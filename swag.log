@@ -1,0 +1,3 @@
+nohup: ignoring input
+/home/z/miniconda3/envs/thesis/lib/python3.13/site-packages/gymnasium/envs/registration.py:512: DeprecationWarning: [33mWARN: The environment Swimmer-v4 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
