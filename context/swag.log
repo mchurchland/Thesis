@@ -1,0 +1,4 @@
+nohup: ignoring input
+2025-09-26 01:59:27,011	INFO worker.py:1951 -- Started a local Ray instance.
+[36m(_single_run_remote pid=911324)[0m /home/z/miniconda3/envs/thesis/lib/python3.13/site-packages/gymnasium/envs/registration.py:512: DeprecationWarning: [33mWARN: The environment Swimmer-v4 is out of date. You should consider upgrading to version `v5`.[0m
+[36m(_single_run_remote pid=911324)[0m   logger.deprecation(
