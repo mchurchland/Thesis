@@ -97,31 +97,7 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def ws_adjacency(n: int, k: int, p: float, rng: np.random.Generator) -> np.ndarray:
-    """Undirected Watts–Strogatz adjacency (bool)."""
-    assert k % 2 == 0 and k < n and 0.0 <= p <= 1.0
-    A = np.zeros((n, n), dtype=bool)
-    # ring
-    for i in range(n):
-        for j in range(1, k // 2 + 1):
-            A[i, (i + j) % n] = True
-            A[i, (i - j) % n] = True
-    # rewire symmetrically
-    for i in range(n):
-        for j in range(1, k // 2 + 1):
-            if rng.random() < p:
-                old = (i + j) % n
-                if not A[i, old]:
-                    continue
-                A[i, old] = False; A[old, i] = False
-                candidates = np.where(~A[i] & (np.arange(n) != i))[0]
-                if len(candidates) == 0:
-                    A[i, old] = True; A[old, i] = True
-                else:
-                    new = rng.choice(candidates)
-                    A[i, new] = True; A[new, i] = True
-    np.fill_diagonal(A, False)
-    return A.astype(np.float32)
+
 
 
 def degree_matched_shuffle_directed(A: np.ndarray, tries: int = 10_000,
