@@ -24,7 +24,7 @@ GLOB_VARIANTS="experiment_full_chunks/chunk_*/ce_real_reps.csv"
 OUT_DIR="experiment_full_merged"
 
 # Run merge + plots (uses safe, non-destructive outputs)
-conda run -n cel python merge.py \
+conda run -n cel python util/merge.py \
   --glob-shuf "${GLOB_SHUF}" \
   --glob-variants "${GLOB_VARIANTS}" \
   --out-dir "${OUT_DIR}" \
