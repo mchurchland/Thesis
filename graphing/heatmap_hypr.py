@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch import Tensor
+from network_stats.run_one import run_one
 
 # -------- existing helpers (already in your repo) ----------
 from util.util import (
