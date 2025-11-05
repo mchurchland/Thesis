@@ -34,6 +34,7 @@ from torch import Tensor
 from util.util import load_connectome, build_reservoir
 from network_stats.stats import compute_IPC, compute_KR, compute_GR, compute_MC
 from util.util import degree_matched_shuffle_directed
+from network_stats.run_one import run_one
 # =================== Defaults (match your diagnostics) ===================
 
 WASHOUT        = 1000
@@ -49,9 +50,9 @@ NEAR_ZERO_STD  = 1e-3
 K_CONTROLLABILITY = 100
 WS_K           = 40  # signature compatibility with util.build_reservoir
 
-SWEEP_SR       = [0.6, 0.8, 0.95, 1.05]
-SWEEP_LEAK     = [0.6, 0.8, 1.0]
-SWEEP_U        = [0.1, 0.5, 1.0, 1.5]
+SWEEP_SR       = [0.6, 0.8, 0.95, 1.05,1.5, 2.0] ## 1.05,2.0 added
+SWEEP_LEAK     = [0.1,0.2,0.6, 0.8, 1.0] ## 0.1,0.2 added
+SWEEP_U        = [0.1, 0.5, 1.0, 1.5, 3.0, 5.0]  # input scale 3.0,5.0 added
 
 # =================== Core helpers ===================
 
@@ -61,81 +62,6 @@ def set_seed(seed: int):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-@torch.no_grad()
-def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tuple[Tensor, Tensor]:
-    N = W.shape[0]
-    T = u.shape[0]
-    z = torch.zeros(N, device=W.device)
-    X = torch.zeros(T, N, device=W.device)
-    Pre = torch.zeros(T, N, device=W.device)
-    for t in range(T):
-        pre = W @ z + (Win @ u[t:t+1, :].T).squeeze()
-        h = torch.tanh(pre)
-        z = (1 - leak) * z + leak * h
-        X[t] = z
-        Pre[t] = pre
-    return X, Pre
-
-@torch.no_grad()
-def effective_rank(X: Tensor) -> float:
-    Xc = X - X.mean(dim=0, keepdim=True)
-    s = torch.linalg.svdvals(Xc)
-    s = torch.clamp(s, min=1e-12)
-    p = s / torch.sum(s)
-    H = -torch.sum(p * torch.log(p))
-    return float(torch.exp(H))
-
-@torch.no_grad()
-def controllability_erank(W: Tensor, Win: Tensor, leak: float, Ddiag_mean: Tensor, K: int) -> float:
-    N = W.shape[0]
-    I = torch.eye(N, device=W.device)
-    A = (1 - leak) * I + leak * (Ddiag_mean @ W)
-    cols = []
-    v = Win
-    for _ in range(K + 1):
-        cols.append(v)
-        v = A @ v
-    C = torch.cat(cols, dim=1)  # [N, K+1]
-    s = torch.linalg.svdvals(C)
-    s = torch.clamp(s, min=1e-12)
-    p = s / torch.sum(s)
-    H = -torch.sum(p * torch.log(p))
-    return float(torch.exp(H))
-
-def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device):
-    T_total = WASHOUT + T_TRAIN + T_TEST
-    u = (torch.rand(T_total, 1, device=device) * 2.0 - 1.0)
-    u = u - u.mean()
-
-    X, Pre = run_reservoir_with_pre(W, Win, u, leak)
-    Xn, _  = run_reservoir_with_pre(W, Win, u + PERTURB_STD * torch.randn_like(u), leak)
-
-    Xtr = X[WASHOUT:WASHOUT+T_TRAIN]
-    Xte = X[WASHOUT+T_TRAIN:]
-    Pre_tr = Pre[WASHOUT:WASHOUT+T_TRAIN]
-    utr = u[WASHOUT:WASHOUT+T_TRAIN]
-    ute = u[WASHOUT+T_TRAIN:]
-
-    MC_total, _ = compute_MC(Xtr, Xte, utr, ute, MC_MAX_DELAY, RIDGE_ALPHA)
-    IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, IPC_MAX_ORDER, RIDGE_ALPHA)
-    KR_val      = compute_KR(Xtr)
-    GR_val      = compute_GR(Xtr, Xn[WASHOUT:WASHOUT+T_TRAIN])
-
-    Dbar_diag = (1.0 - torch.tanh(Pre_tr)**2).mean(dim=0)
-    Dbar = torch.diag(Dbar_diag)
-    rank_k = controllability_erank(W, Win, leak, Dbar, K_CONTROLLABILITY)
-    std_per_unit = Xtr.std(dim=0)
-
-    return dict(
-        MC=MC_total, IPC=IPC_total, KR=KR_val, GR=GR_val,
-        sat_frac=float((Pre_tr.abs() > SAT_THRESH).float().mean()),
-        erank_X=effective_rank(Xtr),
-        erank_pre=effective_rank(Pre_tr),
-        rank_k=rank_k,
-        frac_near_zero=float((std_per_unit < NEAR_ZERO_STD).float().mean())
-    )
-
-# =================== CE weight shuffle & dispersion ===================
 def save(out_csv: str, rows: list[tuple[str,int,float,float,float,float,float,float,float,str]]):
     with open(out_csv, "w", newline="") as f:
         w = csv.writer(f)
@@ -149,80 +75,11 @@ def _shuffle_ce_weights(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarra
     W[nz] = vals
     return W
 
-def _dispersion(y: np.ndarray) -> float:
-    m = float(np.mean(y))
-    s = float(np.std(y))
-    return s / (abs(m) + 1e-12)
-
-# =================== Rows over a given matrix ===================
-
-def _run_row_for_matrix(W_bio_mat: np.ndarray,
-                        col_params: list[tuple[float,float,float]],
-                        ce_ei: np.ndarray | None,
-                        device: torch.device,
-                        seed_base: int = 0) -> dict[str, np.ndarray]:
-    scores = {k: [] for k in ("MC","IPC","KR","GR")}
-    for ci, (target_sr, leak, in_scale) in enumerate(col_params):
-        try:
-            Wt, Win, _, _, _ = build_reservoir(
-                feature_conn="cel",
-                feature_weights="bio",
-                feature_dale="none",
-                target_sr=target_sr,
-                N=W_bio_mat.shape[0],
-                ce_W_bio=W_bio_mat,
-                ce_ei=ce_ei,
-                ws_k=WS_K,
-                input_scale=in_scale,
-                seed=seed_base + ci*101,
-                drive_idx=None,
-                nnz_target=None
-            )
-            Wt  = Wt.to(device)
-            Win = Win.to(device)
-            sc = run_one(Wt, Win, leak, device)
-        except Exception:
-            sc = dict(MC=np.nan, IPC=np.nan, KR=np.nan, GR=np.nan)
-
-        for k in scores: scores[k].append(float(sc[k]))
-    return {k: np.asarray(v, dtype=np.float32) for k, v in scores.items()}
-
-
-def run_one_shuff(
-    ce_W_bio: np.ndarray,
-    ce_ei: np.ndarray | None,
-    col_params: list[tuple[float,float,float]],
-    out_dir: str,
-    device: torch.device,
-    *,
-    seed: int = 0,
-    sid: int = -1,
-    metric: str = "MC",
-    csv_name: str = "bio_vs_shuffle_invariance.csv",
-    fig_prefix: str = "bio_invariance_hist_",
-    src_tag: str = "chunk_0",
-):
-    assert metric in ("MC","IPC","KR","GR")
-    os.makedirs(out_dir, exist_ok=True)
-    out_csv = os.path.join(out_dir, csv_name)
-
-    rng = np.random.default_rng(seed)
-
-
-    # Shuffled weight rows
-    disp_null = []
-    rows = []
-    Wsh = _shuffle_ce_weights(ce_W_bio, rng)
-    res = _run_row_for_matrix(Wsh, col_params, ce_ei, device, seed_base=seed+9999+sid)
-    disp = _dispersion(res[metric])
-    disp_null.append(disp)
-    for (rho_t, leak, u), mc, ipc, kr, gr in zip(col_params, res["MC"], res["IPC"], res["KR"], res["GR"]):
-        rows.append(("shuffle", sid, rho_t, leak, u, float(mc), float(ipc), float(kr), float(gr), src_tag))
-    save(out_csv, rows)
 
 
 
-# =================== Test 2: Additional variants (single CSV) ===================
+
+##these can be combined into a single function, but I left them separate for now
 def _run_variant_row(feature_conn: str,
                         feature_weights: str,
                         col_params: list[tuple[float, float, float]],
@@ -263,9 +120,136 @@ def _run_variant_row(feature_conn: str,
                 rows_local.append((mode_label, shuffle_id, target_sr, leak, in_scale,
                                    np.nan, np.nan, np.nan, np.nan, src_tag))
         return rows_local
+def _run_row_for_matrix(W_bio_mat: np.ndarray,
+                        col_params: list[tuple[float,float,float]],
+                        ce_ei: np.ndarray | None,
+                        device: torch.device,
+                        seed_base: int = 0) -> dict[str, np.ndarray]:
+    scores = {k: [] for k in ("MC","IPC","KR","GR")}
+    for ci, (target_sr, leak, in_scale) in enumerate(col_params):
+        try:
+            Wt, Win, _, _, _ = build_reservoir(
+                feature_conn="cel",
+                feature_weights="bio",
+                feature_dale="none",
+                target_sr=target_sr,
+                N=W_bio_mat.shape[0],
+                ce_W_bio=W_bio_mat,
+                ce_ei=ce_ei,
+                ws_k=WS_K,
+                input_scale=in_scale,
+                seed=seed_base + ci*101,
+                drive_idx=None,
+                nnz_target=None
+            )
+            Wt  = Wt.to(device)
+            Win = Win.to(device)
+            sc = run_one(Wt, Win, leak, device)
+        except Exception:
+            sc = dict(MC=np.nan, IPC=np.nan, KR=np.nan, GR=np.nan)
 
+        for k in scores: scores[k].append(float(sc[k]))
+    return {k: np.asarray(v, dtype=np.float32) for k, v in scores.items()}
 
-def save_invariance_variants(
+def run_one_shuf_weights(
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float,float,float]],
+    out_dir: str,
+    device: torch.device,
+    *,
+    seed: int = 0,
+    sid: int = -1,
+    metric: str = "MC",
+    csv_name: str = "bio_vs_shuffle_invariance.csv",
+    src_tag: str = "chunk_0",
+):
+    assert metric in ("MC","IPC","KR","GR")
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = os.path.join(out_dir, csv_name)
+
+    rng = np.random.default_rng(seed)
+
+    rows = []
+    Wsh = _shuffle_ce_weights(ce_W_bio, rng)
+    res = _run_row_for_matrix(Wsh, col_params, ce_ei, device, seed_base=seed+9999+sid)
+
+    for (rho_t, leak, u), mc, ipc, kr, gr in zip(col_params, res["MC"], res["IPC"], res["KR"], res["GR"]):
+        rows.append(("shuffle", sid, rho_t, leak, u, float(mc), float(ipc), float(kr), float(gr), src_tag))
+    save(out_csv, rows)
+def run_one_real(
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float,float,float]],
+    out_dir: str,
+    device: torch.device,
+    *,
+    seed: int = 0,
+    nid: int = 1,
+    csv_name: str = "bio_vs_shuffle_invariance.csv",
+    src_tag: str = "chunk_0",
+):
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = os.path.join(out_dir, csv_name)
+    rows = []
+    rng = np.random.default_rng(seed)
+
+    # Real CE row
+    real = _run_row_for_matrix(ce_W_bio, col_params, ce_ei, device, seed_base=seed+123)
+
+    # Append real CE
+    for (rho_t, leak, u), mc, ipc, kr, gr in zip(col_params, real["MC"], real["IPC"], real["KR"], real["GR"]):
+        rows.append(("real", nid, rho_t, leak, u, float(mc), float(ipc), float(kr), float(gr), src_tag))
+    save(out_csv, rows)
+def run_one_cel_randN(
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float, float, float]],
+    out_dir: str,
+    device: torch.device,
+    *,
+    seed: int = 0,
+    csv_name: str = "cel_variants.csv",
+    src_tag: str = "chunk_0"):
+    rows = []
+    rows += _run_variant_row("cel", "rand_gauss",col_params,device, ce_W_bio,\
+                                  "cel+randN", -1, ce_W_bio,ce_ei=ce_ei, src_tag=src_tag,seed_base=seed + 10_000)
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = os.path.join(out_dir, csv_name)
+    save(out_csv, rows)
+def run_one_esn_er_randN(
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float, float, float]],
+    out_dir: str,
+    device: torch.device,
+    *,
+    seed: int = 0,
+    csv_name: str = "cel_variants.csv",
+    src_tag: str = "chunk_0"):
+    rows = []
+    rows += _run_variant_row("er_p={er_p}", "rand_gauss",col_params,device, None,\
+                                  "er+randN", -1, ce_W_bio,ce_ei=ce_ei, src_tag=src_tag,seed_base=seed + 20_000)
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = os.path.join(out_dir, csv_name)
+    save(out_csv, rows)
+def run_one_ws_p0_1_randN(
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float, float, float]],
+    out_dir: str,
+    device: torch.device,
+    *,
+    seed: int = 0,
+    csv_name: str = "cel_variants.csv",
+    src_tag: str = "chunk_0"):
+    rows = []
+    rows += _run_variant_row("ws_p=0.1", "rand_gauss",col_params,device, None,\
+                                  "ws_p0.1+randN", -1, ce_W_bio,ce_ei=ce_ei, src_tag=src_tag,seed_base=seed + 20_000)
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = os.path.join(out_dir, csv_name)
+    save(out_csv, rows)
+def run_one_shuf_conn(
     ce_W_bio: np.ndarray,
     ce_ei: np.ndarray | None,
     col_params: list[tuple[float, float, float]],
@@ -274,8 +258,8 @@ def save_invariance_variants(
     *,
     seed: int = 0,
     csv_name: str = "invariance_variants.csv",
+    sid: int =1,
     er_p: float = 0.1,
-    n_conn_shuf: int = 50,
     src_tag: str = "chunk_0",
 ):
     """
@@ -295,69 +279,25 @@ def save_invariance_variants(
     np.fill_diagonal(nnz_mask, False)
     nnz_target = int(nnz_mask.sum())
 
-    all_rows: list[tuple] = []
-
-    # 1) CEL + randN
-    all_rows += _run_variant_row("cel", "rand_gauss", ce_W_bio, "cel+randN", -1, seed_base=seed + 10_000)
-
-    # 2) Std ESN ER + randN
-    all_rows += _run_variant_row(f"er_p={er_p}", "rand_gauss", None, "er+randN", -1, seed_base=seed + 20_000)
-
-    # 3) WS p=0.1 + randN
-    all_rows += _run_variant_row("ws_p=0.1", "rand_gauss", None, "ws_p0.1+randN", -1, seed_base=seed + 30_000)
-
-    # 4) CE weights + shuffled connections (degree-matched)
     rng = np.random.default_rng(seed + 40_000)
     A_ce = (np.abs(ce_W_bio) > 0).astype(np.float32)
     np.fill_diagonal(A_ce, 0.0)
     ce_weights_all = ce_W_bio[np.abs(ce_W_bio) > 0].astype(np.float32)
 
-    for sid in range(int(n_conn_shuf)):
-        As = degree_matched_shuffle_directed(A_ce, tries=20_000, rng=rng).astype(bool)
-        if int(As.sum()) != nnz_target:
-            continue
+    As = degree_matched_shuffle_directed(A_ce, tries=20_000, rng=rng).astype(bool)
+    if int(As.sum()) != nnz_target:
         Wsh = np.zeros_like(ce_W_bio, dtype=np.float32)
         # permute and assign the multiset of CE weights to new positions
         perm = rng.permutation(len(ce_weights_all))
         Wsh[As] = ce_weights_all[perm][:nnz_target]
         np.fill_diagonal(Wsh, 0.0)
-        all_rows += _run_variant_row("cel", "bio", Wsh, "celW+connShuf", sid, seed_base=seed + 50_000 + sid * 911)
-
-    with open(out_csv, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR", "src"])
-        w.writerows(all_rows)
-    print(f"[saved] {out_csv}")
-
-def run_one_real(
-    ce_W_bio: np.ndarray,
-    ce_ei: np.ndarray | None,
-    col_params: list[tuple[float,float,float]],
-    out_dir: str,
-    device: torch.device,
-    *,
-    seed: int = 0,
-    nid: int = 1,
-    csv_name: str = "bio_vs_shuffle_invariance.csv",
-    fig_prefix: str = "bio_invariance_hist_",
-    src_tag: str = "chunk_0",
-):
+        all_rows += _run_variant_row("cel", "bio", col_params,device,Wsh,\
+                                      "celW+connShuf", sid,ce_W_bio,ce_ei, seed_base=seed + 50_000 + sid * 911)
     os.makedirs(out_dir, exist_ok=True)
     out_csv = os.path.join(out_dir, csv_name)
-    rows = []
-    rng = np.random.default_rng(seed)
+    save(out_csv,all_rows)
 
-    # Real CE row
-    real = _run_row_for_matrix(ce_W_bio, col_params, ce_ei, device, seed_base=seed+123)
 
-    # Append real CE
-    for (rho_t, leak, u), mc, ipc, kr, gr in zip(col_params, real["MC"], real["IPC"], real["KR"], real["GR"]):
-        rows.append(("real", nid, rho_t, leak, u, float(mc), float(ipc), float(kr), float(gr), src_tag))
-    # Save CSV
-    with open(out_csv, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["mode","shuffle_id","rho_target","leak","input_scale","MC","IPC","KR","GR","src"])
-        w.writerows(rows)
 # =================== CLI ===================
 def parse_args():
     ap = argparse.ArgumentParser(description="Run CE-real and random-variant invariance reps.")
