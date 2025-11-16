@@ -1,0 +1,5 @@
+rho(W)                      = 5.236428e+01
+Henrici departure delta_H   = 1.973464e+02
+||W W* - W* W||_F (check)   = 1.071609e+04
+Kreiss constant lower bound = 1.830680e+00
+

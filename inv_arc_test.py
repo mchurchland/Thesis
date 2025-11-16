@@ -37,17 +37,7 @@ from util.util import degree_matched_shuffle_directed
 from network_stats.run_one import run_one
 # =================== Defaults (match your diagnostics) ===================
 
-WASHOUT        = 1000
-T_TRAIN        = 10000
-T_TEST         = 2000
-RIDGE_ALPHA    = 1e-4
-IPC_MAX_DELAY  = 50
-IPC_MAX_ORDER  = 3
-MC_MAX_DELAY   = 300
-PERTURB_STD    = 0.01
-SAT_THRESH     = 2.0
-NEAR_ZERO_STD  = 1e-3
-K_CONTROLLABILITY = 100
+
 WS_K           = 40  # signature compatibility with util.build_reservoir
 
 SWEEP_SR       = [0.6, 0.8, 0.95, 1.05,1.5, 2.0] ## 1.05,2.0 added

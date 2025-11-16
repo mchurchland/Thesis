@@ -16,35 +16,39 @@ def effective_rank_from_states(X: Tensor) -> float:
     """
     Kernel rank via effective rank of centered states.
     """
-    Xc = X - X.mean(dim=0, keepdim=True)
-    s = torch.linalg.svdvals(Xc)
-    s = torch.clamp(s, min=1e-12)
-    p = s / torch.sum(s)
-    H = -torch.sum(p * torch.log(p))
+    Xc = X - X.mean(dim=0, keepdim=True) ## normalize the vec
+    s = torch.linalg.svdvals(Xc) 
+    s = torch.clamp(s, min=1e-12) ## same as just adding 1e-12/\epsilon
+    p = s / torch.sum(s) ## mean is 0 stdev of 1 WHY AM I SUMMING S this is not normalizing btu seing what part of the distribution each individual s makes
+    H = -torch.sum(p * torch.log(p)) #shannon entropy expected amount of information needed to encode the distribution
+    #if h is high lots of variance across many dimensions, if variance constrained to a few dimensions, then h is low
+
     erank = torch.exp(H)
+    ##this gives us the number of the dimensions that are needed to encode the state of the system
     return float(erank)
 
 
 def ridge_fit_predict(Xtr: Tensor, ytr: Tensor, Xte: Tensor, alpha: float) -> Tensor:
     """
     Ridge readout with feature standardization and pinv fallback.
+    
     """
     from heatmap import DEVICE
     # center and scale columns (train stats)
     mu = Xtr.mean(dim=0, keepdim=True)
-    sig = Xtr.std(dim=0, keepdim=True) + 1e-8
+    sig = Xtr.std(dim=0, keepdim=True) + 1e-12
     Xtr_n = (Xtr - mu) / sig
     Xte_n = (Xte - mu) / sig
 
     XT_X = Xtr_n.T @ Xtr_n
-    D = XT_X.shape[0]
-    A = XT_X + alpha * torch.eye(D, device=DEVICE)
+    D = XT_X.shape[0] ## columns of Xtr_n
+    A = XT_X + alpha * torch.eye(D, device=DEVICE) 
     b = Xtr_n.T @ ytr
-    try:
-        w = torch.linalg.solve(A, b)
-    except RuntimeError:
-        w = torch.linalg.pinv(A) @ b
-    return Xte_n @ w
+    #try:
+    w = torch.linalg.solve(A, b) ## solve for w 
+    #except RuntimeError: ## this should be gotten rid of!
+    #    w = torch.linalg.pinv(A) @ b
+    return Xte_n @ w ## apply w
 
 def r2_score(y_true: Tensor, y_pred: Tensor) -> float:
     y_true_c = y_true - y_true.mean()
