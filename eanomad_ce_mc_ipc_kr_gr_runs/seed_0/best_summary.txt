@@ -1,0 +1,9 @@
+best_fit	-1000000000.0
+MC_baseline_mean	nan
+MC_best_mean	nan
+IPC_baseline_mean	nan
+IPC_best_mean	nan
+KR_baseline_mean	nan
+KR_best_mean	nan
+GR_baseline_mean	nan
+GR_best_mean	nan
