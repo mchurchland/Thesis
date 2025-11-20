@@ -16,13 +16,12 @@ def effective_rank_from_states(X: Tensor) -> float:
     """
     Kernel rank via effective rank of centered states.
     """
-    Xc = X - X.mean(dim=0, keepdim=True) ## normalize the vec
-    s = torch.linalg.svdvals(Xc) 
-    s = torch.clamp(s, min=1e-12) ## same as just adding 1e-12/\epsilon
+    Xc = X - X.mean(dim=0, keepdim=True) ## normalize the vec dim 0 is time normalize with respect to time
+    s = torch.linalg.svdvals(Xc) ## this just gives sqrt(x^2) of eigen values, which is abs(eigen)
+    s = torch.clamp(s, min=1e-12) ## the iegen values are positive, and hence we just need to make sure that they are not zero or some relaly small value
     p = s / torch.sum(s) ## mean is 0 stdev of 1 WHY AM I SUMMING S this is not normalizing btu seing what part of the distribution each individual s makes
     H = -torch.sum(p * torch.log(p)) #shannon entropy expected amount of information needed to encode the distribution
     #if h is high lots of variance across many dimensions, if variance constrained to a few dimensions, then h is low
-
     erank = torch.exp(H)
     ##this gives us the number of the dimensions that are needed to encode the state of the system
     return float(erank)

@@ -77,7 +77,7 @@ def _dispersion(a: np.ndarray) -> float:
     a = np.asarray(a, float).ravel()
     m = float(np.mean(a))
     s = float(np.std(a))
-    return s/(abs(m)+1e-12)
+    return s/(abs(m)+1e-12) ## allows us to calcualte variance accross different models which have different scales
 
 def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
     keys = ["rho_target","leak","input_scale"]

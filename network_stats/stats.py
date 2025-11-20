@@ -1,4 +1,4 @@
-from stats_util import legendre_P,effective_rank_from_states,ridge_fit_predict,r2_score
+from network_stats.stats_util import legendre_P,effective_rank_from_states,ridge_fit_predict,r2_score
 from torch import Tensor
 import torch ; import numpy as np
 
