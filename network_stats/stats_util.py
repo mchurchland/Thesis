@@ -27,12 +27,11 @@ def effective_rank_from_states(X: Tensor) -> float:
     return float(erank)
 
 
-def ridge_fit_predict(Xtr: Tensor, ytr: Tensor, Xte: Tensor, alpha: float) -> Tensor:
+def ridge_fit_predict(Xtr: Tensor, ytr: Tensor, Xte: Tensor, alpha: float, DEVICE: torch.device) -> Tensor:
     """
     Ridge readout with feature standardization and pinv fallback.
     
     """
-    from heatmap import DEVICE
     # center and scale columns (train stats)
     mu = Xtr.mean(dim=0, keepdim=True)
     sig = Xtr.std(dim=0, keepdim=True) + 1e-12

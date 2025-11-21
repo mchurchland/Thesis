@@ -2,7 +2,7 @@
 #SBATCH --job-name=ce_eanomad_opt
 #SBATCH --partition=normal
 #SBATCH --gres=gpu:l40s:1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
 #SBATCH --time=1-00:00:00
 # Uncomment to run multiple independent seeds:
@@ -32,16 +32,16 @@ conda run -n cel python opt_cel.py \
   --out-dir "${OUTDIR}" \
   --device cuda \
   --mode rEA \
-  --generations 80 \
+  --generations 10 \
   --population-size 32 \
-  --subset-size 20 \
-  --bounds 0.1 \
+  --subset-size 49 \
+  --bounds 0.5 \
   --max-bb-eval 150 \
   --n-mutate-coords 5 \
-  --rho-targets 0.9 1.0 1.1 \
-  --leaks 0.2 0.5 0.8 \
-  --input-scales 0.5 1.0 2.0 \
-  --w-mc 1 --w-ipc 1 --w-kr 1 --w-gr 1 \
+  --rho-targets 0.99 \
+  --leaks  0.95 \
+  --input-scales 1.0 \
+  --w-mc 1 --w-ipc 1 --w-kr 1 --w-gr -1 \
   --norm ratio \
   --l2-penalty 0.0 \
   --seed "${SEED}"

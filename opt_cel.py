@@ -29,7 +29,17 @@ import torch
 from util.util import load_connectome, build_reservoir
 from network_stats.run_one import run_one
 from EANOMAD import EANOMAD  # pip install EANOMAD :contentReference[oaicite:1]{index=1}
-
+WASHOUT        = 1000
+T_TRAIN        = 10000
+T_TEST         = 2000
+RIDGE_ALPHA    = 1e-4
+IPC_MAX_DELAY  = 50
+IPC_MAX_ORDER  = 3
+MC_MAX_DELAY   = 300
+PERTURB_STD    = 0.01
+SAT_THRESH     = 2.0
+NEAR_ZERO_STD  = 1e-3
+K_CONTROLLABILITY = 100
 
 # ------------------------- helpers -------------------------
 
@@ -66,12 +76,15 @@ def run_scores_for_matrix(
                 seed=seed_base + ci * 101,
                 drive_idx=None,
                 nnz_target=None,
+                DEVICE=device
             )
             Wt = Wt.to(device)
             Win = Win.to(device)
-            sc = run_one(Wt, Win, leak, device)
-        except Exception:
-            sc = dict(MC=np.nan, IPC=np.nan, KR=np.nan, GR=np.nan)
+            sc = run_one(Wt, Win, leak, device,WASHOUT,PERTURB_STD,T_TRAIN,T_TEST,MC_MAX_DELAY,IPC_MAX_DELAY,IPC_MAX_ORDER,RIDGE_ALPHA,\
+                         K_CONTROLLABILITY,SAT_THRESH,NEAR_ZERO_STD)
+        except Exception as e:
+            print(e)
+
 
         for k in scores:
             scores[k].append(float(sc[k]))
@@ -168,6 +181,7 @@ def main():
         device=device,
         seed_base=args.seed + 123,
     )
+ 
     baseline_means = {k: float(np.nanmean(v)) for k, v in baseline.items()}
 
     # log baseline

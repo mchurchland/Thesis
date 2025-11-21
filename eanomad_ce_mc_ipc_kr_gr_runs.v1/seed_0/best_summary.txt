@@ -1,0 +1,10 @@
+best_fit	5.011974107276759
+MC_baseline_mean	1.6509767770767212
+MC_best_mean	2.0812108516693115
+IPC_baseline_mean	2.1561923027038574
+IPC_best_mean	2.6793229579925537
+KR_baseline_mean	6.756952285766602
+KR_best_mean	8.36854076385498
+GR_baseline_mean	13.819475173950195
+GR_best_mean	17.222272872924805
+took 9 hours for 10 generations

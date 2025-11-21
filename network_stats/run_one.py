@@ -1,16 +1,6 @@
 import torch
 from torch import Tensor
-WASHOUT        = 1000
-T_TRAIN        = 10000
-T_TEST         = 2000
-RIDGE_ALPHA    = 1e-4
-IPC_MAX_DELAY  = 50
-IPC_MAX_ORDER  = 3
-MC_MAX_DELAY   = 300
-PERTURB_STD    = 0.01
-SAT_THRESH     = 2.0
-NEAR_ZERO_STD  = 1e-3
-K_CONTROLLABILITY = 100
+
 # ---- repo helpers (reuse your utils/stats) ----
 from util.util import load_connectome, build_reservoir
 from network_stats.stats import compute_IPC, compute_KR, compute_GR, compute_MC
@@ -66,8 +56,8 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
     utr = u[WASHOUT:WASHOUT+T_TRAIN] ## u_train
     ute = u[WASHOUT+T_TRAIN:] ## u_test
 
-    MC_total, _ = compute_MC(Xtr, Xte, utr, ute, MC_MAX_DELAY, RIDGE_ALPHA)
-    IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, IPC_MAX_ORDER, RIDGE_ALPHA)
+    MC_total, _ = compute_MC(Xtr, Xte, utr, ute, MC_MAX_DELAY, RIDGE_ALPHA,device)
+    IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, IPC_MAX_ORDER, RIDGE_ALPHA,device)
     KR_val      = compute_KR(Xtr)
     GR_val      = compute_GR(Xtr, Xn[WASHOUT:WASHOUT+T_TRAIN])
 

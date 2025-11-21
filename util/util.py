@@ -81,12 +81,11 @@ def load_connectome(adj_path: str | None, ei_path: str | None):
 
 
 @torch.no_grad()
-def run_reservoir(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> Tensor:
+def run_reservoir(W: Tensor, Win: Tensor, u: Tensor, leak: float,DEVICE:torch.device) -> Tensor:
     """
     u: [T, 1] input sequence on DEVICE
     Returns states X: [T, N]
     """
-    from heatmap import DEVICE
     N = W.shape[0]
     T = u.shape[0]
     z = torch.zeros(N, device=DEVICE)
@@ -110,12 +109,12 @@ def build_reservoir(
     seed: int,
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
+    DEVICE: torch.device | None = None,
 ) -> tuple[Tensor, Tensor, Tensor | None, float, float]:
     """
     Returns:
       Wt, Win, ei_t, rho_nat, rho_post
     """
-    from heatmap import DEVICE
     set_seed(seed)
     rng = np.random.default_rng(seed)
 
