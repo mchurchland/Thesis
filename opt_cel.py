@@ -254,13 +254,12 @@ def main():
         n_mutate_coords=args.n_mutate_coords,
         crossover_rate=args.crossover_rate,
         init_vec=np.zeros(dim, dtype=np.float32),  # start at biological weights
-        low=-1.0,
-        high=1.0,
         use_ray=args.use_ray,
         seed=args.seed,
     )
 
     best_x, best_fit = opt.run(generations=args.generations)
+    print(opt.fitness_history)
 
     Wbest = vec_to_W(best_x)
 

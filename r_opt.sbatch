@@ -15,7 +15,7 @@ mkdir -p logs
 
 BASE_SEED=12345
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
-SEED=$(( BASE_SEED + TASK_ID * 100000 ))
+SEED=2
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
@@ -31,13 +31,13 @@ conda run -n cel python opt_cel.py \
   --ce-ei  Connectome/ce_ei.npy \
   --out-dir "${OUTDIR}" \
   --device cuda \
-  --mode rEA \
-  --generations 10 \
-  --population-size 32 \
+  --mode EA \
+  --generations 40 \
+  --population-size 16 \
   --subset-size 49 \
-  --bounds 0.5 \
-  --max-bb-eval 150 \
-  --n-mutate-coords 5 \
+  --bounds 1 \
+  --max-bb-eval 250 \
+  --n-mutate-coords 0 \
   --rho-targets 0.99 \
   --leaks  0.95 \
   --input-scales 1.0 \
