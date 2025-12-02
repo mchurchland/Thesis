@@ -25,10 +25,10 @@ import argparse
 import numpy as np
 from pathlib import Path
 import torch
-
+import time
 from util.util import load_connectome, build_reservoir
 from network_stats.run_one import run_one
-from EANOMAD import EANOMAD  # pip install EANOMAD :contentReference[oaicite:1]{index=1}
+from nomad import EANOMAD  # pip install EANOMAD :contentReference[oaicite:1]{index=1}
 WASHOUT        = 1000
 T_TRAIN        = 10000
 T_TEST         = 2000
@@ -40,6 +40,9 @@ PERTURB_STD    = 0.01
 SAT_THRESH     = 2.0
 NEAR_ZERO_STD  = 1e-3
 K_CONTROLLABILITY = 100
+#WASHOUT        = 600
+#T_TRAIN        = 1500
+#T_TEST         = 500
 
 # ------------------------- helpers -------------------------
 
@@ -58,36 +61,73 @@ def run_scores_for_matrix(
     col_params: list[tuple[float, float, float]],
     device: torch.device,
     seed_base: int = 0,
+    n_seeds: int = 1,
+    seed_stride: int = 10_000,
 ) -> dict[str, np.ndarray]:
-    """Return arrays over col_params for MC/IPC/KR/GR."""
+    """Return arrays over col_params for MC/IPC/KR/GR, averaged over n_seeds.
+
+    For each (rho_target, leak, input_scale) in col_params, run n_seeds
+    independent instantiations and average the resulting stats.
+    """
     scores = {k: [] for k in ("MC", "IPC", "KR", "GR")}
+
     for ci, (target_sr, leak, in_scale) in enumerate(col_params):
-        try:
-            Wt, Win, _, _, _ = build_reservoir(
-                feature_conn="cel",
-                feature_weights="bio",
-                feature_dale="none",
-                target_sr=target_sr,
-                N=W_bio_mat.shape[0],
-                ce_W_bio=W_bio_mat,
-                ce_ei=ce_ei,
-                ws_k=WS_K,
-                input_scale=in_scale,
-                seed=seed_base + ci * 101,
-                drive_idx=None,
-                nnz_target=None,
-                DEVICE=device
-            )
-            Wt = Wt.to(device)
-            Win = Win.to(device)
-            sc = run_one(Wt, Win, leak, device,WASHOUT,PERTURB_STD,T_TRAIN,T_TEST,MC_MAX_DELAY,IPC_MAX_DELAY,IPC_MAX_ORDER,RIDGE_ALPHA,\
-                         K_CONTROLLABILITY,SAT_THRESH,NEAR_ZERO_STD)
-        except Exception as e:
-            print(e)
+        per_seed_vals = {k: [] for k in scores.keys()}
 
+        for si in range(n_seeds):
+            cur_seed = seed_base + ci * seed_stride + si
 
-        for k in scores:
-            scores[k].append(float(sc[k]))
+            try:
+                Wt, Win, _, _, _ = build_reservoir(
+                    feature_conn="cel",
+                    feature_weights="bio",
+                    feature_dale="none",
+                    target_sr=target_sr,
+                    N=W_bio_mat.shape[0],
+                    ce_W_bio=W_bio_mat,
+                    ce_ei=ce_ei,
+                    ws_k=WS_K,
+                    input_scale=in_scale,
+                    seed=cur_seed,
+                    drive_idx=None,
+                    nnz_target=None,
+                    DEVICE=device,
+                )
+                Wt = Wt.to(device)
+                Win = Win.to(device)
+
+                sc = run_one(
+                    Wt,
+                    Win,
+                    leak,
+                    device,
+                    WASHOUT,
+                    PERTURB_STD,
+                    T_TRAIN,
+                    T_TEST,
+                    MC_MAX_DELAY,
+                    IPC_MAX_DELAY,
+                    IPC_MAX_ORDER,
+                    RIDGE_ALPHA,
+                    K_CONTROLLABILITY,
+                    SAT_THRESH,
+                    NEAR_ZERO_STD,
+                )
+            except Exception as e:
+                print(f"run_scores_for_matrix error at col_idx={ci}, seed={cur_seed}: {e}")
+                continue
+
+            for k in per_seed_vals.keys():
+                per_seed_vals[k].append(float(sc[k]))
+
+        # average over seeds for this col_param (NaN if everything failed)
+        for k in scores.keys():
+            if len(per_seed_vals[k]) == 0:
+                raise ValueError(
+                    f"No valid runs for col_idx={ci}, seed_base={seed_base}, n_seeds={n_seeds}. "
+                    "Check if the connectome is valid and the parameters are correct.")
+            else:
+                scores[k].append(float(np.nanmean(per_seed_vals[k])))
 
     return {k: np.asarray(v, dtype=np.float32) for k, v in scores.items()}
 
@@ -133,6 +173,13 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--use-ray", action="store_true",
                     help="Enable ray parallel NOMAD calls. :contentReference[oaicite:7]{index=7}")
+    ap.add_argument(
+        "--n-seeds-per-eval",
+        type=int,
+        default=1,
+        help="Number of random seeds to average over for each (rho, leak, input_scale) per fitness eval."
+    )
+
 
     # scalarization / regularization
     ap.add_argument("--w-mc", type=float, default=1.0)
@@ -173,6 +220,7 @@ def main():
     col_params = make_col_params(args.rho_targets, args.leaks, args.input_scales)
 
     # baseline scores
+    t0= time.time()
     baseline = run_scores_for_matrix(
         WS_K=0,
         W_bio_mat=ce_W_bio,
@@ -180,8 +228,11 @@ def main():
         col_params=col_params,
         device=device,
         seed_base=args.seed + 123,
+        n_seeds=args.n_seeds_per_eval,
     )
- 
+    print(f"Baseline scores computed in {time.time() - t0:.2f} seconds.")
+    quit()
+    exit()
     baseline_means = {k: float(np.nanmean(v)) for k, v in baseline.items()}
 
     # log baseline
@@ -212,6 +263,9 @@ def main():
     # objective for EANOMAD (maximize)
     def objective_fn(x: np.ndarray) -> float:
         Wcand = vec_to_W(x)
+
+        # mask of entries that are (approximately) whole numbers
+
         res = run_scores_for_matrix(
             WS_K=0,
             W_bio_mat=Wcand,
@@ -219,6 +273,7 @@ def main():
             col_params=col_params,
             device=device,
             seed_base=args.seed + 9999,
+            n_seeds=args.n_seeds_per_eval,
         )
         cand_means = {k: float(np.nanmean(v)) for k, v in res.items()}
 
@@ -238,7 +293,6 @@ def main():
         if args.l2_penalty > 0.0:
             diff = Wcand[A_ce] - ce_W_bio[A_ce]
             fit -= args.l2_penalty * float(np.mean(diff * diff))
-
         return float(fit)
 
     dim = len(w0)
@@ -253,9 +307,11 @@ def main():
         max_bb_eval=args.max_bb_eval,
         n_mutate_coords=args.n_mutate_coords,
         crossover_rate=args.crossover_rate,
-        init_vec=np.zeros(dim, dtype=np.float32),  # start at biological weights
+        init_vec=w0.astype(np.float32),  # start at biological weights, fuck you fuck you fuck you fuck you
         use_ray=args.use_ray,
         seed=args.seed,
+        low = -1.0,
+        high= 1.0,
     )
 
     best_x, best_fit = opt.run(generations=args.generations)
@@ -270,7 +326,8 @@ def main():
         ce_ei=ce_ei,
         col_params=col_params,
         device=device,
-        seed_base=args.seed + 4242,
+        seed_base=args.seed + 9999,
+        n_seeds=args.n_seeds_per_eval,
     )
 
     np.save(out_dir / "best_Wbio.npy", Wbest)
