@@ -81,19 +81,37 @@ def load_connectome(adj_path: str | None, ei_path: str | None):
 
 
 @torch.no_grad()
-def run_reservoir(W: Tensor, Win: Tensor, u: Tensor, leak: float,DEVICE:torch.device) -> Tensor:
+def run_reservoir(W: torch.Tensor,
+                  Win: torch.Tensor,
+                  u: torch.Tensor,
+                  leak: float) -> torch.Tensor:
     """
-    u: [T, 1] input sequence on DEVICE
-    Returns states X: [T, N]
+    W:   [N, N]
+    Win: [N, 1] or [N]
+    u:   [T, 1] or [T]
+    Returns X: [T, N]
     """
+    device = W.device
     N = W.shape[0]
     T = u.shape[0]
-    z = torch.zeros(N, device=DEVICE)
-    X = torch.zeros(T, N, device=DEVICE)
+
+    # normalize shapes once
+    u_flat = u.view(T)                    # [T]
+    win_vec = Win.view(N)                 # [N]
+
+    z = torch.zeros(N, device=device)
+    X = torch.empty(T, N, device=device)  # no need to zero
+
+    one_minus_leak = 1.0 - leak
+
     for t in range(T):
-        h = torch.tanh(W @ z + (Win @ u[t:t+1, :].T).squeeze())
-        z = (1 - leak) * z + leak * h
-        X[t] = z
+        # h = tanh(W z + win * u_t)
+        # use addmv: y + A x  (all vectors) for better BLAS path
+        h = torch.tanh(torch.addmv(win_vec * u_flat[t], W, z))
+        # z = (1 - leak) * z + leak * h, in-place
+        z.mul_(one_minus_leak).add_(h, alpha=leak)
+        X[t].copy_(z)
+
     return X
 
 def build_reservoir(
@@ -115,7 +133,6 @@ def build_reservoir(
     Returns:
       Wt, Win, ei_t, rho_nat, rho_post
     """
-    set_seed(seed)
     rng = np.random.default_rng(seed)
 
     # ---------- base adjacency/weights ----------
@@ -225,7 +242,7 @@ def build_reservoir(
     # --- scale by spectral radius (this is the requested change) ---
     rho_nat = spectral_radius_power(Wt)
     Wt = scale_to_sr(Wt, target_sr)
-    rho_post = spectral_radius_power(Wt)
+    #rho_post = spectral_radius_power(Wt)
 
     # --- Input weights Win ---
     if drive_idx is not None and len(drive_idx) > 0:
@@ -235,7 +252,7 @@ def build_reservoir(
     else:
         Win = torch.randn(Wt.shape[0], 1, device=DEVICE) * input_scale
 
-    return Wt, Win, ei_t, rho_nat, rho_post
+    return Wt, Win, ei_t, rho_nat
 
 @torch.no_grad()
 def spectral_radius_power(W: Tensor, iters: int = 200) -> float:

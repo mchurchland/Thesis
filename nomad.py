@@ -112,7 +112,6 @@ def _fitness_based_crossover(
     # compute per‑offspring bias, then broadcast to all genes -------------------------
     bias = (f1 / (f1 + f2)) ** exponent               # (P,)
     mask = rng.random((P, D)) < bias[:, None]       # (P,D)
-
     return np.where(mask, p1, p2)
 
 def _random_reset_mutation(pop: npt.NDArray, n_coords: int, low: float, high: float, rng: Generator) -> None:

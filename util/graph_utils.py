@@ -1,6 +1,6 @@
 import os
 import glob
-import pd
+import pandas as pd
 import matplotlib as plt
 import numpy as np
 
@@ -48,11 +48,19 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
                 raise ValueError(f"Missing required column: {c}")
     return df[needed].copy()
 
-def _dispersion(a: np.ndarray) -> float:
+def _dispersion_cv(a: np.ndarray) -> float:
+    """ this is coefficient of variation"""
     a = np.asarray(a, float).ravel()
-    m = float(np.mean(a))
+    m = float(np.mean(a)) 
     s = float(np.std(a))
     return s/(abs(m)+1e-12)
+
+
+def _dispersion_v(a: np.ndarray) -> float:
+    """ this is variation"""
+    a = np.asarray(a, float).ravel()
+    s = float(np.std(a))
+    return s
 
 def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
     keys = ["rho_target","leak","input_scale"]
@@ -82,8 +90,9 @@ def _build_combined(df_shuf: pd.DataFrame | None, df_var: pd.DataFrame | None) -
     comb["mode"] = comb["mode"].astype(str)
     return comb
 
-def _compute_dispersion_table(combined: pd.DataFrame) -> pd.DataFrame:
+def _compute_dispersion_table(combined: pd.DataFrame,mode: str = "cv") -> pd.DataFrame:
     """
+    modes = "cv" or "v" for coefficient of variation or variation
     For each (mode, src, group_id), compute dispersion across hyper-params:
       - group_id = shuffle_id if shuffle_id != -1 else src
     """
@@ -107,7 +116,7 @@ def _compute_dispersion_table(combined: pd.DataFrame) -> pd.DataFrame:
                 "src": src,
                 "group_id": gid,
                 "metric": m,
-                "dispersion": _dispersion(grp[m].to_numpy()),
+                "dispersion": _dispersion_cv(grp[m].to_numpy()) if mode == "cv" else _dispersion_v(grp[m].to_numpy()),
                 "n_hparams": len(grp)
             })
     disp = pd.DataFrame(rows)

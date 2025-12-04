@@ -23,7 +23,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
+from util.graph_utils import _compute_dispersion_table
 
 # ---------------------------- CLI ----------------------------
 
@@ -89,36 +89,7 @@ def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
               .sort_values(keys)
               .reset_index(drop=True))
 
-def _compute_dispersion_table(combined: pd.DataFrame) -> pd.DataFrame:
-    """
-    For each (mode, src, group_id), compute dispersion across hyper-params:
-      - group_id = shuffle_id if shuffle_id != -1 else src
-    """
-    df = combined.copy()
-    df["group_id"] = df["shuffle_id"].astype(str)
-    df.loc[df["shuffle_id"] == -1, "group_id"] = df["src"].astype(str)
 
-    # dedup repeated measurements within the same hyperparam triple
-    keys = ["mode","src","group_id","rho_target","leak","input_scale"]
-    metrics = [m for m in ("MC","IPC","KR","GR") if m in df.columns]
-    df_agg = (df.groupby(keys, as_index=False)[metrics]
-                .mean()
-                .sort_values(keys)
-                .reset_index(drop=True))
-
-    rows = []
-    for (mode, src, gid), grp in df_agg.groupby(["mode","src","group_id"]):
-        for m in metrics:
-            rows.append({
-                "mode": mode,
-                "src": src,
-                "group_id": gid,
-                "metric": m,
-                "dispersion": _dispersion(grp[m].to_numpy()),
-                "n_hparams": len(grp)
-            })
-    disp = pd.DataFrame(rows)
-    return disp
 
 
 # --------------------------- plots ---------------------------
@@ -150,7 +121,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                      label=f"{mode} (N={len(s)})")
 
         plt.title(f"Invariance dispersion by architecture — {m}")
-        plt.xlabel(f"dispersion = std({m}) / mean({m}) across hyper-params")
+        plt.xlabel(f"dispersion = std({m}) across hyper-params") # / mean({m}) 
         plt.ylabel("fraction (normalized by N)")
         plt.legend(frameon=False, fontsize=9, ncol=2)
         plt.tight_layout()
@@ -202,7 +173,7 @@ def main():
     print(f"[saved] {out_comb}  (rows={len(combined)})")
 
     # Compute and save dispersion table
-    disp = _compute_dispersion_table(combined)
+    disp = _compute_dispersion_table(combined,mode="v")
     out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))
     disp.to_csv(out_disp, index=False)
     print(f"[saved] {out_disp}  (rows={len(disp)})")

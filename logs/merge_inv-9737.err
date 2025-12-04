@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/util/merge.py", line 29, in <module>
+    from util.graph_utils import _safe_path, _read_glob, _build_combined, _compute_dispersion_table
+ModuleNotFoundError: No module named 'util.graph_utils'; 'util' is not a package
+
+ERROR conda.cli.main_run:execute(49): `conda run python util/merge.py --glob-shuf experiment_full_chunks/chunk_*/bio_vs_shuffle_invariance.csv --glob-variants experiment_full_chunks/chunk_*/ce_real_reps.csv --out-dir experiment_full_merged --bins 40 --scatter-alpha 0.6` failed. (See above for error)

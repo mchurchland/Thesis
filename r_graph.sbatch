@@ -15,8 +15,8 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
 # Run graphing.py
-conda run -n cel python graphing/graph_hist.py \
-  --combined experiment_full_merged.v2/combined.ALL.csv \
-  --out-dir experiment_full_merged.v2 \
+conda run -n cel python graph_hist.py \
+  --combined experiment_full_merged.v2_saved/combined.ALL.csv \
+  --out-dir experiment_full_merged.v2_saved \
   --bins 100 \
   --scatter-alpha 0.55

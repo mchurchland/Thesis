@@ -29,9 +29,9 @@ import time
 from util.util import load_connectome, build_reservoir
 from network_stats.run_one import run_one
 from nomad import EANOMAD  # pip install EANOMAD :contentReference[oaicite:1]{index=1}
-WASHOUT        = 1000
-T_TRAIN        = 10000
-T_TEST         = 2000
+WASHOUT        = 500
+T_TRAIN        = 1500
+T_TEST         = 500
 RIDGE_ALPHA    = 1e-4
 IPC_MAX_DELAY  = 50
 IPC_MAX_ORDER  = 3
@@ -40,9 +40,9 @@ PERTURB_STD    = 0.01
 SAT_THRESH     = 2.0
 NEAR_ZERO_STD  = 1e-3
 K_CONTROLLABILITY = 100
-#WASHOUT        = 600
-#T_TRAIN        = 1500
-#T_TEST         = 500
+#WASHOUT        = 500 1000
+#T_TRAIN        = 1500 10000
+#T_TEST         = 500 2000
 
 # ------------------------- helpers -------------------------
 
@@ -70,66 +70,66 @@ def run_scores_for_matrix(
     independent instantiations and average the resulting stats.
     """
     scores = {k: [] for k in ("MC", "IPC", "KR", "GR")}
+    with torch.no_grad():
+        for ci, (target_sr, leak, in_scale) in enumerate(col_params):
+            per_seed_vals = {k: [] for k in scores.keys()}
 
-    for ci, (target_sr, leak, in_scale) in enumerate(col_params):
-        per_seed_vals = {k: [] for k in scores.keys()}
+            for si in range(n_seeds):
+                cur_seed = seed_base + ci * seed_stride + si
 
-        for si in range(n_seeds):
-            cur_seed = seed_base + ci * seed_stride + si
+                try:
+                    Wt, Win, _, _ = build_reservoir(
+                        feature_conn="cel",
+                        feature_weights="bio",
+                        feature_dale="none",
+                        target_sr=target_sr,
+                        N=W_bio_mat.shape[0],
+                        ce_W_bio=W_bio_mat,
+                        ce_ei=ce_ei,
+                        ws_k=WS_K,
+                        input_scale=in_scale,
+                        seed=cur_seed,
+                        drive_idx=None,
+                        nnz_target=None,
+                        DEVICE=device,
+                    )
+                    Wt = Wt.to(device)
+                    Win = Win.to(device)
 
-            try:
-                Wt, Win, _, _, _ = build_reservoir(
-                    feature_conn="cel",
-                    feature_weights="bio",
-                    feature_dale="none",
-                    target_sr=target_sr,
-                    N=W_bio_mat.shape[0],
-                    ce_W_bio=W_bio_mat,
-                    ce_ei=ce_ei,
-                    ws_k=WS_K,
-                    input_scale=in_scale,
-                    seed=cur_seed,
-                    drive_idx=None,
-                    nnz_target=None,
-                    DEVICE=device,
-                )
-                Wt = Wt.to(device)
-                Win = Win.to(device)
+                    sc = run_one(
+                        Wt,
+                        Win,
+                        leak,
+                        device,
+                        WASHOUT,
+                        PERTURB_STD,
+                        T_TRAIN,
+                        T_TEST,
+                        MC_MAX_DELAY,
+                        IPC_MAX_DELAY,
+                        IPC_MAX_ORDER,
+                        RIDGE_ALPHA,
+                        K_CONTROLLABILITY,
+                        SAT_THRESH,
+                        NEAR_ZERO_STD,
+                    )
+                except Exception as e:
+                    print(f"run_scores_for_matrix error at col_idx={ci}, seed={cur_seed}: {e}")
+                    continue
 
-                sc = run_one(
-                    Wt,
-                    Win,
-                    leak,
-                    device,
-                    WASHOUT,
-                    PERTURB_STD,
-                    T_TRAIN,
-                    T_TEST,
-                    MC_MAX_DELAY,
-                    IPC_MAX_DELAY,
-                    IPC_MAX_ORDER,
-                    RIDGE_ALPHA,
-                    K_CONTROLLABILITY,
-                    SAT_THRESH,
-                    NEAR_ZERO_STD,
-                )
-            except Exception as e:
-                print(f"run_scores_for_matrix error at col_idx={ci}, seed={cur_seed}: {e}")
-                continue
+                for k in per_seed_vals.keys():
+                    per_seed_vals[k].append(float(sc[k]))
 
-            for k in per_seed_vals.keys():
-                per_seed_vals[k].append(float(sc[k]))
+            # average over seeds for this col_param (NaN if everything failed)
+            for k in scores.keys():
+                if len(per_seed_vals[k]) == 0:
+                    raise ValueError(
+                        f"No valid runs for col_idx={ci}, seed_base={seed_base}, n_seeds={n_seeds}. "
+                        "Check if the connectome is valid and the parameters are correct.")
+                else:
+                    scores[k].append(float(np.nanmean(per_seed_vals[k])))
 
-        # average over seeds for this col_param (NaN if everything failed)
-        for k in scores.keys():
-            if len(per_seed_vals[k]) == 0:
-                raise ValueError(
-                    f"No valid runs for col_idx={ci}, seed_base={seed_base}, n_seeds={n_seeds}. "
-                    "Check if the connectome is valid and the parameters are correct.")
-            else:
-                scores[k].append(float(np.nanmean(per_seed_vals[k])))
-
-    return {k: np.asarray(v, dtype=np.float32) for k, v in scores.items()}
+        return {k: np.asarray(v, dtype=np.float32) for k, v in scores.items()}
 
 
 def make_col_params(
@@ -230,9 +230,7 @@ def main():
         seed_base=args.seed + 123,
         n_seeds=args.n_seeds_per_eval,
     )
-    print(f"Baseline scores computed in {time.time() - t0:.2f} seconds.")
-    quit()
-    exit()
+
     baseline_means = {k: float(np.nanmean(v)) for k, v in baseline.items()}
 
     # log baseline

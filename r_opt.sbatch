@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
-#SBATCH --time=02:00:00
+#SBATCH --time=24:00:00
 # Uncomment to run multiple independent seeds:
 # SBATCH --array=0-7
 #SBATCH --output=logs/%x-%A_%a.out
@@ -33,10 +33,10 @@ conda run -n cel python opt_cel.py \
   --device cuda \
   --mode EA \
   --generations 2 \
-  --population-size 2 \
+  --population-size 4 \
   --subset-size 49 \
   --bounds 1 \
-  --max-bb-eval 5 \
+  --max-bb-eval 20 \
   --n-mutate-coords 0 \
   --rho-targets 0.99 \
   --leaks  0.95 \

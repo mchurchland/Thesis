@@ -40,7 +40,7 @@ def _run_variant_row(   WS_K: int,
         Nloc = (custom_ce.shape[0] if (custom_ce is not None and feature_conn == "cel") else ce_W_bio.shape[0])
         for ci, (target_sr, leak, in_scale) in enumerate(col_params):
             try:
-                Wt, Win, _, _, _ = build_reservoir(
+                Wt, Win, _, _ = build_reservoir(
                     feature_conn=feature_conn,
                     feature_weights=feature_weights,
                     feature_dale="none",
@@ -74,7 +74,7 @@ def _run_row_for_matrix(WS_K: int,
     scores = {k: [] for k in ("MC","IPC","KR","GR")}
     for ci, (target_sr, leak, in_scale) in enumerate(col_params):
         try:
-            Wt, Win, _, _, _ = build_reservoir(
+            Wt, Win, _, _ = build_reservoir(
                 feature_conn="cel",
                 feature_weights="bio",
                 feature_dale="none",
