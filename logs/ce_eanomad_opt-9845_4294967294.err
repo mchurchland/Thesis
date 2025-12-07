@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/opt_cel.py", line 373, in <module>
+    main(args)
+  File "/home/milesc/Thesis/opt_cel.py", line 235, in main
+    baseline = run_scores_for_matrix(
+  File "/home/milesc/Thesis/opt_cel.py", line 191, in run_scores_for_matrix
+    raise ValueError(
+ValueError: No valid runs for col_idx=0, seed_base=125, n_seeds=4. Check if the connectome is valid and the parameters are correct.
+
+ERROR conda.cli.main_run:execute(49): `conda run python opt_cel.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir eanomad_ce_mc_ipc_kr_gr_runs/seed_0 --device cuda --mode EA --generations 2 --population-size 2 --subset-size 49 --bounds 1 --max-bb-eval 20 --n-mutate-coords 0 --rho-targets 0.99 --leaks 0.95 --input-scales 1.0 --w-mc 1 --w-ipc 1 --w-kr 1 --w-gr -1 --l2-penalty 0.0 --seed 2 --n-seeds-per-eval 4 --profile --profile-print` failed. (See above for error)

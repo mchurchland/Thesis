@@ -2,14 +2,25 @@ from network_stats.stats_util import legendre_P,effective_rank_from_states,ridge
 from torch import Tensor
 import torch ; import numpy as np
 
-def compute_IPC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor,
-                max_delay: int, max_order: int, alpha: float, device: torch.device) -> float:
+def compute_IPC(
+    Xtr: Tensor,
+    Xte: Tensor,
+    utr: Tensor,
+    ute: Tensor,
+    max_delay: int,
+    max_order: int,
+    alpha: float,
+    device: torch.device,
+) -> float:
     """
     Information Processing Capacity (approx.): sum of R^2 for Legendre targets
     P_k(u_{t - d}) for k=1..max_order, d=1..max_delay.
-    Inputs are rescaled to [-1,1] per-split.
-    """ 
-    # rescale u to [-1,1]
+
+    This version batches all Legendre orders for a fixed delay d, so that
+    we do ONE Cholesky factorization per delay and solve for all targets
+    in one go.
+    """
+
     def to_m11(u: Tensor) -> Tensor:
         umax = u.max()
         umin = u.min()
@@ -19,14 +30,42 @@ def compute_IPC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor,
     ute_s = to_m11(ute)
 
     total = 0.0
+
     for d in range(1, max_delay + 1):
+        # shared slices for this delay
+        base_tr = utr_s[:-d]          # [T_train - d, 1] or [T_train - d]
+        base_te = ute_s[:-d]          # [T_test  - d, 1] or [T_test  - d]
+        Xtr_d   = Xtr[d:]             # [T_train - d, N]
+        Xte_d   = Xte[d:]             # [T_test  - d, N]
+
+        # build all Legendre targets for orders k=1..max_order
+        ytr_cols = []
+        yte_cols = []
         for k in range(1, max_order + 1):
-            ytr = legendre_P(utr_s[:-d], k) ##train take off d amount of input
-            yte = legendre_P(ute_s[:-d], k) ##test take off d amount of input
-            Xtr_d = Xtr[d:] ## 
-            Xte_d = Xte[d:]
-            yhat = ridge_fit_predict(Xtr_d, ytr, Xte_d, alpha,DEVICE=device)
-            total += max(0.0, r2_score(yte, yhat))
+            ytr_k = legendre_P(base_tr, k)
+            yte_k = legendre_P(base_te, k)
+
+            # ensure 2D [T, 1]
+            if ytr_k.dim() == 1:
+                ytr_k = ytr_k.unsqueeze(1)
+            if yte_k.dim() == 1:
+                yte_k = yte_k.unsqueeze(1)
+
+            ytr_cols.append(ytr_k)
+            yte_cols.append(yte_k)
+
+        # [T_train - d, max_order], [T_test - d, max_order]
+        Ytr = torch.cat(ytr_cols, dim=1).to(device)
+        Yte = torch.cat(yte_cols, dim=1).to(device)
+
+        # ONE ridge solve for all orders k at this delay
+        Yhat = ridge_fit_predict(Xtr_d, Ytr, Xte_d, alpha, DEVICE=device)
+        # Yhat: [T_test - d, max_order]
+
+        # accumulate R^2 per column
+        for j in range(Ytr.shape[1]):
+            total += max(0.0, r2_score(Yte[:, j], Yhat[:, j]))
+
     return float(total)
 
 

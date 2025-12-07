@@ -33,7 +33,7 @@ conda run -n cel python opt_cel.py \
   --device cuda \
   --mode EA \
   --generations 2 \
-  --population-size 4 \
+  --population-size 2 \
   --subset-size 49 \
   --bounds 1 \
   --max-bb-eval 20 \
@@ -41,8 +41,10 @@ conda run -n cel python opt_cel.py \
   --rho-targets 0.99 \
   --leaks  0.95 \
   --input-scales 1.0 \
-  --w-mc 1 --w-ipc 1 --w-kr 1\
+  --w-mc 1 --w-ipc 1 --w-kr 1 \
   --w-gr -1 \
   --l2-penalty 0.0 \
-  --seed "${SEED}"\
-  --n-seeds-per-eval 4
+  --seed "${SEED}" \
+  --n-seeds-per-eval 4 \
+  --profile \
+  --profile-print

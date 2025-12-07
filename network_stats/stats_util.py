@@ -27,26 +27,56 @@ def effective_rank_from_states(X: Tensor) -> float:
     return float(erank)
 
 
-def ridge_fit_predict(Xtr: Tensor, ytr: Tensor, Xte: Tensor, alpha: float, DEVICE: torch.device) -> Tensor:
+def ridge_fit_predict(
+    Xtr: Tensor,
+    ytr: Tensor,
+    Xte: Tensor,
+    alpha: float,
+    DEVICE: torch.device,
+    eps: float = 1e-6,
+) -> Tensor:
     """
-    Ridge readout with feature standardization and pinv fallback.
-    
-    """
-    # center and scale columns (train stats)
-    mu = Xtr.mean(dim=0, keepdim=True)
-    sig = Xtr.std(dim=0, keepdim=True) + 1e-12
-    Xtr_n = (Xtr - mu) / sig
-    Xte_n = (Xte - mu) / sig
+    Ridge regression:
 
-    XT_X = Xtr_n.T @ Xtr_n
-    D = XT_X.shape[0] ## columns of Xtr_n
-    A = XT_X + alpha * torch.eye(D, device=DEVICE) 
-    b = Xtr_n.T @ ytr
-    #try:
-    w = torch.linalg.solve(A, b) ## solve for w 
-    #except RuntimeError: ## this should be gotten rid of!
-    #    w = torch.linalg.pinv(A) @ b
-    return Xte_n @ w ## apply w
+        w = (X^T X + alpha I)^(-1) X^T y
+
+    Supports:
+        ytr: [T] or [T, K] (multiple targets).
+
+    Uses ONE solve with multiple RHS instead of one per target.
+    """
+    Xtr = Xtr.to(DEVICE)
+    Xte = Xte.to(DEVICE)
+    ytr = ytr.to(DEVICE)
+
+    single_target = False
+    if ytr.dim() == 1:
+        ytr = ytr.unsqueeze(1)   # [T, 1]
+        single_target = True
+
+    T_train, n_feat = Xtr.shape
+    Xt = Xtr.transpose(0, 1)     # [N, T]
+
+    # Gram matrix
+    G = Xt @ Xtr                 # [N, N]
+    G = G + (alpha + eps) * torch.eye(
+        n_feat, device=DEVICE, dtype=Xtr.dtype
+    )
+
+    # All right-hand sides at once
+    B = Xt @ ytr                 # [N, K]
+
+    # Single linear solve for all targets
+    W = torch.linalg.solve(G, B) # [N, K]
+
+    # Predictions
+    yhat = Xte @ W               # [T_test, K]
+
+    if single_target:
+        return yhat.squeeze(1)
+
+    return yhat
+
 
 def r2_score(y_true: Tensor, y_pred: Tensor) -> float:
     y_true_c = y_true - y_true.mean()

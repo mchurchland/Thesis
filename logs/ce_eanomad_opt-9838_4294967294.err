@@ -1,0 +1,19 @@
+usage: opt_cel.py [-h] --ce-adj CE_ADJ --ce-ei CE_EI [--out-dir OUT_DIR]
+                  [--device DEVICE]
+                  [--rho-targets RHO_TARGETS [RHO_TARGETS ...]]
+                  [--leaks LEAKS [LEAKS ...]]
+                  [--input-scales INPUT_SCALES [INPUT_SCALES ...]]
+                  [--mode {EA,rEA}] [--generations GENERATIONS]
+                  [--population-size POPULATION_SIZE]
+                  [--subset-size SUBSET_SIZE] [--bounds BOUNDS]
+                  [--max-bb-eval MAX_BB_EVAL]
+                  [--n-mutate-coords N_MUTATE_COORDS]
+                  [--crossover-rate CROSSOVER_RATE] [--seed SEED] [--use-ray]
+                  [--n-seeds-per-eval N_SEEDS_PER_EVAL] [--w-mc W_MC]
+                  [--w-ipc W_IPC] [--w-kr W_KR] [--w-gr W_GR]
+                  [--norm {ratio,diff}] [--l2-penalty L2_PENALTY]
+                  [--delta-scale DELTA_SCALE] [--clip-abs CLIP_ABS]
+                  [--profile] [--profile-print]
+opt_cel.py: error: unrecognized arguments:  
+
+ERROR conda.cli.main_run:execute(49): `conda run python opt_cel.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir eanomad_ce_mc_ipc_kr_gr_runs/seed_0 --device cuda --mode EA --generations 2 --population-size 2 --subset-size 49 --bounds 1 --max-bb-eval 20 --n-mutate-coords 0 --rho-targets 0.99 --leaks 0.95 --input-scales 1.0 --w-mc 1 --w-ipc 1 --w-kr 1 --w-gr -1 --l2-penalty 0.0 --seed 2 --n-seeds-per-eval 4  ` failed. (See above for error)

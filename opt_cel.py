@@ -24,8 +24,9 @@ import csv
 import argparse
 import numpy as np
 from pathlib import Path
+import cProfile
 import torch
-import time
+import pstats
 from util.util import load_connectome, build_reservoir
 from network_stats.run_one import run_one
 from nomad import EANOMAD  # pip install EANOMAD :contentReference[oaicite:1]{index=1}
@@ -45,7 +46,71 @@ K_CONTROLLABILITY = 100
 #T_TEST         = 500 2000
 
 # ------------------------- helpers -------------------------
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ce-adj", type=str, required=True,
+                    help="Path prefix for load_connectome (same as your other scripts).")
+    ap.add_argument("--ce-ei", type=str, required=True,
+                    help="Path prefix for load_connectome (same as your other scripts).")
+    ap.add_argument("--out-dir", type=str, default="eanomad_opt")
+    ap.add_argument("--device", type=str, default="cuda")
 
+    # reservoir construction sweep during evaluation
+    ap.add_argument("--rho-targets", type=float, nargs="+", default=[0.9, 1.0, 1.1])
+    ap.add_argument("--leaks", type=float, nargs="+", default=[0.2, 0.5, 0.8])
+    ap.add_argument("--input-scales", type=float, nargs="+", default=[0.5, 1.0, 2.0])
+
+    # optimization hyperparams
+    ap.add_argument("--mode", type=str, choices=["EA", "rEA"], default="rEA",
+                    help="EA runs NOMAD on random slices each gen; rEA only on mutated coords. :contentReference[oaicite:2]{index=2}")
+    ap.add_argument("--generations", type=int, default=50)
+    ap.add_argument("--population-size", type=int, default=32)
+    ap.add_argument("--subset-size", type=int, default=20,
+                    help="Coords refined per NOMAD call, keep <=49. :contentReference[oaicite:3]{index=3}")
+    ap.add_argument("--bounds", type=float, default=0.1,
+                    help="Half-width of NOMAD box around slice. :contentReference[oaicite:4]{index=4}")
+    ap.add_argument("--max-bb-eval", type=int, default=150,
+                    help="NOMAD evaluations per call. :contentReference[oaicite:5]{index=5}")
+    ap.add_argument("--n-mutate-coords", type=int, default=5,
+                    help="Coords reset per mutation. :contentReference[oaicite:6]{index=6}")
+    ap.add_argument("--crossover-rate", type=float, default=0.5)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--use-ray", action="store_true",
+                    help="Enable ray parallel NOMAD calls. :contentReference[oaicite:7]{index=7}")
+    ap.add_argument(
+        "--n-seeds-per-eval",
+        type=int,
+        default=1,
+        help="Number of random seeds to average over for each (rho, leak, input_scale) per fitness eval."
+    )
+
+    # scalarization / regularization
+    ap.add_argument("--w-mc", type=float, default=1.0)
+    ap.add_argument("--w-ipc", type=float, default=1.0)
+    ap.add_argument("--w-kr", type=float, default=1.0)
+    ap.add_argument("--w-gr", type=float, default=1.0)
+    ap.add_argument("--norm", choices=["ratio", "diff"], default="ratio",
+                    help="ratio: candidate/baseline; diff: candidate-baseline")
+    ap.add_argument("--l2-penalty", type=float, default=0.0,
+                    help="Penalty on mean squared synapse change over nz edges.")
+    ap.add_argument("--delta-scale", type=float, default=None,
+                    help="Scale for x -> additive delta. Default = std of nz weights.")
+    ap.add_argument("--clip-abs", type=float, default=None,
+                    help="Optional abs clip on candidate synapse weights.")
+
+    # profiling controls
+    ap.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable cProfile profiling and write profile to out-dir as profile.prof.",
+    )
+    ap.add_argument(
+        "--profile-print",
+        action="store_true",
+        help="Also print top 40 functions by cumulative time.",
+    )
+
+    return ap
 def save_csv(path: str, header: list[str], rows: list[tuple]):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="") as f:
@@ -142,60 +207,7 @@ def make_col_params(
 
 # ------------------------- main -------------------------
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--ce-adj", type=str, required=True,
-                    help="Path prefix for load_connectome (same as your other scripts).")
-    ap.add_argument("--ce-ei", type=str, required=True,
-                    help="Path prefix for load_connectome (same as your other scripts).")
-    ap.add_argument("--out-dir", type=str, default="eanomad_opt")
-    ap.add_argument("--device", type=str, default="cuda")
-
-    # reservoir construction sweep during evaluation
-    ap.add_argument("--rho-targets", type=float, nargs="+", default=[0.9, 1.0, 1.1])
-    ap.add_argument("--leaks", type=float, nargs="+", default=[0.2, 0.5, 0.8])
-    ap.add_argument("--input-scales", type=float, nargs="+", default=[0.5, 1.0, 2.0])
-
-    # optimization hyperparams
-    ap.add_argument("--mode", type=str, choices=["EA", "rEA"], default="rEA",
-                    help="EA runs NOMAD on random slices each gen; rEA only on mutated coords. :contentReference[oaicite:2]{index=2}")
-    ap.add_argument("--generations", type=int, default=50)
-    ap.add_argument("--population-size", type=int, default=32)
-    ap.add_argument("--subset-size", type=int, default=20,
-                    help="Coords refined per NOMAD call, keep <=49. :contentReference[oaicite:3]{index=3}")
-    ap.add_argument("--bounds", type=float, default=0.1,
-                    help="Half-width of NOMAD box around slice. :contentReference[oaicite:4]{index=4}")
-    ap.add_argument("--max-bb-eval", type=int, default=150,
-                    help="NOMAD evaluations per call. :contentReference[oaicite:5]{index=5}")
-    ap.add_argument("--n-mutate-coords", type=int, default=5,
-                    help="Coords reset per mutation. :contentReference[oaicite:6]{index=6}")
-    ap.add_argument("--crossover-rate", type=float, default=0.5)
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--use-ray", action="store_true",
-                    help="Enable ray parallel NOMAD calls. :contentReference[oaicite:7]{index=7}")
-    ap.add_argument(
-        "--n-seeds-per-eval",
-        type=int,
-        default=1,
-        help="Number of random seeds to average over for each (rho, leak, input_scale) per fitness eval."
-    )
-
-
-    # scalarization / regularization
-    ap.add_argument("--w-mc", type=float, default=1.0)
-    ap.add_argument("--w-ipc", type=float, default=1.0)
-    ap.add_argument("--w-kr", type=float, default=1.0)
-    ap.add_argument("--w-gr", type=float, default=1.0)
-    ap.add_argument("--norm", choices=["ratio", "diff"], default="ratio",
-                    help="ratio: candidate/baseline; diff: candidate-baseline")
-    ap.add_argument("--l2-penalty", type=float, default=0.0,
-                    help="Penalty on mean squared synapse change over nz edges.")
-    ap.add_argument("--delta-scale", type=float, default=None,
-                    help="Scale for x -> additive delta. Default = std of nz weights.")
-    ap.add_argument("--clip-abs", type=float, default=None,
-                    help="Optional abs clip on candidate synapse weights.")
-
-    args = ap.parse_args()
+def main(args: argparse.Namespace):
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -220,7 +232,6 @@ def main():
     col_params = make_col_params(args.rho_targets, args.leaks, args.input_scales)
 
     # baseline scores
-    t0= time.time()
     baseline = run_scores_for_matrix(
         WS_K=0,
         W_bio_mat=ce_W_bio,
@@ -349,4 +360,22 @@ def main():
             f.write(f"{k}_best_mean\t{float(np.nanmean(best_scores[k]))}\n")
 
 if __name__ == "__main__":
-    main()
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.profile:
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = out_dir / "profile.prof"
+
+        profiler = cProfile.Profile()
+        profiler.enable()
+        main(args)
+        profiler.disable()
+        profiler.dump_stats(str(profile_path))
+
+        if args.profile_print:
+            stats = pstats.Stats(profiler).sort_stats("cumtime")
+            stats.print_stats(40)
+    else:
+        main(args)

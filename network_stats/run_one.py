@@ -60,7 +60,6 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
     IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, IPC_MAX_ORDER, RIDGE_ALPHA,device)
     KR_val      = compute_KR(Xtr)
     GR_val      = compute_GR(Xtr, Xn[WASHOUT:WASHOUT+T_TRAIN])
-
     Dbar_diag = (1.0 - torch.tanh(Pre_tr)**2).mean(dim=0)
     Dbar = torch.diag(Dbar_diag)
     rank_k = controllability_erank(W, Win, leak, Dbar, K_CONTROLLABILITY)
