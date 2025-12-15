@@ -2,7 +2,10 @@ from torch import Tensor
 import torch
 
 def legendre_P(x: Tensor, order: int) -> Tensor:
-    # x in [-1,1]
+    """
+    Low-order Legendre polynomials P_n on [-1, 1] (n=1..3).
+    See: https://github.com/numpy/numpy/blob/main/numpy/polynomial/legendre.py
+    """
     if order == 1:
         return x
     elif order == 2:
@@ -14,7 +17,8 @@ def legendre_P(x: Tensor, order: int) -> Tensor:
 
 def effective_rank_from_states(X: Tensor) -> float:
     """
-    Kernel rank via effective rank of centered states.
+    Shannon effective rank of centered states (Roy & Vetterli, 2007, IEEE Signal Processing Letters 14:649-652).
+    Uses torch.linalg.svdvals; see https://github.com/pytorch/pytorch/blob/main/torch/linalg/__init__.py
     """
     Xc = X - X.mean(dim=0, keepdim=True) ## normalize the vec dim 0 is time normalize with respect to time
     s = torch.linalg.svdvals(Xc) ## this just gives sqrt(x^2) of eigen values, which is abs(eigen)
@@ -44,6 +48,7 @@ def ridge_fit_predict(
         ytr: [T] or [T, K] (multiple targets).
 
     Uses ONE solve with multiple RHS instead of one per target.
+    See: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_ridge.py
     """
     Xtr = Xtr.to(DEVICE)
     Xte = Xte.to(DEVICE)
@@ -79,6 +84,7 @@ def ridge_fit_predict(
 
 
 def r2_score(y_true: Tensor, y_pred: Tensor) -> float:
+    """Coefficient of determination R^2 (see sklearn.metrics.r2_score: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/_regression.py#L104)."""
     y_true_c = y_true - y_true.mean()
     ss_res = torch.sum((y_true - y_pred)**2)
     ss_tot = torch.sum(y_true_c**2) + 1e-12
@@ -86,6 +92,7 @@ def r2_score(y_true: Tensor, y_pred: Tensor) -> float:
 
 @torch.no_grad()
 def effective_rank(X: Tensor) -> float:
+    """Effective rank helper (same as effective_rank_from_states)."""
     Xc = X - X.mean(dim=0, keepdim=True)
     s = torch.linalg.svdvals(Xc)
     s = torch.clamp(s, min=1e-12)

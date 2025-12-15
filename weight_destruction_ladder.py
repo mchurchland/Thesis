@@ -1,0 +1,303 @@
+from __future__ import annotations
+
+"""
+Weight-destruction ladder: gradually replace C. elegans weights with Gaussian draws
+while keeping the CE adjacency fixed. Outputs per-fraction metrics and dispersion
+(coefficient of variation across the hyperparameter grid) and a plot of dispersion vs frac_replace.
+"""
+
+import argparse
+import os
+from typing import Iterable
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+from reservoir_variants import evaluate_reservoir
+from util.util import build_reservoir, load_connectome
+
+
+def partial_weight_randomization(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator) -> np.ndarray:
+    W = W_ce.copy().astype(np.float32)
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+
+    # match cel+randN: N(0, 1) on existing edges
+    new_vals = rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32)
+
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]])
+    W[sel] = new_vals
+    return W
+
+def _build_col_params(
+    sr_grid: Iterable[float],
+    leak_grid: Iterable[float],
+    u_grid: Iterable[float],
+) -> list[tuple[float, float, float]]:
+    return [(sr, leak, u) for sr in sr_grid for leak in leak_grid for u in u_grid]
+
+
+def _pick_device(cuda_index: int | None) -> torch.device:
+    if cuda_index is None:
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if cuda_index >= 0 and torch.cuda.is_available():
+        return torch.device(f"cuda:{cuda_index}")
+    return torch.device("cpu")
+
+
+def _dispersion(arr: np.ndarray, mode: str) -> float:
+    """Compute dispersion (std or CV) with safe mean handling for CV."""
+    arr = np.asarray(arr, float)
+    if mode == "std":
+        return float(np.nanstd(arr))
+    m = float(np.nanmean(arr))
+    s = float(np.nanstd(arr))
+    return s / (abs(m) + 1e-12)
+
+
+def run_scores_for_fraction(
+    ce_W_bio: np.ndarray,
+    frac_replace: float,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float, float, float]],
+    device: torch.device,
+    ws_k: int,
+    dispersion_mode: str,
+    seed_base: int = 0,
+    n_seeds: int = 1,
+    seed_stride: int = 101,
+) -> tuple[dict[str, float], dict[str, float], list[tuple]]:
+    """
+    Return (means across all seed×hparam runs, dispersion averaged over seeds, raw rows).
+    Dispersion is computed per-seed across the hyperparameter grid, then averaged over seeds.
+    """
+    metrics = ("MC", "IPC", "KR", "GR")
+    # per-seed lists of per-hparam values
+    seed_vals: dict[str, list[list[float]]] = {k: [] for k in metrics}
+    raw_rows: list[tuple] = []
+
+    for si in range(n_seeds):
+        per_seed_vals = {k: [] for k in metrics}
+        for ci, (target_sr, leak, in_scale) in enumerate(col_params):
+            cur_seed = seed_base + si * seed_stride + ci
+            rng_local = np.random.default_rng(cur_seed)
+            #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local)
+            W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
+            try:
+                Wt, Win, _, _ = build_reservoir(
+                    feature_conn="cel",
+                    feature_weights="bio",
+                    feature_dale="none",
+                    target_sr=target_sr,
+                    N=W_mat.shape[0],
+                    ce_W_bio=W_mat,
+                    ce_ei=ce_ei,
+                    ws_k=ws_k,
+                    input_scale=in_scale,
+                    seed=cur_seed,
+                    drive_idx=None,
+                    nnz_target=None,
+                    DEVICE=device,
+                )
+                res = evaluate_reservoir(Wt, Win, leak, device)
+            except Exception:
+                res = dict(MC=np.nan, IPC=np.nan, KR=np.nan, GR=np.nan)
+            for k in metrics:
+                per_seed_vals[k].append(float(res[k]))
+            raw_rows.append((frac_replace, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
+        for k in metrics:
+            seed_vals[k].append(per_seed_vals[k])
+
+    # means over all seed×hparam samples
+    means = {}
+    for k in metrics:
+        flat = [v for seed_list in seed_vals[k] for v in seed_list]
+        means[k] = float(np.nanmean(flat))
+
+    # dispersion per seed, then averaged
+    disp = {}
+    for k in metrics:
+        per_seed_disp = [_dispersion(np.asarray(seed_list, float), dispersion_mode) for seed_list in seed_vals[k]]
+        disp[k] = float(np.nanmean(per_seed_disp))
+
+    return means, disp, raw_rows
+
+
+def save_summary(
+    out_csv: str,
+    rows: list[tuple],
+):
+    import csv
+
+    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+    with open(out_csv, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(
+            [
+                "frac_replace",
+                "MC_mean",
+                "MC_disp",
+                "IPC_mean",
+                "IPC_disp",
+                "KR_mean",
+                "KR_disp",
+                "GR_mean",
+                "GR_disp",
+            ]
+        )
+        w.writerows(rows)
+
+
+def save_raw(out_csv: str, rows: list[tuple]):
+    import csv
+
+    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+    with open(out_csv, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["frac_replace", "seed_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR"])
+        w.writerows(rows)
+
+
+def plot_dispersion(out_png: str, summary_rows: list[tuple]):
+    fracs = [r[0] for r in summary_rows]
+    mc_std = [r[2] for r in summary_rows]
+    ipc_std = [r[4] for r in summary_rows]
+    kr_std = [r[6] for r in summary_rows]
+    gr_std = [r[8] for r in summary_rows]
+
+    plt.figure(figsize=(7, 4), dpi=140)
+    plt.plot(fracs, mc_std, marker="o", label="MC disp")
+    plt.plot(fracs, ipc_std, marker="o", label="IPC disp")
+    plt.plot(fracs, kr_std, marker="o", label="KR disp")
+    plt.plot(fracs, gr_std, marker="o", label="GR disp")
+    plt.xlabel("Fraction of CE connections shuffled")
+    plt.ylabel("Dispersion (per-seed over hyperparameter grid)")
+    plt.title("Invariance loss as CE connections are shuffled (per-hparam shuffle)")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_png)
+    plt.close()
+    print(f"Saved {out_png}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Weight destruction ladder on CE adjacency.")
+    ap.add_argument("--ce-adj", required=True, help="Path to C. elegans adjacency (npy).")
+    ap.add_argument("--ce-ei", required=True, help="Path to C. elegans EI labels (npy).")
+    ap.add_argument("--out-dir", default="ladder_results", help="Directory for CSVs/plots.")
+    ap.add_argument("--fractions", type=float, nargs="+", default=[0.0, 0.25, 0.5, 0.75, 1.0])
+    ap.add_argument("--ws-k", type=int, default=40, help="WS K (only used to match util.build_reservoir signature).")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--cuda", type=int, default=None, help="CUDA device index; omit for auto.")
+    ap.add_argument("--rho-targets", type=float, nargs="+", default=[0.6, 0.8, 0.95, 1.05])
+    ap.add_argument("--leaks", type=float, nargs="+", default=[0.6, 0.8, 1.0])
+    ap.add_argument("--input-scales", type=float, nargs="+", default=[0.1, 0.5, 1.0, 1.5])
+    ap.add_argument("--n-seeds", type=int, default=1, help="Number of seeds to average per hyperparam point.")
+    ap.add_argument("--seed-stride", type=int, default=101, help="Stride between seeds across columns.")
+    ap.add_argument("--dispersion", choices=["cv", "std"], default="cv", help="Dispersion metric across hyperparams (per seed).")
+    args = ap.parse_args()
+
+    device = _pick_device(args.cuda)
+    ce_W_bio, ce_ei, _ = load_connectome(args.ce_adj, args.ce_ei)
+
+    col_params = _build_col_params(args.rho_targets, args.leaks, args.input_scales)
+
+    summary_rows = []
+    raw_rows = []
+
+    for fi, frac in enumerate(args.fractions):
+        means, disp, rows = run_scores_for_fraction(
+            ce_W_bio=ce_W_bio,
+            frac_replace=frac,
+            ce_ei=ce_ei,
+            col_params=col_params,
+            device=device,
+            ws_k=args.ws_k,
+            dispersion_mode=args.dispersion,
+            seed_base=args.seed + fi * 10_000,
+            n_seeds=args.n_seeds,
+            seed_stride=args.seed_stride,
+        )
+        summary_rows.append(
+            (
+                frac,
+                means["MC"],
+                disp["MC"],
+                means["IPC"],
+                disp["IPC"],
+                means["KR"],
+                disp["KR"],
+                means["GR"],
+                disp["GR"],
+
+            )
+        )
+
+        raw_rows.extend(rows)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    save_summary(os.path.join(args.out_dir, "ladder_summary.csv"), summary_rows)
+    save_raw(os.path.join(args.out_dir, "ladder_raw.csv"), raw_rows)
+    plot_dispersion(os.path.join(args.out_dir, "dispersion_vs_frac.png"), summary_rows)
+
+def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
+                                    rng: np.random.Generator | None = None) -> np.ndarray:
+    """
+    A ---> B -------> A ---> D \\
+    C ---> D -------> C ---> B preseving degree 
+    """
+    if percent == 0.0:
+        return A.copy().astype(np.float32)  # no change
+    def can_swap(a,b,c,d):
+        if (len({a,b,c,d}) < 4) or ( A[a,d] or A[c,b]): ## makes sure all the values are unique, if the connection between a and d already exists or c and b
+            return False
+        else:
+            return True
+    if rng is None:
+        raise ValueError("Need to pass in a random number generator")
+    A = A.copy().astype(bool) ## make a copy of A
+    np.fill_diagonal(A, False)
+    edges = np.argwhere(A)
+    m = edges.shape[0]
+    if m < 2:
+        raise ValueError(f"Not enough edges to perform randomization. Found {m} edges. make sure the matrix is correct")
+    if m* percent < 2:
+        return A.copy().astype(np.float32)  # not enough edges to swap, return original
+    #I dont need a for loop for this 
+    max_retries = m*2 ##arbitrary
+    retries = 0
+    
+    idx = rng.choice(m, size=np.floor(m * percent).astype(int), replace=False) ##i feel like this hsould be a stack
+    #while not(idx.isempty) and retries < max_retries:
+    i=0
+    
+    while i + 1 < len(idx) and retries < max_retries:
+        a, b = edges[idx[i]] ## edge 1
+        c, d = edges[idx[i+1]] ## edge 2
+        if can_swap(a,b,c,d):
+            A[a,b] = 0## turn of ab
+            A[c,d] = 0
+            A[a,d] = 1
+            A[c,b] = 1 
+            edges[idx[i]] = [a,d]
+            edges[idx[i+1]] = [c,b]
+            i+=2
+
+        else:
+            retries += 1
+            rem = idx[i:]
+            rng.shuffle(rem) ## shuffle the indices
+            idx[i:] = rem ## replace the indices with the shuffled one
+    return A.astype(np.float32)
+
+if __name__ == "__main__":
+    main()
