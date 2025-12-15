@@ -10,7 +10,6 @@ import gymnasium as gym
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from collections import deque
 import ray
 
 

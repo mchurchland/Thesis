@@ -3,8 +3,11 @@ import matplotlib.pyplot as plt
 from torch import Tensor
 import torch
 import os
+import networkx as nx
+import networkx as nx
 
 def imsave_heatmap(data: np.ndarray, row_labels, col_labels, title: str, fname: str):
+    """Save a labeled heatmap using Matplotlib (Hunter, 2007, Comput. Sci. Eng. 9:90-95). See: https://github.com/matplotlib/matplotlib/blob/main/examples/images_contours_and_fields/image_annotated_heatmap.py"""
     plt.figure(figsize=(1.6 + 1.1*len(col_labels), 1.6 + 0.9*len(row_labels)))
     vmin = np.nanmin(data)
     vmax = np.nanmax(data)
@@ -21,6 +24,9 @@ def imsave_heatmap(data: np.ndarray, row_labels, col_labels, title: str, fname: 
 
 def load_connectome(adj_path: str | None, ei_path: str | None):
     """
+    Load C. elegans adjacency and EI labels (Varshney et al., 2011, PLoS Comput. Biol. 7:e1001066).
+    See: https://github.com/OpenWorm/CElegansNeuroML/blob/master/CElegansNeuronTables.xlsx
+
     Returns:
       W_bio: np.ndarray [N,N] or None
       ei_labels: np.ndarray [N] with values in {-1,0,+1} or None
@@ -86,6 +92,9 @@ def run_reservoir(W: torch.Tensor,
                   u: torch.Tensor,
                   leak: float) -> torch.Tensor:
     """
+    Echo state update for a single-reservoir run (Jaeger, 2002, GMD Report 152).
+    See: https://github.com/cknd/pyESN/blob/master/pyESN.py#L32
+
     W:   [N, N]
     Win: [N, 1] or [N]
     u:   [T, 1] or [T]
@@ -130,6 +139,15 @@ def build_reservoir(
     DEVICE: torch.device | None = None,
 ) -> tuple[Tensor, Tensor, Tensor | None, float, float]:
     """
+    Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
+    ER (Erdos & Renyi, 1959, Publ. Math. Debrecen 6:290-297), WS (Watts & Strogatz, 1998, Nature 393:440-442),
+    and spectral-radius scaling for echo state networks (Jaeger, 2002, GMD Report 152); Dale sign constraints follow
+    standard excitatory/inhibitory segregation (Eccles, 1964, The Physiology of Synapses).
+    See: https://github.com/networkx/networkx/blob/main/networkx/generators/random_graphs.py (ER),
+         https://github.com/networkx/networkx/blob/main/networkx/generators/smallworld.py (WS),
+         https://github.com/networkx/networkx/blob/main/networkx/algorithms/swap.py (degree-preserving swaps),
+         https://github.com/cknd/pyESN/blob/master/pyESN.py (spectral-radius scaling / ESN setup).
+
     Returns:
       Wt, Win, ei_t, rho_nat, rho_post
     """
@@ -256,23 +274,33 @@ def build_reservoir(
 
 @torch.no_grad()
 def spectral_radius_power(W: Tensor, iters: int = 200) -> float:
-    """Power iteration estimate of spectral radius ρ(W)."""
-    n = W.shape[0]
-    v = torch.randn(n, device=W.device)
-    v = v / (v.norm() + 1e-12)
-    lam = 0.0
-    for _ in range(iters):
-        v = W @ v
-        nrm = v.norm()
-        if float(nrm) < 1e-12:
-            break
-        v = v / nrm
-        lam = float((v @ (W @ v)) / (v @ v + 1e-12))
-    return abs(lam)
+    """
+    Spectral radius via torch.linalg.eigvals with a power-iteration fallback
+    (Golub & Van Loan, 2013, Matrix Computations 4th ed.).
+    """
+    try:
+        eigs = torch.linalg.eigvals(W)
+        return float(torch.max(torch.abs(eigs)).item())
+    except Exception:
+        n = W.shape[0]
+        v = torch.randn(n, device=W.device)
+        v = v / (v.norm() + 1e-12)
+        lam = 0.0
+        for _ in range(iters):
+            v = W @ v
+            nrm = v.norm()
+            if float(nrm) < 1e-12:
+                break
+            v = v / nrm
+            lam = float((v @ (W @ v)) / (v @ v + 1e-12))
+        return abs(lam)
 
 @torch.no_grad()
 def scale_to_sr(W: torch.Tensor, target_sr: float | None):
-    """Scale W so that spectral radius ρ(W) = target_sr; if None, return unchanged."""
+    """
+    Scale W so that spectral radius rho(W) = target_sr (Jaeger, 2002, GMD Report 152); if None, return unchanged.
+    See: https://github.com/cknd/pyESN/blob/master/pyESN.py#L59 (spectral-radius scaling in ESNs).
+    """
     if target_sr is None:
         return W
     sr = spectral_radius_power(W)
@@ -284,98 +312,71 @@ def _match_edge_count(mask: np.ndarray, target_m: int, rng: np.random.Generator)
     """
     Given a boolean mask (no self-loops), randomly add/remove edges to match target_m nnz.
     Returns a boolean mask with exactly target_m ones (and zero diagonal).
-    """
-    n = mask.shape[0]
-    M = mask.copy().astype(bool)
-    np.fill_diagonal(M, False)
-    current = int(M.sum())
-    if current == target_m:
-        return M.astype(np.float32)
 
-    all_idx = [(i, j) for i in range(n) for j in range(n) if i != j]
+    Random edge add/drop to match density (Newman, 2010, Networks: An Introduction).
+    Uses NetworkX DiGraph utilities; see https://github.com/networkx/networkx/blob/main/networkx/classes/digraph.py
+    """
+    G = nx.from_numpy_array(mask.astype(bool), create_using=nx.DiGraph)
+    G.remove_edges_from(nx.selfloop_edges(G))
+    current = G.number_of_edges()
+    nodes = list(G.nodes())
 
     if current > target_m:
-        # remove extras
-        ones = np.argwhere(M)
-        drop_k = current - target_m
-        keep_sel = rng.choice(ones.shape[0], size=(ones.shape[0] - drop_k), replace=False)
-        keep_pairs = ones[keep_sel]
-        M[:] = False
-        for i, j in keep_pairs:
-            M[i, j] = True
-    else:
-        # add missing
-        zeros = np.array([(i, j) for (i, j) in all_idx if not M[i, j]])
-        add_k = target_m - current
-        if add_k > 0 and zeros.size > 0:
-            pick = rng.choice(zeros.shape[0], size=min(add_k, zeros.shape[0]), replace=False)
-            for i, j in zeros[pick]:
-                M[i, j] = True
-            # if still short (zeros exhausted), leave as is
-    np.fill_diagonal(M, False)
-    return M.astype(np.float32)
+        edges = list(G.edges())
+        drop_idx = rng.choice(len(edges), size=current - target_m, replace=False)
+        G.remove_edges_from([edges[i] for i in drop_idx])
+    elif current < target_m:
+        candidates = [(u, v) for u in nodes for v in nodes if u != v and not G.has_edge(u, v)]
+        need = target_m - current
+        if need > 0 and candidates:
+            add_idx = rng.choice(len(candidates), size=min(need, len(candidates)), replace=False)
+            G.add_edges_from([candidates[i] for i in add_idx])
+
+    G.remove_edges_from(nx.selfloop_edges(G))
+    return nx.to_numpy_array(G, dtype=np.float32)
 
 def er_adjacency(n: int, p: float, rng: np.random.Generator) -> np.ndarray:
-    """Directed Erdős–Rényi; independent directions."""
-    A = rng.random((n, n)) < p
-    np.fill_diagonal(A, False)
-    return A.astype(np.float32)
+    """
+    Directed Erdos-Renyi graph with independent directions (Erdos & Renyi, 1959, Publ. Math. Debrecen 6:290-297).
+    Uses NetworkX gnp_random_graph with directed=True; see https://github.com/networkx/networkx/blob/main/networkx/generators/random_graphs.py#L310
+    """
+    G = nx.gnp_random_graph(n, p, seed=rng, directed=True)
+    G.remove_edges_from(nx.selfloop_edges(G))
+    return nx.to_numpy_array(G, dtype=np.float32)
 
 def ws_adjacency(n: int, k: int, p: float, rng: np.random.Generator) -> np.ndarray:
-    """Undirected Watts–Strogatz adjacency (bool)."""
+    """
+    Undirected Watts-Strogatz small-world adjacency (Watts & Strogatz, 1998, Nature 393:440-442).
+    Uses NetworkX watts_strogatz_graph; see https://github.com/networkx/networkx/blob/main/networkx/generators/smallworld.py#L14
+    """
     assert k % 2 == 0 and k < n and 0.0 <= p <= 1.0
-    A = np.zeros((n, n), dtype=bool)
-    # ring
-    for i in range(n):
-        for j in range(1, k // 2 + 1):
-            A[i, (i + j) % n] = True
-            A[i, (i - j) % n] = True
-    # rewire symmetrically
-    for i in range(n):
-        for j in range(1, k // 2 + 1):
-            if rng.random() < p:
-                old = (i + j) % n
-                if not A[i, old]:
-                    continue
-                A[i, old] = False; A[old, i] = False
-                candidates = np.where(~A[i] & (np.arange(n) != i))[0]
-                if len(candidates) == 0:
-                    A[i, old] = True; A[old, i] = True
-                else:
-                    new = rng.choice(candidates)
-                    A[i, new] = True; A[new, i] = True
-    np.fill_diagonal(A, False)
-    return A.astype(np.float32)
+    G = nx.watts_strogatz_graph(n, k, p, seed=rng)
+    A = nx.to_numpy_array(G, dtype=np.float32)
+    np.fill_diagonal(A, 0.0)
+    return A
 
 
 def degree_matched_shuffle_directed(A: np.ndarray, tries: int = 10_000,
                                     rng: np.random.Generator | None = None) -> np.ndarray:
+    """
+    Degree-preserving double-edge swaps for directed graphs (Milo et al., 2002, Science 298:824-827).
+    Uses NetworkX directed_double_edge_swap; see https://github.com/networkx/networkx/blob/main/networkx/algorithms/swap.py#L266
+    """
     if rng is None:
         rng = np.random.default_rng()
-    A = A.copy().astype(bool)
-    n = A.shape[0]
-    np.fill_diagonal(A, False)
-    edges = np.argwhere(A)
-    m = edges.shape[0]
+    G = nx.from_numpy_array(A.astype(bool), create_using=nx.DiGraph)
+    G.remove_edges_from(nx.selfloop_edges(G))
+    m = G.number_of_edges()
     if m < 2:
-        return A.astype(np.float32)
-    for _ in range(tries):
-        idx = rng.choice(m, size=2, replace=False)
-        a, b = edges[idx[0]]
-        c, d = edges[idx[1]]
-        if len({a, b, c, d}) < 4:
-            continue
-        if a == d or c == b:
-            continue
-        if A[a, d] or A[c, b]:
-            continue
-        A[a, b] = False; A[c, d] = False
-        A[a, d] = True;  A[c, b] = True
-        edges[idx[0]] = [a, d]
-        edges[idx[1]] = [c, b]
-    return A.astype(np.float32)
+        return nx.to_numpy_array(G, dtype=np.float32)
+    nswap = min(tries, max(1, m))
+    max_tries = max(tries, nswap * 10)
+    H = nx.directed_double_edge_swap(G.copy(), nswap=nswap, max_tries=max_tries, seed=rng)
+    H.remove_edges_from(nx.selfloop_edges(H))
+    return nx.to_numpy_array(H, dtype=np.float32)
 
 def spectral_norm(W: Tensor) -> float:
+    """Spectral norm via leading singular value (Golub & Van Loan, 2013, Matrix Computations 4th ed.). See: https://github.com/pytorch/pytorch/blob/main/torch/nn/utils/spectral_norm.py"""
     return float(torch.linalg.svdvals(W)[0])
 
 def set_seed(seed: int):

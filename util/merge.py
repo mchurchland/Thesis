@@ -18,14 +18,10 @@ Outputs (defaults)
 """
 
 import os
-import glob
 import argparse
-import numpy as np
-import pandas as pd
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 from util.graph_utils import _safe_path, _read_glob, _build_combined, _compute_dispersion_table
 
 # ---------------------------- CLI ----------------------------

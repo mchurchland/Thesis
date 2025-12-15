@@ -24,6 +24,9 @@ from util.util import build_reservoir, load_connectome
 def partial_weight_randomization(W_ce: np.ndarray,
                                  frac_replace: float,
                                  rng: np.random.Generator) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
     W = W_ce.copy().astype(np.float32)
     nz = np.nonzero(W)
     idx = np.arange(len(nz[0]))
@@ -42,6 +45,7 @@ def _build_col_params(
     leak_grid: Iterable[float],
     u_grid: Iterable[float],
 ) -> list[tuple[float, float, float]]:
+
     return [(sr, leak, u) for sr in sr_grid for leak in leak_grid for u in u_grid]
 
 
@@ -54,7 +58,9 @@ def _pick_device(cuda_index: int | None) -> torch.device:
 
 
 def _dispersion(arr: np.ndarray, mode: str) -> float:
-    """Compute dispersion (std or CV) with safe mean handling for CV."""
+    """
+    Compute dispersion (std or CV) with safe mean handling for CV (Sokal & Rohlf, 1995, Biometry 3rd ed.).
+    """
     arr = np.asarray(arr, float)
     if mode == "std":
         return float(np.nanstd(arr))
@@ -76,8 +82,11 @@ def run_scores_for_fraction(
     seed_stride: int = 101,
 ) -> tuple[dict[str, float], dict[str, float], list[tuple]]:
     """
-    Return (means across all seed×hparam runs, dispersion averaged over seeds, raw rows).
-    Dispersion is computed per-seed across the hyperparameter grid, then averaged over seeds.
+    Sweep seeds/hyperparameters to compute MC/IPC/KR/GR reservoir metrics, following standard RC
+    evaluations (Jaeger, 2002, GMD Report 152; Dambre et al., 2012, Sci. Rep. 2:514; Legenstein &
+    Maass, 2007, Neural Networks 20:323-334).
+    Return (means across all seed x hparam runs, dispersion averaged over seeds, raw rows). Dispersion
+    is computed per-seed across the hyperparameter grid, then averaged over seeds.
     """
     metrics = ("MC", "IPC", "KR", "GR")
     # per-seed lists of per-hparam values
@@ -116,7 +125,7 @@ def run_scores_for_fraction(
         for k in metrics:
             seed_vals[k].append(per_seed_vals[k])
 
-    # means over all seed×hparam samples
+    # means over all seed x hparam samples
     means = {}
     for k in metrics:
         flat = [v for seed_list in seed_vals[k] for v in seed_list]
@@ -157,6 +166,7 @@ def save_summary(
 
 
 def save_raw(out_csv: str, rows: list[tuple]):
+    """Write raw seed x hyperparameter rows to CSV (Shafranovich, 2005, IETF RFC 4180)."""
     import csv
 
     os.makedirs(os.path.dirname(out_csv), exist_ok=True)
@@ -190,6 +200,7 @@ def plot_dispersion(out_png: str, summary_rows: list[tuple]):
 
 
 def main():
+
     ap = argparse.ArgumentParser(description="Weight destruction ladder on CE adjacency.")
     ap.add_argument("--ce-adj", required=True, help="Path to C. elegans adjacency (npy).")
     ap.add_argument("--ce-ei", required=True, help="Path to C. elegans EI labels (npy).")
@@ -252,8 +263,8 @@ def main():
 def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
                                     rng: np.random.Generator | None = None) -> np.ndarray:
     """
-    A ---> B -------> A ---> D \\
-    C ---> D -------> C ---> B preseving degree 
+    Degree-preserving double-edge swap randomization for directed graphs
+    (Milo et al., 2002, Science 298:824-827).
     """
     if percent == 0.0:
         return A.copy().astype(np.float32)  # no change
@@ -262,9 +273,16 @@ def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
             return False
         else:
             return True
+    def edge_swap(a: int, b: int, c: int, d: int):
+        edge1_weight = A[a,b].copy()
+        edge2_weight = A[c,d].copy()
+        A[a,b] = 0  # remove edge 1
+        A[c,d] = 0  # remove edge 2
+        A[a,d] = edge1_weight  # add edge 1 to new nodes
+        A[c,b] = edge2_weight  # add edge 2 to new nodes
     if rng is None:
         raise ValueError("Need to pass in a random number generator")
-    A = A.copy().astype(bool) ## make a copy of A
+    A = A.copy() ## make a copy of A
     np.fill_diagonal(A, False)
     edges = np.argwhere(A)
     m = edges.shape[0]
@@ -284,14 +302,11 @@ def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
         a, b = edges[idx[i]] ## edge 1
         c, d = edges[idx[i+1]] ## edge 2
         if can_swap(a,b,c,d):
-            A[a,b] = 0## turn of ab
-            A[c,d] = 0
-            A[a,d] = 1
-            A[c,b] = 1 
+            edge_swap(a,b,c,d) ## swap the edges
             edges[idx[i]] = [a,d]
             edges[idx[i+1]] = [c,b]
             i+=2
-
+            
         else:
             retries += 1
             rem = idx[i:]

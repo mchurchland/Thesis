@@ -2,12 +2,14 @@ import torch
 from torch import Tensor
 
 # ---- repo helpers (reuse your utils/stats) ----
-from util.util import load_connectome, build_reservoir
 from network_stats.stats import compute_IPC, compute_KR, compute_GR, compute_MC
-from util.util import degree_matched_shuffle_directed
 from network_stats.stats_util import  effective_rank
 @torch.no_grad()
 def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tuple[Tensor, Tensor]:
+    """
+    Basic ESN-style update loop with pre-activation tracking.
+    See: https://github.com/cknd/pyESN/blob/master/pyESN.py for a similar state update.
+    """
     N = W.shape[0]
     T = u.shape[0]
     z = torch.zeros(N, device=W.device)
@@ -23,6 +25,11 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
 
 @torch.no_grad()
 def controllability_erank(W: Tensor, Win: Tensor, leak: float, Ddiag_mean: Tensor, K: int) -> float:
+    """
+    Effective rank of the controllability matrix (entropic rank).
+    Controllability construction mirrors standard discrete-time linear systems; see:
+    https://github.com/pytorch/pytorch/blob/main/torch/linalg/__init__.py for SVD utilities.
+    """
     N = W.shape[0]
     I = torch.eye(N, device=W.device)
     A = (1 - leak) * I + leak * (Ddiag_mean @ W)
@@ -43,6 +50,11 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
             MC_MAX_DELAY: int, IPC_MAX_DELAY: int, IPC_MAX_ORDER: int,
             RIDGE_ALPHA: float, K_CONTROLLABILITY: int,
             SAT_THRESH: float, NEAR_ZERO_STD: float) -> dict:
+    """
+    End-to-end reservoir evaluation computing MC/IPC/KR/GR and controllability metrics.
+    Wraps the ESN update plus metrics pipeline; see reservoirpy/pyESN for similar evaluation flows:
+    https://github.com/reservoirpy/reservoirpy/blob/master/reservoirpy/metrics/memory_capacity.py
+    """
     T_total = WASHOUT + T_TRAIN + T_TEST
     u = (torch.rand(T_total, 1, device=device) * 2.0 - 1.0) ## rescale to [-1, 1]
     u = u - u.mean()

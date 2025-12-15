@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 292, in <module>
+    main()
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 218, in main
+    means, disp, rows = run_scores_for_fraction(
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 93, in run_scores_for_fraction
+    W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 275, in degree_matched_shuffle_directed
+    raise ValueError(f"not even sure how tf this happened{a,b,c,d}")
+ValueError: not even sure how tf this happened(np.int64(0), np.int64(1), np.int64(0), np.int64(4))
+
+ERROR conda.cli.main_run:execute(49): `conda run python weight_destruction_ladder.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir ladder_results --fractions 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 --ws-k 40 --seed 12345 --n-seeds 3 --seed-stride 101 --cuda 0` failed. (See above for error)

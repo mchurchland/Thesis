@@ -3,17 +3,13 @@ import torch
 
 def legendre_P(x: Tensor, order: int) -> Tensor:
     """
-    Low-order Legendre polynomials P_n on [-1, 1] (n=1..3).
-    See: https://github.com/numpy/numpy/blob/main/numpy/polynomial/legendre.py
+    Low-order Legendre polynomials P_n on [-1, 1] (n=1..3) via torch.special.legendre_polynomial_p.
+    See: https://github.com/pytorch/pytorch/blob/main/torch/special/__init__.py
     """
-    if order == 1:
-        return x
-    elif order == 2:
-        return 0.5 * (3 * x**2 - 1)
-    elif order == 3:
-        return 0.5 * (5 * x**3 - 3 * x)
-    else:
+    if order > 3 or order < 0:
         raise ValueError("Supported orders: 1..3")
+    return torch.special.legendre_polynomial_p(x, order)
+
 
 def effective_rank_from_states(X: Tensor) -> float:
     """

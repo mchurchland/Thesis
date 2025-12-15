@@ -14,30 +14,17 @@ Invariance sweeps for C. elegans reservoirs.
 """
 
 import os
-import csv
-import sys
 import argparse
 import itertools
-from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
 import matplotlib
 matplotlib.use("Agg")  # safe for headless cluster
-import matplotlib.pyplot as plt
 
 import torch
-from torch import Tensor
 
-from run_arc import (
-    run_one_real,
-    run_one_shuf_weights,
-    run_one_cel_randN,
-    run_one_esn_er_randN,
-    run_one_ws_p0_1_randN,
-    run_one_celW_connShuf,
-)
+from reservoir_variants import VARIANT_REGISTRY, VariantContext, run_variant, save_rows
 
 # ---- repo helpers (reuse your utils/stats) ----
 from util.util import load_connectome
@@ -112,6 +99,42 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
+def _build_ctx(
+    job_key: str,
+    WS_K: int,
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float, float, float]],
+    device: torch.device,
+    seed: int,
+    sid: int,
+    er_p: float,
+    ws_p: float,
+    src_tag: str,
+) -> VariantContext:
+    if job_key not in VARIANT_REGISTRY:
+        raise ValueError(f"Unknown variant key: {job_key}")
+    return VariantContext(
+        ce_W_bio=ce_W_bio,
+        ce_ei=ce_ei,
+        ws_k=WS_K,
+        col_params=col_params,
+        device=device,
+        seed=seed,
+        sid=sid,
+        er_p=er_p,
+        ws_p=ws_p,
+        src_tag=src_tag,
+    )
+
+
+def _run_and_save(job_key: str, ctx: VariantContext, out_dir: str, csv_name: str, append: bool = False):
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = os.path.join(out_dir, csv_name)
+    rows = run_variant(VARIANT_REGISTRY[job_key], ctx)
+    save_rows(out_csv, rows, append=append)
+
+
 def parse_args():
     p = argparse.ArgumentParser(
         description="Invariance sweeps for C. elegans reservoirs (cluster-friendly)."
@@ -119,14 +142,7 @@ def parse_args():
     # What to run
     p.add_argument(
         "--job",
-        choices=[
-            "real",            # CE bio weights on CE adjacency
-            "shuffle_weights", # CE adjacency, CE weights shuffled across nonzeros
-            "cel_randN",       # CE adjacency, Gaussian weights
-            "er_randN",        # ER directed, Gaussian weights (nnz matched via util)
-            "ws_p01_randN",    # WS p=0.1, Gaussian weights (nnz matched via util)
-            "conn_shuf",       # CE weights on degree-matched shuffled adjacency
-        ],
+        choices=sorted(VARIANT_REGISTRY.keys()),
         required=True,
         help="Select a single variant per invocation; use array jobs to sweep sids etc.",
     )
@@ -252,105 +268,61 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     # ---------------- job dispatch ----------------
+    job_key = args.job
 
-    if args.job == "real":
-        # One pass over CE bio weights
-        run_one_real(
-            WS_K=WS_K,
-            ce_W_bio=ce_W_bio,
-            ce_ei=ce_ei,
-            col_params=col_params,
-            out_dir=out_dir,
-            device=device,
-            seed=args.seed,
-            nid=args.sid,
-            csv_name=csv_name,
-            src_tag=args.src_tag,
-        )
-        return
-
-    if args.job == "shuffle_weights":
-        # Possibly repeat multiple independent shuffles for the same param subset
+    if job_key == "shuffle_weights":
         for j in range(args.n_shuffles):
             sid = args.sid if args.n_shuffles == 1 else (args.sid + j)
-            run_one_shuf_weights(
-                WS_K=WS_K,
-                ce_W_bio=ce_W_bio,
-                ce_ei=ce_ei,
-                col_params=col_params,
-                out_dir=out_dir,
-                device=device,
+            ctx = _build_ctx(
+                job_key,
+                WS_K,
+                ce_W_bio,
+                ce_ei,
+                col_params,
+                device,
                 seed=args.seed + 7_000 * j,
                 sid=sid,
-                metric="MC",  # stored anyway; keep API stable
-                csv_name=csv_name,
+                er_p=args.er_p,
+                ws_p=args.ws_p,
                 src_tag=args.src_tag,
             )
+            _run_and_save(job_key, ctx, out_dir, csv_name, append=(j > 0))
         return
 
-    if args.job == "cel_randN":
-        run_one_cel_randN(
-            WS_K=WS_K,
-            ce_W_bio=ce_W_bio,
-            ce_ei=ce_ei,
-            col_params=col_params,
-            out_dir=out_dir,
-            device=device,
-            seed=args.seed,
-            csv_name=csv_name,
-            src_tag=args.src_tag,
-        )
-        return
-
-    if args.job == "er_randN":
-        run_one_esn_er_randN(
-            WS_K=WS_K,
-            ce_W_bio=ce_W_bio,
-            ce_ei=ce_ei,
-            col_params=col_params,
-            out_dir=out_dir,
-            device=device,
-            er_p=args.er_p,
-            seed=args.seed,
-            csv_name=csv_name,
-            src_tag=args.src_tag,
-        )
-        return
-
-    if args.job == "ws_p01_randN":
-        # Note: args.ws_p is accepted but run_one_ws_p0_1_randN may internally fix p=0.1
-        run_one_ws_p0_1_randN(
-            WS_K=WS_K,
-            ce_W_bio=ce_W_bio,
-            ce_ei=ce_ei,
-            col_params=col_params,
-            out_dir=out_dir,
-            device=device,
-            seed=args.seed,
-            csv_name=csv_name,
-            src_tag=args.src_tag,
-        )
-        return
-
-    if args.job == "conn_shuf":
-        # Degree-matched connection shuffles; optionally repeat
+    if job_key == "conn_shuf":
         for j in range(args.n_shuffles):
             sid = args.sid if args.n_shuffles == 1 else (args.sid + j)
-            run_one_celW_connShuf(
-                WS_K=WS_K,
-                ce_W_bio=ce_W_bio,
-                ce_ei=ce_ei,
-                col_params=col_params,
-                out_dir=out_dir,
-                device=device,
-                sid=sid,
+            ctx = _build_ctx(
+                job_key,
+                WS_K,
+                ce_W_bio,
+                ce_ei,
+                col_params,
+                device,
                 seed=args.seed + 9_000 * j,
-                csv_name=csv_name,
+                sid=sid,
+                er_p=args.er_p,
+                ws_p=args.ws_p,
                 src_tag=args.src_tag,
             )
+            _run_and_save(job_key, ctx, out_dir, csv_name, append=(j > 0))
         return
 
-    raise RuntimeError(f"Unhandled job: {args.job}")
+    sid = args.sid if job_key in ("real", "shuffle_weights", "conn_shuf") else -1
+    ctx = _build_ctx(
+        job_key,
+        WS_K,
+        ce_W_bio,
+        ce_ei,
+        col_params,
+        device,
+        seed=args.seed,
+        sid=sid,
+        er_p=args.er_p,
+        ws_p=args.ws_p,
+        src_tag=args.src_tag,
+    )
+    _run_and_save(job_key, ctx, out_dir, csv_name)
 
 
 # ------------------------------ CLI entry ------------------------------------

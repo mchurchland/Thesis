@@ -2,7 +2,7 @@ import os
 import pd
 import numpy as np
 import matplotlib as plt
-from  util.graph_utils import _safe_path, _read_glob, _ensure_columns, _dispersion, _unique_hparam_rows
+from  util.graph_utils import _safe_path, _unique_hparam_rows
 
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)

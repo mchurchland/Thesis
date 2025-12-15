@@ -19,6 +19,9 @@ def compute_IPC(
     This version batches all Legendre orders for a fixed delay d, so that
     we do ONE Cholesky factorization per delay and solve for all targets
     in one go.
+
+    See: Dambre et al., 2012, Sci. Rep. 2:514; batching pattern similar to scikit-learn Ridge
+    multi-target solves (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_ridge.py).
     """
 
     def to_m11(u: Tensor) -> Tensor:
@@ -78,6 +81,8 @@ def compute_MC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor, max_delay: in
     """
     Linear memory capacity (sum of R^2 over delays).
     Inputs/targets are assumed zero-mean. just linear version of ipc
+    See: Jaeger, 2002, GMD Report 152; reservoirpy metric analogue:
+         https://github.com/reservoirpy/reservoirpy/blob/master/reservoirpy/metrics/memory_capacity.py
     """
     r2s = []
     for tau in range(1, max_delay + 1):
@@ -94,7 +99,8 @@ def compute_MC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor, max_delay: in
 def compute_GR(X_clean: Tensor, X_noisy: Tensor) -> float:
     """
     Generalization rank: effective rank of state difference across small perturbations.
-    Lower ⇒ more robust/generalizable.
+    Lower => more robust/generalizable.
+    Related to robustness metrics using effective rank; see Roy & Vetterli, 2007, IEEE SPL 14:649-652.
     """
     D = X_noisy - X_clean ##this is nice I like this, here is whats going on, we add noise
     # to the input of the reservoir, then we subtract that from the version without noise

@@ -21,27 +21,21 @@
 # GPU: uses PyTorch; runs on CUDA if available.
 # ------------------------------------------------------------
 
-import os
-import itertools
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import torch
-from torch import Tensor
 from network_stats.run_one import run_one
 
 # -------- existing helpers (already in your repo) ----------
 from util.util import (
     load_connectome,
     imsave_heatmap,
-    spectral_radius_power,
-    spectral_norm,
     build_reservoir,
     set_seed      # must support target_sr + nnz_target + drive_idx
 )
-from stats import compute_IPC, compute_KR, compute_GR, compute_MC  # keep your versions
 
 
 # =================== Paths & defaults ===================
