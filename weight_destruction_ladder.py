@@ -40,6 +40,57 @@ def partial_weight_randomization(W_ce: np.ndarray,
     W[sel] = new_vals
     return W
 
+def cel_weight_sample(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+    
+    # match cel+randN: N(0, 1) on existing edges
+    new_vals = rng.normal(loc = W[nz].mean(), scale=W[nz].std(ddof=0), size=k).astype(np.float32)
+
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]])
+    W[sel] = new_vals
+    return W
+
+def cel_weight_ei_match(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]])
+    v = W[sel] ## v is a "pointer" to the weights that are selected
+     
+    sel_p = v > 0 ## get the positive weights of the selection
+    w_p = W[W > 0] ## get the positive weights of w
+
+    sel_n = v < 0 ## get the negative weights of the selection
+    w_n = W[W < 0] ## get the negative weights of w
+    
+    # match cel+randN: N(0, 1) on existing edges
+    num_pos = int(sel_p.sum())
+    num_neg = int(sel_n.sum())
+    if num_pos:
+        new_vals_p = rng.normal(loc = w_p.mean(), scale = w_p.std(ddof=0), size= num_pos).astype(np.float32)
+        v[sel_p] = new_vals_p
+    if num_neg:
+        new_vals_n = rng.normal(loc = w_n.mean(), scale = w_n.std(ddof=0), size= num_neg).astype(np.float32)
+        v[sel_n] = new_vals_n
+    return W
 def _build_col_params(
     sr_grid: Iterable[float],
     leak_grid: Iterable[float],
@@ -258,7 +309,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     save_summary(os.path.join(args.out_dir, "ladder_summary.csv"), summary_rows)
     save_raw(os.path.join(args.out_dir, "ladder_raw.csv"), raw_rows)
-    plot_dispersion(os.path.join(args.out_dir, "dispersion_vs_frac.png"), summary_rows)
+    plot_dispersion(os.path.join(args.out_dir, "dispersion_vs_frac_shuf.png"), summary_rows)
 
 def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
                                     rng: np.random.Generator | None = None) -> np.ndarray:
