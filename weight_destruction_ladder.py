@@ -59,7 +59,7 @@ def cel_weight_sample(W_ce: np.ndarray,
     W[sel] = new_vals
     return W
 
-def cel_weight_ei_match(W_ce: np.ndarray,
+def cel_weight_local_sign_mixture_match(W_ce: np.ndarray,
                                  frac_replace: float,
                                  rng: np.random.Generator) -> np.ndarray:
     """
@@ -90,6 +90,43 @@ def cel_weight_ei_match(W_ce: np.ndarray,
     if num_neg:
         new_vals_n = rng.normal(loc = w_n.mean(), scale = w_n.std(ddof=0), size= num_neg).astype(np.float32)
         v[sel_n] = new_vals_n
+    return W
+
+def cel_weight_global_sign_mixture_match(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+    
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+
+
+    num_pos = int((W[nz] > 0).sum())
+    num_neg = int((W[nz] < 0).sum())
+    frac = num_pos/(num_pos+num_neg) 
+    k = int(frac_replace * len(idx))
+    k_pos = int(round(k * frac))
+    k_neg = k - k_pos
+    assert k_neg+k_pos==k
+
+    sel_p = (nz[0][idx[:k_pos]], nz[1][idx[:k_pos]])
+    sel_n = (nz[0][idx[k_pos:k_pos+k_neg]], nz[1][idx[k_pos:k_pos+k_neg]])
+     
+    w_p = W[W > 0] ## get the positive weights of w
+
+    w_n = W[W < 0] ## get the negative weights of w
+    # match cel+randN: N(0, 1) on existing edges
+
+    if num_pos:
+        new_vals_p = rng.normal(loc = w_p.mean(), scale = w_p.std(ddof=0), size= k_pos).astype(np.float32)
+        W[sel_p] = new_vals_p
+    if num_neg:
+        new_vals_n = rng.normal(loc = w_n.mean(), scale = w_n.std(ddof=0), size= k_neg).astype(np.float32)
+        W[sel_n] = new_vals_n
     return W
 def _build_col_params(
     sr_grid: Iterable[float],
@@ -143,14 +180,15 @@ def run_scores_for_fraction(
     # per-seed lists of per-hparam values
     seed_vals: dict[str, list[list[float]]] = {k: [] for k in metrics}
     raw_rows: list[tuple] = []
-
+    #plot_cel_dist(ce_W_bio)
+    #quit()
     for si in range(n_seeds):
         per_seed_vals = {k: [] for k in metrics}
         for ci, (target_sr, leak, in_scale) in enumerate(col_params):
             cur_seed = seed_base + si * seed_stride + ci
             rng_local = np.random.default_rng(cur_seed)
             #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local)
-            W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
+            W_mat = cel_weight_global_sign_mixture_match(ce_W_bio,frac_replace,rng_local)
             try:
                 Wt, Win, _, _ = build_reservoir(
                     feature_conn="cel",
@@ -226,6 +264,16 @@ def save_raw(out_csv: str, rows: list[tuple]):
         w.writerow(["frac_replace", "seed_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR"])
         w.writerows(rows)
 
+def plot_cel_dist(cel,bins=50):
+    nz = np.nonzero(cel)
+
+    fig, ax = plt.subplots()
+    ax.hist(cel[nz].ravel(),bins=bins)
+    #ax.set_yscale('log')
+    fig.savefig("celdist_no_0.png") 
+    plt.close(fig)
+
+    
 
 def plot_dispersion(out_png: str, summary_rows: list[tuple]):
     fracs = [r[0] for r in summary_rows]
@@ -241,7 +289,7 @@ def plot_dispersion(out_png: str, summary_rows: list[tuple]):
     plt.plot(fracs, gr_std, marker="o", label="GR disp")
     plt.xlabel("Fraction of CE connections shuffled")
     plt.ylabel("Dispersion (per-seed over hyperparameter grid)")
-    plt.title("Invariance loss as CE connections are shuffled (per-hparam shuffle)")
+    plt.title("Invariance loss as CE weights are randomized, global sign balance preserved")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -309,7 +357,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     save_summary(os.path.join(args.out_dir, "ladder_summary.csv"), summary_rows)
     save_raw(os.path.join(args.out_dir, "ladder_raw.csv"), raw_rows)
-    plot_dispersion(os.path.join(args.out_dir, "dispersion_vs_frac_shuf.png"), summary_rows)
+    plot_dispersion(os.path.join(args.out_dir, "global_sign_preserved.png"), summary_rows)
 
 def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
                                     rng: np.random.Generator | None = None) -> np.ndarray:
