@@ -5,7 +5,7 @@ Weight-destruction ladder: gradually replace C. elegans weights with Gaussian dr
 while keeping the CE adjacency fixed. Outputs per-fraction metrics and dispersion
 (coefficient of variation across the hyperparameter grid) and a plot of dispersion vs frac_replace.
 """
-
+import warnings
 import argparse
 import os
 from typing import Iterable
@@ -38,6 +38,76 @@ def partial_weight_randomization(W_ce: np.ndarray,
 
     sel = (nz[0][idx[:k]], nz[1][idx[:k]])
     W[sel] = new_vals
+    return W
+def partial_weight_randomization_stacked_gaus(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+
+    # match cel+randN: N(0, 1) on existing edges
+    signs = rng.choice(np.array([-1,1],dtype=np.float32),size=k)
+    new_vals = np.abs(rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32)) 
+
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]])
+    W[sel] = new_vals * signs
+    return W
+def gaus_m0_sign_pres(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]])
+    v = W[sel] ## v is a "pointer" to the weights that are selected
+    sel_p = v > 0 ## get the positive weights of the selection
+    sel_n = v < 0 ## get the negative weights of the selection
+
+
+    # match cel+randN: N(0, 1) on existing edges
+    num_pos = int(sel_p.sum())
+    num_neg = int(sel_n.sum())
+    if num_pos:
+        new_vals_p = np.abs(rng.normal(loc=0.0, scale=1.0, size=num_pos).astype(np.float32))
+        v[sel_p] = new_vals_p
+    if num_neg:
+        new_vals_n = -np.abs(rng.normal(loc=0.0, scale=1.0, size=num_neg).astype(np.float32))
+        v[sel_n] = new_vals_n
+    return W
+
+def gaus_m0_ei_pres(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator,
+                                 ce_ei: np.ndarray) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+    W_bool = W_ce.copy().astype(np.bool_).astype(np.float32)
+    diag = np.diag(ce_ei) ## put the +1/-1 on the diag of a 299x299 matrix
+    ei_signs = np.matmul(diag,W_bool) ##im fucking cool ash
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]]) ## these are rows and columns
+
+
+    new_vals = np.abs(rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32))
+    W[sel] = new_vals * ei_signs[sel]
     return W
 
 def cel_weight_sample(W_ce: np.ndarray,
@@ -117,7 +187,6 @@ def cel_weight_global_sign_mixture_match(W_ce: np.ndarray,
     sel_n = (nz[0][idx[k_pos:k_pos+k_neg]], nz[1][idx[k_pos:k_pos+k_neg]])
      
     w_p = W[W > 0] ## get the positive weights of w
-
     w_n = W[W < 0] ## get the negative weights of w
     # match cel+randN: N(0, 1) on existing edges
 
@@ -128,6 +197,7 @@ def cel_weight_global_sign_mixture_match(W_ce: np.ndarray,
         new_vals_n = rng.normal(loc = w_n.mean(), scale = w_n.std(ddof=0), size= k_neg).astype(np.float32)
         W[sel_n] = new_vals_n
     return W
+
 def _build_col_params(
     sr_grid: Iterable[float],
     leak_grid: Iterable[float],
@@ -160,7 +230,7 @@ def _dispersion(arr: np.ndarray, mode: str) -> float:
 def run_scores_for_fraction(
     ce_W_bio: np.ndarray,
     frac_replace: float,
-    ce_ei: np.ndarray | None,
+    ce_ei: np.ndarray | None,    ## get the positive weights of w
     col_params: list[tuple[float, float, float]],
     device: torch.device,
     ws_k: int,
@@ -180,15 +250,22 @@ def run_scores_for_fraction(
     # per-seed lists of per-hparam values
     seed_vals: dict[str, list[list[float]]] = {k: [] for k in metrics}
     raw_rows: list[tuple] = []
-    #plot_cel_dist(ce_W_bio)
-    #quit()
+    #plot_cel_dist(ce_W_bio,np.random.default_rng(0))
+    ce_ei = make_ei_from_count(ce_W_bio) ## overrwrite because I dont like how the old one was handeled
+
+    #neuron_test(ce_W_bio,ce_ei)
+    #ce_W_bio = gaus_m0_sign_pres(ce_W_bio,1.0, np.random.default_rng(0))
     for si in range(n_seeds):
         per_seed_vals = {k: [] for k in metrics}
         for ci, (target_sr, leak, in_scale) in enumerate(col_params):
             cur_seed = seed_base + si * seed_stride + ci
             rng_local = np.random.default_rng(cur_seed)
-            #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local)
-            W_mat = cel_weight_global_sign_mixture_match(ce_W_bio,frac_replace,rng_local)
+            #ce_W_bio=cel_weight_global_sign_mixture_match(ce_W_bio,1.0,rng_local)
+            #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local) partial_weight_randomization_stacked_gaus
+            #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
+            
+            W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
+            #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
             try:
                 Wt, Win, _, _ = build_reservoir(
                     feature_conn="cel",
@@ -264,16 +341,113 @@ def save_raw(out_csv: str, rows: list[tuple]):
         w.writerow(["frac_replace", "seed_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR"])
         w.writerows(rows)
 
-def plot_cel_dist(cel,bins=50):
+def plot_cel_dist(cel,rng,bins=50,samples = 1000):
     nz = np.nonzero(cel)
+    w = cel[nz]
+    #cel_normal = rng.normal(loc = cel[nz].mean(), scale =  cel[nz].std(ddof=0), size= 1000).astype(np.float32)
+    w_p =  cel[cel > 0]
+    w_n =  cel[cel > 0]
+    cel_normal_p = rng.normal(loc = w_p.mean(), scale = w_p.std(ddof=0), size= samples).astype(np.float32)
+    cel_normal_n = rng.normal(loc = w_n.mean(), scale = w_n.std(ddof=0), size= samples).astype(np.float32)
+    fig, ax = plt.subplots()
+    lo = min(w.min(), cel_normal_n.min())
+    hi = max(w.max(), cel_normal_p.max())
+    edges = np.linspace(lo, hi, bins + 1)
 
     fig, ax = plt.subplots()
-    ax.hist(cel[nz].ravel(),bins=bins)
-    #ax.set_yscale('log')
-    fig.savefig("celdist_no_0.png") 
-    plt.close(fig)
+    ax.hist(cel_normal_n, bins=edges, density=True, alpha=0.3, color="blue", label="Normal fit neg")
+    ax.hist(cel_normal_p, bins=edges, density=True, alpha=0.3, color="red", label="Normal fit pos")
 
+    ax.hist(w,          bins=edges, density=True, alpha=0.3, color="green",  label="C. elegans (nonzero)")
+    ax.legend()
+    #ax.set_yscale('log')
+    fig.savefig("cel_compar.png") 
+    plt.close(fig)
+    quit()
+
+def make_ei_from_sum(W_ce):
+    W = W_ce.copy().astype(np.float32)
+    row_sum = W @ np.ones(W.shape[0])
+    for idx in np.where(row_sum == 0)[0]:
+        if not np.any(W[idx]):
+            continue
+        else:
+            pos_count = (W[idx]>0).sum()
+            neg_count = (W[idx]<0).sum()
+            if pos_count == neg_count:
+                row_sum[idx] = 0 ##gross but lets just assume if both sum is the same and pos_neg count is same its non
+            else:
+                row_sum[idx] = pos_count-neg_count
+    return np.sign(row_sum) 
     
+    
+
+def make_ei_from_count(W_ce):
+
+    W = W_ce.copy().astype(np.float32)
+    W_ind_normal =np.sign(W) ## handel naan
+    ei_label = W_ind_normal @ np.ones(W_ind_normal.shape[0])
+
+    for idx in np.where(ei_label == 0)[0]:
+        if not np.any(W[idx]):
+            continue
+        else:
+            r_sum = W[idx].sum()
+            if r_sum==0:
+                warnings.warn("When generating EI from count you had a row that had an equal number of\
+                               positive and negative weights whos sum was 0,\
+                               we set this EI value to 0 but this could change topology of the network\
+                               you may want to rewrite this code if this behavior is not suitable for you")
+                #this dosent happen in the celegan connectome and is just here defensivly
+                #row_sum[idx] = 0 ##gross but lets just assume if both sum is the same and pos_neg count is same its non
+                continue ## does the same thing as the line above
+            else:
+                ei_label[idx] = r_sum
+
+    return np.sign(ei_label).astype(np.float32)
+
+
+def neuron_test(W_ce,ce_ei):
+    print(make_ei_from_count(np.array([[1,2],[-3,2]])))
+    quit()
+    
+    print(ce_ei.shape)
+    W = W_ce.copy().astype(np.float32)
+    c_pos,c_neg,c_zero,c_both = 0,0,0,0
+    print(len(W))
+    print(len(np.where(ce_ei==0))) ###need to do a pause here and verify that everything lines up
+    #quit()
+    for e,nur in enumerate(W):
+        pos_conn_count = (nur>0).sum()
+        neg_conn_count = (nur<0).sum()
+
+
+        if pos_conn_count>0 and neg_conn_count>0:
+            c_both+=1
+            if (nur.sum()<0) and  ce_ei[e] >0:
+                print("err")
+            if (nur.sum()>0) and  ce_ei[e] <0:
+                print("err")
+            if (nur.sum()==0):
+                print(pos_conn_count,neg_conn_count) ## more to be uncovered here
+                print("0gfdsgfds")
+
+        elif neg_conn_count > 0:
+            if ce_ei[e] >0:
+                print("err")
+            c_neg+=1
+        elif pos_conn_count > 0:
+            if ce_ei[e] <0:
+                print("err")
+            c_pos+=1
+
+        else:
+            c_zero+=1
+            pass ## neurons with no outgoing connections
+            print(nur,nur.sum()==0)
+    print(c_pos,c_neg,c_both,c_zero,c_neg+c_pos+c_both)
+    quit()
+
 
 def plot_dispersion(out_png: str, summary_rows: list[tuple]):
     fracs = [r[0] for r in summary_rows]
@@ -287,9 +461,9 @@ def plot_dispersion(out_png: str, summary_rows: list[tuple]):
     plt.plot(fracs, ipc_std, marker="o", label="IPC disp")
     plt.plot(fracs, kr_std, marker="o", label="KR disp")
     plt.plot(fracs, gr_std, marker="o", label="GR disp")
-    plt.xlabel("Fraction of CE connections shuffled")
+    plt.xlabel("Fraction of CE connections redrawn from gaus distribution")
     plt.ylabel("Dispersion (per-seed over hyperparameter grid)")
-    plt.title("Invariance loss as CE weights are randomized, global sign balance preserved")
+    plt.title("Invariance loss as CE weights are randomized, preserve Original EI balance")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -355,9 +529,9 @@ def main():
         raw_rows.extend(rows)
 
     os.makedirs(args.out_dir, exist_ok=True)
-    save_summary(os.path.join(args.out_dir, "ladder_summary.csv"), summary_rows)
-    save_raw(os.path.join(args.out_dir, "ladder_raw.csv"), raw_rows)
-    plot_dispersion(os.path.join(args.out_dir, "global_sign_preserved.png"), summary_rows)
+    save_summary(os.path.join(args.out_dir, "ladder_summary_2.csv"), summary_rows)
+    save_raw(os.path.join(args.out_dir, "ladder_raw_2.csv"), raw_rows)
+    plot_dispersion(os.path.join(args.out_dir, "gaus_ei_pres.png"), summary_rows)
 
 def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
                                     rng: np.random.Generator | None = None) -> np.ndarray:

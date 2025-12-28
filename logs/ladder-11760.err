@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 465, in <module>
+    main()
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 376, in main
+    means, disp, rows = run_scores_for_fraction(
+  File "/home/milesc/Thesis/weight_destruction_ladder.py", line 215, in run_scores_for_fraction
+    ce_W_bio = gaus_m0_sign_pres(ce_W_bio,1.0,rng_local = np.random.default_rng(0))
+TypeError: gaus_m0_sign_pres() got an unexpected keyword argument 'rng_local'
+
+ERROR conda.cli.main_run:execute(49): `conda run python weight_destruction_ladder.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir ladder_results --fractions 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 --ws-k 40 --seed 12345 --n-seeds 5 --seed-stride 101 --cuda 0` failed. (See above for error)

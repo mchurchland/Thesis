@@ -224,6 +224,7 @@ def build_reservoir(
     elif feature_weights == "bio":
         if ce_W_bio is None and feature_conn != "cel":
             # emulate heavy-tail signed weights if no CE magnitudes
+            """
             mask = (np.abs(W) > 0).astype(np.float32)
             m = int(mask.sum())
             mags  = rng.lognormal(mean=-1.0, sigma=0.5, size=m).astype(np.float32)
@@ -231,6 +232,9 @@ def build_reservoir(
             W2 = np.zeros_like(W, dtype=np.float32)
             W2[mask != 0] = mags * signs
             W = W2
+            """
+            raise "you must pass in ce_W_bi"
+        
         # else: 'cel' with CE weights already prepared
 
     # Torchify
