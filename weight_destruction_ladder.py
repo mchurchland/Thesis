@@ -110,6 +110,30 @@ def gaus_m0_ei_pres(W_ce: np.ndarray,
     W[sel] = new_vals * ei_signs[sel]
     return W
 
+def gaus_m0_ei_pres_mixed_rand(W_ce: np.ndarray,
+                                 frac_replace: float,
+                                 rng: np.random.Generator,
+                                 ce_ei: np.ndarray,
+                                 mixed_idx: np.ndarray) -> np.ndarray:
+    """
+    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
+    """
+    W = W_ce.copy().astype(np.float32)
+    W_bool = W_ce.copy().astype(np.bool_).astype(np.float32)
+    diag = np.diag(ce_ei) ## put the +1/-1 on the diag of a 299x299 matrix
+    ei_signs = np.matmul(diag,W_bool) ##im fucking cool ash
+    ei_signs[mixed_idx] = rng.choice([-1, 1], size=(mixed_idx.shape[0],W.shape[1]))
+    nz = np.nonzero(W)
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    k = int(frac_replace * len(idx))
+    sel = (nz[0][idx[:k]], nz[1][idx[:k]]) ## these are rows and columns
+
+
+    new_vals = np.abs(rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32))
+    W[sel] = new_vals * ei_signs[sel]
+    return W
+
 def cel_weight_sample(W_ce: np.ndarray,
                                  frac_replace: float,
                                  rng: np.random.Generator) -> np.ndarray:
@@ -251,7 +275,7 @@ def run_scores_for_fraction(
     seed_vals: dict[str, list[list[float]]] = {k: [] for k in metrics}
     raw_rows: list[tuple] = []
     #plot_cel_dist(ce_W_bio,np.random.default_rng(0))
-    ce_ei = make_ei_from_count(ce_W_bio) ## overrwrite because I dont like how the old one was handeled
+    ce_ei,mixed_idx = make_ei_from_count(ce_W_bio) ## overrwrite because I dont like how the old one was handeled
 
     #neuron_test(ce_W_bio,ce_ei)
     #ce_W_bio = gaus_m0_sign_pres(ce_W_bio,1.0, np.random.default_rng(0))
@@ -264,10 +288,11 @@ def run_scores_for_fraction(
             #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local) partial_weight_randomization_stacked_gaus
             #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
             
-            W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
+            #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
+            W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
             try:
-                Wt, Win, _, _ = build_reservoir(
+                Wt, Win, _, _,_ = build_reservoir(
                     feature_conn="cel",
                     feature_weights="bio",
                     feature_dale="none",
@@ -387,8 +412,8 @@ def make_ei_from_count(W_ce):
     W = W_ce.copy().astype(np.float32)
     W_ind_normal =np.sign(W) ## handel naan
     ei_label = W_ind_normal @ np.ones(W_ind_normal.shape[0])
-
-    for idx in np.where(ei_label == 0)[0]:
+    ei_mixed = np.where(ei_label == 0)[0]
+    for idx in ei_mixed:
         if not np.any(W[idx]):
             continue
         else:
@@ -404,7 +429,7 @@ def make_ei_from_count(W_ce):
             else:
                 ei_label[idx] = r_sum
 
-    return np.sign(ei_label).astype(np.float32)
+    return np.sign(ei_label).astype(np.float32), ei_mixed
 
 
 def neuron_test(W_ce,ce_ei):

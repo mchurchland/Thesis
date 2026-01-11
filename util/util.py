@@ -4,7 +4,6 @@ from torch import Tensor
 import torch
 import os
 import networkx as nx
-import networkx as nx
 
 def imsave_heatmap(data: np.ndarray, row_labels, col_labels, title: str, fname: str):
     """Save a labeled heatmap using Matplotlib (Hunter, 2007, Comput. Sci. Eng. 9:90-95). See: https://github.com/matplotlib/matplotlib/blob/main/examples/images_contours_and_fields/image_annotated_heatmap.py"""
