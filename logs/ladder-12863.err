@@ -1,0 +1,9 @@
+/home/milesc/Thesis/weight_destruction_ladder.py:323: RuntimeWarning: Mean of empty slice
+  means[k] = float(np.nanmean(flat))
+/home/milesc/Thesis/weight_destruction_ladder.py:249: RuntimeWarning: Mean of empty slice
+  m = float(np.nanmean(arr))
+/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/numpy/lib/_nanfunctions_impl.py:2019: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  var = nanvar(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+/home/milesc/Thesis/weight_destruction_ladder.py:329: RuntimeWarning: Mean of empty slice
+  disp[k] = float(np.nanmean(per_seed_disp))
+

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_over_ei.py", line 499, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_over_ei.py", line 376, in main
+    summary_rows = load_summary_rows_from_glob(args.summary_glob)
+  File "/home/milesc/Thesis/inv_over_ei.py", line 278, in load_summary_rows_from_glob
+    raise ValueError(f"Duplicate EI_bal {key} in {path} and {seen[key]}")
+ValueError: Duplicate EI_bal 269 in inv_over_ei_chunks/chunk_9/ladder_summary__chunk_9.csv and inv_over_ei_chunks/chunk_10/ladder_summary__chunk_10.csv
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_over_ei.py --plot-only --summary-glob inv_over_ei_chunks/chunk_*/ladder_summary__chunk_*.csv --out-dir inv_over_ei` failed. (See above for error)

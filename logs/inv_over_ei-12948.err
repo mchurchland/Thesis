@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_over_ei.py", line 499, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_over_ei.py", line 383, in main
+    plot_dispersion(out_png, summary_rows)
+  File "/home/milesc/Thesis/inv_over_ei.py", line 338, in plot_dispersion
+    plt.savefig(out_png)
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/pyplot.py", line 1251, in savefig
+    res = fig.savefig(*args, **kwargs)  # type: ignore[func-returns-value]
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/figure.py", line 3490, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2184, in print_figure
+    result = print_method(
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2040, in <lambda>
+    print_method = functools.wraps(meth)(lambda *args, **kwargs: meth(
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 481, in print_png
+    self._print_pil(filename_or_obj, "png", pil_kwargs, metadata)
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 430, in _print_pil
+    mpl.image.imsave(
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/matplotlib/image.py", line 1657, in imsave
+    image.save(fname, **pil_kwargs)
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/PIL/Image.py", line 2576, in save
+    fp = builtins.open(filename, "w+b")
+FileNotFoundError: [Errno 2] No such file or directory: 'inv_over_ei/gaus_ei_pres.png'
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_over_ei.py --plot-only --summary-glob inv_over_ei_chunks/chunk_*/ladder_summary__chunk_*.csv --out-dir inv_over_ei` failed. (See above for error)
