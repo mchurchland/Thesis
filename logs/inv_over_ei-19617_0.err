@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_over_ei.py", line 740, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_over_ei.py", line 630, in main
+    means, disp, rows = run_scores_for_fraction(
+  File "/home/milesc/Thesis/inv_over_ei.py", line 192, in run_scores_for_fraction
+    Wt, Win, _, _ = build_reservoir( # type: ignore
+  File "/home/milesc/Thesis/util/util.py", line 257, in build_reservoir
+    Win = torch.randn(Wt.shape[0], 1, device=DEVICE,dtype=wt.dtype) * input_scale
+NameError: name 'wt' is not defined. Did you mean: 'Wt'?
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_over_ei.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir inv_over_ei_chunks/chunk_0 --seed 12345 --n-seeds 5 --seed-stride 101 --split 2 --rank 0 --out-tag chunk_0 --no-plot --cuda 0` failed. (See above for error)

@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_over_ei.py", line 740, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_over_ei.py", line 630, in main
+    means, disp, rows = run_scores_for_fraction(
+  File "/home/milesc/Thesis/inv_over_ei.py", line 204, in run_scores_for_fraction
+    res = evaluate_reservoir(Wt, Win, leak, device)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 113, in evaluate_reservoir
+    return run_one(
+  File "/home/milesc/Thesis/network_stats/run_one.py", line 62, in run_one
+    X, Pre = run_reservoir_with_pre(W, Win, u, leak)
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/milesc/Thesis/network_stats/run_one.py", line 19, in run_reservoir_with_pre
+    pre = W @ z + (Win @ u[t:t+1, :].T).squeeze()
+RuntimeError: expected scalar type Double but found Float
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_over_ei.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir inv_over_ei_chunks/chunk_1 --seed 112345 --n-seeds 5 --seed-stride 101 --split 15 --rank 1 --out-tag chunk_1 --no-plot --cuda 0` failed. (See above for error)

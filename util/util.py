@@ -123,15 +123,15 @@ def run_reservoir(W: torch.Tensor,
     return X
 
 def build_reservoir(
-    feature_conn: str,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
-    feature_weights: str | None,      # 'bio', 'rand_disc', 'rand_gauss'
     target_sr: float | None,   # <--- scale by spectral radius to this (None = unchanged)
     N: int,
-    ce_W_bio: np.ndarray | None,
     ce_ei: np.ndarray | None,
-    ws_k: int,
     input_scale: float,
     seed: int,
+    ws_k: int | None = None,
+    ce_W_bio: np.ndarray | None = None,
+    feature_conn: str | None = None,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
+    feature_weights: str | None = None,      # 'bio', 'rand_disc', 'rand_gauss'
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
@@ -239,9 +239,8 @@ def build_reservoir(
 
     # Apply Dale's Law from ce_ei 
     if ce_ei is not None:
-        signs = torch.from_numpy(ce_ei).to(DEVICE)
-        diag = np.diag(signs)
-        W  = np.matmul(diag,np.abs(W))
+        diag = np.diag(ce_ei).astype(np.float32)
+        W  = np.matmul(diag,np.abs(W)).astype(np.float32)
 
     Wt = torch.from_numpy(W).to(DEVICE)
     # --- scale by spectral radius (this is the requested change) ---
@@ -252,10 +251,10 @@ def build_reservoir(
     # --- Input weights Win ---
     if drive_idx is not None and len(drive_idx) > 0:
         Win = torch.zeros(Wt.shape[0], 1, device=DEVICE)
-        Win[torch.as_tensor(drive_idx, device=DEVICE, dtype=torch.long), 0] = 1.0
+        Win[torch.as_tensor(drive_idx, device=DEVICE, dtype=Wt.dtype), 0] = 1.0
         Win = Win * (input_scale / (Win.norm() + 1e-12))
     else:
-        Win = torch.randn(Wt.shape[0], 1, device=DEVICE) * input_scale
+        Win = torch.randn(Wt.shape[0], 1, device=DEVICE,dtype=Wt.dtype) * input_scale
 
     return Wt, Win, ei_t, rho_nat
 
