@@ -12,7 +12,9 @@ from typing import Iterable
 
 import matplotlib
 
-matplotlib.use("Agg")
+if not os.environ.get("MPLBACKEND"):
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -151,10 +153,10 @@ def run_scores_for_fraction(
                     #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
 
                     
-                    W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=1, rng = rng_local,ce_ei=ce_ei_seed)
+                    W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=0, rng = rng_local,ce_ei=ce_ei_seed)
                     #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
                     try:
-                        Wt, Win, _, _ = build_reservoir(
+                        Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="cel",
                             feature_weights="bio",
                             feature_dale="none",
@@ -175,7 +177,7 @@ def run_scores_for_fraction(
                     for k in metrics:
                         per_seed_vals[k].append(float(res[k]))
                     ##the 1 codes for frac replace
-                    raw_rows.append((ei_balance, 1, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
+                    raw_rows.append((ei_balance, 0, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
             for k in metrics:
                 seed_vals[k].append(per_seed_vals[k])
 
@@ -228,6 +230,32 @@ def save_raw(out_csv: str, rows: list[tuple]):
         w = csv.writer(f)
         w.writerow(["EI_bal","frac_replace", "seed_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR"])
         w.writerows(rows)
+
+
+def load_raw_rows(raw_csv: str) -> list[dict]:
+    import csv
+
+    rows = []
+    with open(raw_csv, newline="") as f:
+        reader = csv.DictReader(f)
+        required = ["EI_bal", "seed_id", "rho_target", "MC", "IPC", "KR", "GR"]
+        if reader.fieldnames is None or any(k not in reader.fieldnames for k in required):
+            raise ValueError(f"Raw CSV missing required columns: {required}")
+        for row in reader:
+            rows.append(
+                dict(
+                    EI_bal=int(float(row["EI_bal"])),
+                    seed_id=int(float(row["seed_id"])),
+                    rho_target=float(row["rho_target"]),
+                    leak=float(row.get("leak", np.nan)) if row.get("leak") not in (None, "") else np.nan,
+                    input_scale=float(row.get("input_scale", np.nan)) if row.get("input_scale") not in (None, "") else np.nan,
+                    MC=float(row["MC"]),
+                    IPC=float(row["IPC"]),
+                    KR=float(row["KR"]),
+                    GR=float(row["GR"]),
+                )
+            )
+    return rows
 
 
 def load_summary_rows(summary_csv: str) -> list[tuple]:
@@ -286,7 +314,83 @@ def load_summary_rows_from_glob(pattern: str) -> list[tuple]:
     return rows
 
 
-    
+def _infer_raw_path(summary_path: str) -> str:
+    """Derive the raw CSV path from a summary CSV path."""
+    base_dir, base_name = os.path.split(summary_path)
+    raw_name = base_name.replace("summary", "raw", 1)
+    return os.path.join(base_dir, raw_name)
+
+
+def _summary_path_with_dispersion(summary_path: str, dispersion_mode: str) -> str:
+    """Insert dispersion mode into the summary filename."""
+    base_dir, base_name = os.path.split(summary_path)
+    root, ext = os.path.splitext(base_name)
+    if f"_{dispersion_mode}" in root:
+        new_root = root
+    elif "summary" in root:
+        new_root = root.replace("summary", f"summary_{dispersion_mode}", 1)
+    else:
+        new_root = f"{root}_{dispersion_mode}"
+    return os.path.join(base_dir, f"{new_root}{ext}")
+
+
+def recompute_summary_from_raw(summary_path: str, dispersion_mode: str, allowed_rhos: set[float] | None = None) -> tuple[str, list[tuple]]:
+    """Given a summary CSV path, recompute it from the corresponding raw CSV with a new dispersion metric."""
+    raw_path = _infer_raw_path(summary_path)
+    if not os.path.exists(raw_path):
+        raise FileNotFoundError(f"Raw CSV not found for {summary_path}; expected {raw_path}")
+    raw_rows = load_raw_rows(raw_path)
+    summary_rows = _summary_from_raw(raw_rows, dispersion_mode, allowed_rhos)
+    out_summary = _summary_path_with_dispersion(summary_path, dispersion_mode)
+    save_summary(out_summary, summary_rows)
+    rho_msg = "" if allowed_rhos is None else f", rho in {sorted(allowed_rhos)}"
+    print(f"Recomputed summary with dispersion={dispersion_mode}{rho_msg}: {out_summary}")
+    return out_summary, summary_rows
+
+
+def _summary_from_raw(raw_rows: list[dict], dispersion_mode: str, allowed_rhos: set[float] | None = None) -> list[tuple]:
+    """Recompute summary rows from raw rows for a given dispersion metric."""
+    metrics = ("MC", "IPC", "KR", "GR")
+    by_ei = {}
+    for row in raw_rows:
+        if allowed_rhos is not None and row["rho_target"] not in allowed_rhos:
+            continue
+        ei = int(row["EI_bal"])
+        seed = int(row["seed_id"])
+        if ei not in by_ei:
+            by_ei[ei] = {
+                "means": {k: [] for k in metrics},
+                "seeds": {k: {} for k in metrics},
+            }
+        for k in metrics:
+            val = float(row[k])
+            by_ei[ei]["means"][k].append(val)
+            by_ei[ei]["seeds"][k].setdefault(seed, []).append(val)
+
+    summary_rows: list[tuple] = []
+    for ei_bal, data in sorted(by_ei.items(), key=lambda kv: kv[0]):
+        means = {k: float(np.nanmean(vs)) if len(vs) else np.nan for k, vs in data["means"].items()}
+        disp = {}
+        for k, seeds in data["seeds"].items():
+            per_seed_disp = [_dispersion(np.asarray(vals, float), dispersion_mode) for vals in seeds.values()]
+            disp[k] = float(np.nanmean(per_seed_disp)) if len(per_seed_disp) else np.nan
+        summary_rows.append(
+            (
+                ei_bal,
+                means["MC"],
+                disp["MC"],
+                means["IPC"],
+                disp["IPC"],
+                means["KR"],
+                disp["KR"],
+                means["GR"],
+                disp["GR"],
+            )
+        )
+    if allowed_rhos is not None and not summary_rows:
+        raise ValueError(f"No rows matched rho filter: {sorted(allowed_rhos)}")
+    return summary_rows
+
 
 def make_ei_from_count(W_ce):
 
@@ -321,7 +425,7 @@ def _tagged_name(name: str, tag: str | None) -> str:
     return f"{root}_{tag}{ext}"
 
 
-def plot_dispersion(out_png: str, summary_rows: list[tuple]):
+def plot_dispersion(out_png: str, summary_rows: list[tuple], show: bool = False):
     ei_counts = [r[0] for r in summary_rows]
     mc_std = [r[2] for r in summary_rows]
     ipc_std = [r[4] for r in summary_rows]
@@ -340,11 +444,13 @@ def plot_dispersion(out_png: str, summary_rows: list[tuple]):
     plt.legend()
     plt.tight_layout()
     plt.savefig(out_png)
+    if show:
+        plt.show()
     plt.close()
     print(f"Saved {out_png}")
 
 
-def plot_metric_means(out_png: str, summary_rows: list[tuple]):
+def plot_metric_means(out_png: str, summary_rows: list[tuple], show: bool = False):
     ei_counts = [r[0] for r in summary_rows]
     mc_mean = [r[1] for r in summary_rows]
     ipc_mean = [r[3] for r in summary_rows]
@@ -363,11 +469,13 @@ def plot_metric_means(out_png: str, summary_rows: list[tuple]):
     plt.legend()
     plt.tight_layout()
     plt.savefig(out_png)
+    if show:
+        plt.show()
     plt.close()
     print(f"Saved {out_png}")
 
 
-def plot_mean_dispersion_3d(out_png: str, summary_rows: list[tuple]):
+def plot_mean_dispersion_3d(out_png: str, summary_rows: list[tuple], show: bool = False):
     ei_counts = [r[0] for r in summary_rows]
     mc_mean = [r[1] for r in summary_rows]
     mc_disp = [r[2] for r in summary_rows]
@@ -391,6 +499,8 @@ def plot_mean_dispersion_3d(out_png: str, summary_rows: list[tuple]):
     ax.legend()
     plt.tight_layout()
     plt.savefig(out_png)
+    if show:
+        plt.show()
     plt.close()
     print(f"Saved {out_png}")
 
@@ -409,7 +519,8 @@ def main():
     ap.add_argument("--input-scales", type=float, nargs="+", default=[0.5, 1.0,2.0])
     ap.add_argument("--n-seeds", type=int, default=1, help="Number of seeds to average per hyperparam point.")
     ap.add_argument("--seed-stride", type=int, default=101, help="Stride between seeds across columns.")
-    ap.add_argument("--dispersion", choices=["cv", "std"], default="cv", help="Dispersion metric across hyperparams (per seed).")
+    ap.add_argument("--dispersion", choices=["cv", "std"], default="std", help="Dispersion metric across hyperparams (per seed).")
+    ap.add_argument("--rho-filter", type=float, nargs="+", default=None, help="If set, only include runs with these rho_target values when recomputing summaries.")
     ap.add_argument("--split", type=int, default=1, help="Number of chunks for parallel runs.")
     ap.add_argument("--rank", type=int, default=0, help="This process's chunk index (0- or 1-based).")
     ap.add_argument("--out-tag", default="", help="Optional suffix for output filenames (useful for array jobs).")
@@ -417,6 +528,7 @@ def main():
     ap.add_argument("--summary-csv", default="", help="Summary CSV path for --plot-only (defaults to out-dir file).")
     ap.add_argument("--summary-glob", default="", help="Glob for summary CSVs (used with --plot-only).")
     ap.add_argument("--plot", action="store_true", help="Force plot generation even for partial chunks.")
+    ap.add_argument("--show-plots", action="store_true", help="Display plots interactively (requires GUI backend).")
     ap.add_argument("--no-plot", action="store_true", help="Disable plot generation.")
     args = ap.parse_args()
 
@@ -425,23 +537,41 @@ def main():
         out_tag = f"chunk_{args.rank}"
 
     if args.plot_only:
+        import glob
+
+        allowed_rhos = set(args.rho_filter) if args.rho_filter else None
         if args.summary_csv and args.summary_glob:
             ap.error("Use only one of --summary-csv or --summary-glob.")
         if args.summary_glob:
-            summary_rows = load_summary_rows_from_glob(args.summary_glob)
+            summary_paths = sorted(glob.glob(args.summary_glob))
+            if not summary_paths:
+                raise FileNotFoundError(f"No summary CSVs matched: {args.summary_glob}")
+            rows = []
+            seen = {}
+            for summary_path in summary_paths:
+                _, chunk_rows = recompute_summary_from_raw(summary_path, args.dispersion, allowed_rhos)
+                for row in chunk_rows:
+                    key = row[0]
+                    if key in seen:
+                        raise ValueError(f"Duplicate EI_bal {key} in {summary_path} and {seen[key]}")
+                    seen[key] = summary_path
+                    rows.append(row)
+            rows.sort(key=lambda r: r[0])
+            summary_rows = rows
         else:
             summary_csv = args.summary_csv
             if not summary_csv:
                 summary_csv = os.path.join(args.out_dir, _tagged_name("ladder_summary_.csv", out_tag))
-            summary_rows = load_summary_rows(summary_csv)
+            _, summary_rows = recompute_summary_from_raw(summary_csv, args.dispersion, allowed_rhos)
         os.makedirs(args.out_dir, exist_ok=True)
         out_png = os.path.join(args.out_dir, _tagged_name("gaus_ei_pres.png", out_tag))
-        plot_dispersion(out_png, summary_rows)
+        plot_dispersion(out_png, summary_rows, show=args.show_plots)
         mean_png = os.path.join(args.out_dir, _tagged_name("gaus_ei_means.png", out_tag))
-        plot_metric_means(mean_png, summary_rows)
+        plot_metric_means(mean_png, summary_rows, show=args.show_plots)
         plot_mean_dispersion_3d(
             os.path.join(args.out_dir, _tagged_name("gaus_ei_3d.png", out_tag)),
             summary_rows,
+            show=args.show_plots,
         )
         return
 
@@ -499,11 +629,20 @@ def main():
     save_raw(os.path.join(args.out_dir, _tagged_name("ladder_raw_.csv", out_tag)), raw_rows)
     plot_full = len(ei_balances) == total_balances
     if not args.no_plot and (plot_full or args.plot):
-        plot_dispersion(os.path.join(args.out_dir, _tagged_name("gaus_ei_pres.png", out_tag)), summary_rows)
-        plot_metric_means(os.path.join(args.out_dir, _tagged_name("gaus_ei_means.png", out_tag)), summary_rows)
+        plot_dispersion(
+            os.path.join(args.out_dir, _tagged_name("gaus_ei_pres.png", out_tag)),
+            summary_rows,
+            show=args.show_plots,
+        )
+        plot_metric_means(
+            os.path.join(args.out_dir, _tagged_name("gaus_ei_means.png", out_tag)),
+            summary_rows,
+            show=args.show_plots,
+        )
         plot_mean_dispersion_3d(
             os.path.join(args.out_dir, _tagged_name("gaus_ei_3d.png", out_tag)),
             summary_rows,
+            show=args.show_plots,
         )
     elif not plot_full:
         print("Skipping plot for partial chunk; pass --plot to force a partial plot.")

@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=08:00:00
-#SBATCH --array=1-20
+#SBATCH --array=1-15
 #SBATCH --output=logs/%x-%A_%a.out
 #SBATCH --error=logs/%x-%A_%a.err
 
@@ -41,7 +41,7 @@ conda run -n cel python inv_over_ei.py \
  --ce-ei "${CE_EI}" \
  --out-dir "${OUTDIR}" \
  --seed "${START_SEED}" \
- --n-seeds 25 \
+ --n-seeds 5 \
  --seed-stride 101 \
  --split "${SPLIT}" \
  --rank "${SLURM_ARRAY_TASK_ID}" \
