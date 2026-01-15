@@ -519,8 +519,8 @@ def plot_mean_dispersion_3d(out_png: str, summary_rows: list[tuple], show: bool 
 
     fig = plt.figure(figsize=(7, 5), dpi=140)
     ax = fig.add_subplot(111, projection="3d")
-    #ax.plot(ei_counts, mc_disp, mc_mean, marker="o", label="MC")
-    #ax.plot(ei_counts, ipc_disp, ipc_mean, marker="o", label="IPC")
+    ax.plot(ei_counts, mc_disp, mc_mean, marker="o", label="MC")
+    ax.plot(ei_counts, ipc_disp, ipc_mean, marker="o", label="IPC")
     ax.plot(ei_counts, kr_disp, kr_mean, marker="o", label="KR")
     ax.plot(ei_counts, gr_disp, gr_mean, marker="o", label="GR")
     ax.set_xlabel("Inhibitory neuron count (EI balance)")
