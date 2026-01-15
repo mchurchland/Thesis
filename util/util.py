@@ -166,6 +166,9 @@ def build_reservoir(
                 row_abs = np.sum(np.abs(W), axis=1, keepdims=True) + 1e-8
                 W = W / row_abs
                 ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
+            else:
+                ei_t = None
+
 
     elif feature_conn == "deg_shuffle":
         if ce_W_bio is None:
