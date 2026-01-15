@@ -136,6 +136,7 @@ def build_reservoir(
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
+    Normalize: bool = True,
 ) -> tuple[Tensor, Tensor, Tensor | None, float, float]:
     """
     Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
@@ -155,21 +156,16 @@ def build_reservoir(
     # ---------- base adjacency/weights ----------
     if feature_conn == "cel":
         if ce_W_bio is None:
-            # fallback WS mask then fill weights ~N(0,1)
-            A = ws_adjacency(N, ws_k, 0.1, rng).astype(np.float32)
-            mask = (A != 0).astype(np.float32)
-            if nnz_target is not None:
-                mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
-            W = mask * rng.normal(0.0, 1.0, size=(N, N)).astype(np.float32)
-            ei_t = None
+            raise RuntimeError("you must pass in bio weights (ce_W_bio) to use the celegan reservoirs")
         else:
             W = ce_W_bio.copy().astype(np.float32)
             N = W.shape[0]
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
-            row_abs = np.sum(np.abs(W), axis=1, keepdims=True) + 1e-8
-            W = W / row_abs
-            ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
+            if Normalize:
+                row_abs = np.sum(np.abs(W), axis=1, keepdims=True) + 1e-8
+                W = W / row_abs
+                ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
 
     elif feature_conn == "deg_shuffle":
         if ce_W_bio is None:

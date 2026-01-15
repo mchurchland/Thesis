@@ -176,7 +176,7 @@ def run_scores_for_fraction(
                             feature_conn="cel",
                             feature_weights="bio",
                             feature_dale="none",
-                            target_sr=target_sr,
+                            target_sr=None,
                             N=W_mat.shape[0],
                             ce_W_bio=W_mat,
                             ce_ei=ce_ei_seed,
@@ -186,6 +186,7 @@ def run_scores_for_fraction(
                             drive_idx=None,
                             nnz_target=None,
                             DEVICE=device,
+                            Normalize=False
                         )
                         res = evaluate_reservoir(Wt, Win, leak, device)
                     except Exception:
