@@ -168,10 +168,10 @@ def run_scores_for_fraction(
                     #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
 
                     
-                    W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=1, rng = rng_local,ce_ei=ce_ei_seed)
+                    #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=1, rng = rng_local,ce_ei=ce_ei_seed)
 
                     #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
-
+                    '''
                     Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="cel",
                             feature_weights="bio",
@@ -185,6 +185,19 @@ def run_scores_for_fraction(
                             seed=cur_seed,
                             drive_idx=None,
                             nnz_target=None,
+                            DEVICE=device,
+                            Normalize=False
+                        )
+                    '''
+                    Wt, Win, _, _ = build_reservoir( # type: ignore
+                            feature_conn="er_p=0.1",
+                            target_sr=target_sr,
+                            N=500,
+                            ce_ei=ce_ei_seed,
+                            input_scale=in_scale,
+                            seed=cur_seed,
+                            drive_idx=None,
+                            nnz_target=None, ## no number of target edges, 
                             DEVICE=device,
                             Normalize=False
                         )
@@ -506,8 +519,8 @@ def plot_mean_dispersion_3d(out_png: str, summary_rows: list[tuple], show: bool 
 
     fig = plt.figure(figsize=(7, 5), dpi=140)
     ax = fig.add_subplot(111, projection="3d")
-    ax.plot(ei_counts, mc_disp, mc_mean, marker="o", label="MC")
-    ax.plot(ei_counts, ipc_disp, ipc_mean, marker="o", label="IPC")
+    #ax.plot(ei_counts, mc_disp, mc_mean, marker="o", label="MC")
+    #ax.plot(ei_counts, ipc_disp, ipc_mean, marker="o", label="IPC")
     ax.plot(ei_counts, kr_disp, kr_mean, marker="o", label="KR")
     ax.plot(ei_counts, gr_disp, gr_mean, marker="o", label="GR")
     ax.set_xlabel("Inhibitory neuron count (EI balance)")
@@ -605,7 +618,9 @@ def main():
     raw_rows = []
 
     #total_balances = np.count_nonzero(ce_ei != 0) + 1
+    ce_ei =np.ones(500) ## we are going to make them all exititory just to start then we willsee the the balence
     total_balances = len(np.where(ce_ei > 0)[0])
+    
     ei_balances = _split_indices(total_balances, args.split, args.rank)
     if not ei_balances:
         print("No EI balance indices assigned for this rank; exiting.")

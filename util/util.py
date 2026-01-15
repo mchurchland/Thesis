@@ -124,8 +124,7 @@ def run_reservoir(W: torch.Tensor,
 
 def build_reservoir(
     feature_conn: str,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
-    feature_weights: str,      # 'bio', 'rand_disc', 'rand_gauss'
-    feature_dale: str,         # 'none', 'e80i20', 'ei_from_cel'
+    feature_weights: str | None,      # 'bio', 'rand_disc', 'rand_gauss'
     target_sr: float | None,   # <--- scale by spectral radius to this (None = unchanged)
     N: int,
     ce_W_bio: np.ndarray | None,
@@ -137,7 +136,7 @@ def build_reservoir(
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
     Normalize: bool = True,
-) -> tuple[Tensor, Tensor, Tensor | None, float, float]:
+) -> tuple[Tensor, Tensor, Tensor, float]:
     """
     Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
     ER (Erdos & Renyi, 1959, Publ. Math. Debrecen 6:290-297), WS (Watts & Strogatz, 1998, Nature 393:440-442),
@@ -231,34 +230,20 @@ def build_reservoir(
             W2[mask != 0] = mags * signs
             W = W2
             """
-            raise "you must pass in ce_W_bi"
+            raise RuntimeError("you must pass in ce_W_bi")
         
         # else: 'cel' with CE weights already prepared
 
     # Torchify
+    
+
+    # Apply Dale's Law from ce_ei 
+    if ce_ei is not None:
+        signs = torch.from_numpy(ce_ei).to(DEVICE)
+        diag = np.diag(signs)
+        W  = np.matmul(diag,np.abs(W))
+
     Wt = torch.from_numpy(W).to(DEVICE)
-
-    # Dale (optional)
-    if feature_dale != "none":
-        if feature_dale == "ei_from_cel" and ce_ei is not None:
-            signs = torch.from_numpy(ce_ei).to(DEVICE)
-        else:
-            rng_np = np.random.default_rng(seed)
-            n_exc = int(round(0.8 * N))
-            signs_np = np.ones(N, dtype=np.float32)
-            signs_np[n_exc:] = -1.0
-            rng_np.shuffle(signs_np)
-            signs = torch.from_numpy(signs_np).to(DEVICE)
-        # Enforce signs by zeroing inconsistent outgoing signs
-        Wpos = torch.clamp(Wt, min=0)
-        Wneg = torch.clamp(Wt, max=0)
-        mask_exc = (signs > 0).view(-1, 1)
-        mask_inh = ~mask_exc
-        Wt = torch.zeros_like(Wt)
-        Wt[mask_exc.expand_as(Wt)] = Wpos[mask_exc.expand_as(Wpos)]
-        Wt[mask_inh.expand_as(Wt)] = Wneg[mask_inh.expand_as(Wneg)]
-        Wt.fill_diagonal_(0.0)
-
     # --- scale by spectral radius (this is the requested change) ---
     rho_nat = spectral_radius_power(Wt)
     Wt = scale_to_sr(Wt, target_sr)
