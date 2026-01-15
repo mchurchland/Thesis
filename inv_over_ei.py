@@ -42,9 +42,22 @@ def gaus_m0_ei_pres(W_ce: np.ndarray,
     sel = (nz[0][idx[:k]], nz[1][idx[:k]]) ## these are rows and columns
 
 
-    new_vals = np.abs(rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32))
-    W[sel] = new_vals * ei_signs[sel]
+    #new_vals = np.abs(rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32))
+    #W[sel] = new_vals * ei_signs[sel]
+    W[sel] = W[sel] * ei_signs[sel]
     return W
+def flip_ei_labels(ce_ei, n_flip, rng,):
+    ce_ei = ce_ei.copy()
+    mixed = np.where(ce_ei == 0)[0]
+
+    # if "ignore", leave zeros as-is and exclude from flips
+    flip_pool = np.where(ce_ei > 0)[0]  # flip excitatory to inhibitory
+    if (n_flip> len(flip_pool)):
+        warnings.warn("you are flipping more than a could possibly be flipped ")
+        raise RuntimeError("you flipped more than could be flipped")
+    flip_idx = rng.choice(flip_pool, size=n_flip, replace=False)
+    ce_ei[flip_idx] *= -1
+    return ce_ei
 
 
 
@@ -109,6 +122,7 @@ def _dispersion(arr: np.ndarray, mode: str) -> float:
 def run_scores_for_fraction(
     ce_W_bio: np.ndarray,
     ce_ei: np.ndarray | None,    ## get the positive weights of w
+    mixed_idx: np.ndarray,
     col_params: list[tuple[float, float, float]],
     device: torch.device,
     ws_k: int,
@@ -138,12 +152,13 @@ def run_scores_for_fraction(
     for si in range(n_seeds):
             ei_seed = seed_base + si * seed_stride + 50_000
             rng_ei = np.random.default_rng(ei_seed)
-            if ei_balance == 0:
-                neg = np.array([], dtype=int)
-            else:
-                neg = rng_ei.choice(all_ind, replace=False, size=ei_balance)
-            ce_ei_seed = np.abs(ce_ei).copy()
-            ce_ei_seed[neg] = -1 * ce_ei_seed[neg]
+            #if ei_balance == 0:
+            #    neg = np.array([], dtype=int)
+            #else:
+            #    neg = rng_ei.choice(all_ind, replace=False, size=ei_balance)
+            #ce_ei_seed = np.abs(ce_ei).copy()
+            #ce_ei_seed[neg] = -1 * ce_ei_seed[neg]
+            ce_ei_seed = flip_ei_labels(ce_ei=ce_ei,n_flip=ei_balance,rng = rng_ei)
             per_seed_vals = {k: [] for k in metrics}
             for ci, (target_sr, leak, in_scale) in enumerate(col_params):
                     cur_seed = seed_base + si * seed_stride + ci
@@ -153,7 +168,8 @@ def run_scores_for_fraction(
                     #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
 
                     
-                    W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=0, rng = rng_local,ce_ei=ce_ei_seed)
+                    W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=1, rng = rng_local,ce_ei=ce_ei_seed)
+
                     #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
                     try:
                         Wt, Win, _, _ = build_reservoir( # type: ignore
@@ -177,7 +193,7 @@ def run_scores_for_fraction(
                     for k in metrics:
                         per_seed_vals[k].append(float(res[k]))
                     ##the 1 codes for frac replace
-                    raw_rows.append((ei_balance, 0, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
+                    raw_rows.append((ei_balance, 1, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
             for k in metrics:
                 seed_vals[k].append(per_seed_vals[k])
 
@@ -586,7 +602,8 @@ def main():
     summary_rows = []
     raw_rows = []
 
-    total_balances = np.count_nonzero(ce_ei != 0) + 1
+    #total_balances = np.count_nonzero(ce_ei != 0) + 1
+    total_balances = len(np.where(ce_ei > 0)[0])
     ei_balances = _split_indices(total_balances, args.split, args.rank)
     if not ei_balances:
         print("No EI balance indices assigned for this rank; exiting.")
@@ -597,6 +614,7 @@ def main():
             ce_W_bio=ce_W_bio,
 
             ce_ei=ce_ei,
+            mixed_idx = mixed_idx,
             col_params=col_params,
             device=device,
             ws_k=args.ws_k,
