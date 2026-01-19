@@ -192,7 +192,7 @@ def run_scores_for_fraction(
                     Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="er_p=0.1",
                             target_sr=target_sr,
-                            N=500,
+                            N=10,
                             ce_ei=ce_ei_seed,
                             input_scale=in_scale,
                             seed=cur_seed,
@@ -618,7 +618,7 @@ def main():
     raw_rows = []
 
     #total_balances = np.count_nonzero(ce_ei != 0) + 1
-    ce_ei =np.ones(500) ## we are going to make them all exititory just to start then we willsee the the balence
+    ce_ei =np.ones(10) ## we are going to make them all exititory just to start then we willsee the the balence
     total_balances = len(np.where(ce_ei > 0)[0])
     
     ei_balances = _split_indices(total_balances, args.split, args.rank)
