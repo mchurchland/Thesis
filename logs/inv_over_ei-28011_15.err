@@ -1,0 +1,20 @@
+/home/milesc/Thesis/network_stats/stats_util.py:20: UserWarning: torch.linalg.svd: During SVD computation with the selected cusolver driver, batches 0 failed to converge. A more accurate method will be used to compute the SVD as a fallback. Check doc at https://pytorch.org/docs/stable/generated/torch.linalg.svd.html (Triggered internally at /pytorch/aten/src/ATen/native/cuda/linalg/BatchLinearAlgebraLib.cpp:702.)
+  s = torch.linalg.svdvals(Xc) ## this just gives sqrt(x^2) of eigen values, which is abs(eigen)
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_over_ei.py", line 773, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_over_ei.py", line 662, in main
+    means, disp, rows = run_scores_for_fraction(
+  File "/home/milesc/Thesis/inv_over_ei.py", line 221, in run_scores_for_fraction
+    res = evaluate_reservoir(Wt, Win, leak, device)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 113, in evaluate_reservoir
+    return run_one(
+  File "/home/milesc/Thesis/network_stats/run_one.py", line 71, in run_one
+    MC_total, _ = compute_MC(Xtr, Xte, utr, ute, MC_MAX_DELAY, RIDGE_ALPHA,device)
+  File "/home/milesc/Thesis/network_stats/stats.py", line 93, in compute_MC
+    yhat = ridge_fit_predict(Xtr_d, ytr, Xte_d, alpha,DEVICE=device)
+  File "/home/milesc/Thesis/network_stats/stats_util.py", line 71, in ridge_fit_predict
+    W = torch.linalg.solve(G, B) # [N, K]
+torch._C._LinAlgError: torch.linalg.solve: The solver failed because the input matrix is singular.
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_over_ei.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir inv_over_ei_chunks/chunk_15 --seed 1512345 --n-seeds 5 --seed-stride 101 --split 16 --rho-targets 0.00 --rank 15 --out-tag chunk_15 --no-plot --cuda 0` failed. (See above for error)

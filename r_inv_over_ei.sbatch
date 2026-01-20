@@ -44,7 +44,7 @@ conda run -n cel python inv_over_ei.py \
  --n-seeds 5 \
  --seed-stride 101 \
  --split "${SPLIT}" \
- --rho-targets 1.0 \ 
+ --rho-targets 0.00 \
  --rank "${SLURM_ARRAY_TASK_ID}" \
  --out-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
  --no-plot \

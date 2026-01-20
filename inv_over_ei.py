@@ -642,6 +642,7 @@ def main():
             print("[WARN] Names file present but none of the requested sensory names matched.")
     elif ce_W_bio is not None:
         print("[WARN] No CE names file found — CEL rows will use random Win.")
+    print(cel_drive_idx)
     ce_ei,mixed_idx = make_ei_from_count(ce_W_bio)      ## overrwrite because I dont like how the old one was handeled
     col_params = _build_col_params(args.rho_targets, args.leaks, args.input_scales)
 

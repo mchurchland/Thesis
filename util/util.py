@@ -251,10 +251,11 @@ def build_reservoir(
     # --- Input weights Win ---
     if drive_idx is not None and len(drive_idx) > 0:
         Win = torch.zeros(Wt.shape[0], 1, device=DEVICE)
-        Win[torch.as_tensor(drive_idx, device=DEVICE, dtype=Wt.dtype), 0] = 1.0
+        # Index tensors must be integer type.
+        Win[torch.as_tensor(drive_idx, device=DEVICE, dtype=torch.long), 0] = 1.0
         Win = Win * (input_scale / (Win.norm() + 1e-12))
     else:
-        Win = torch.randn(Wt.shape[0], 1, device=DEVICE,dtype=Wt.dtype) * input_scale
+        Win = torch.randn(Wt.shape[0], 1, device=DEVICE,dtype=torch.long) * input_scale
 
     return Wt, Win, ei_t, rho_nat
 

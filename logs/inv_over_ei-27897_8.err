@@ -1,0 +1,16 @@
+usage: inv_over_ei.py [-h] [--ce-adj CE_ADJ] [--ce-ei CE_EI]
+                      [--out-dir OUT_DIR] [--ws-k WS_K] [--seed SEED]
+                      [--cuda CUDA]
+                      [--rho-targets RHO_TARGETS [RHO_TARGETS ...]]
+                      [--leaks LEAKS [LEAKS ...]]
+                      [--input-scales INPUT_SCALES [INPUT_SCALES ...]]
+                      [--n-seeds N_SEEDS] [--seed-stride SEED_STRIDE]
+                      [--dispersion {cv,std}]
+                      [--rho-filter RHO_FILTER [RHO_FILTER ...]]
+                      [--split SPLIT] [--rank RANK] [--out-tag OUT_TAG]
+                      [--plot-only] [--summary-csv SUMMARY_CSV]
+                      [--summary-glob SUMMARY_GLOB] [--plot] [--show-plots]
+                      [--no-plot]
+inv_over_ei.py: error: argument --rho-targets: invalid float value: ' '
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_over_ei.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir inv_over_ei_chunks/chunk_8 --seed 812345 --n-seeds 5 --seed-stride 101 --split 16 --rho-targets 1.0  ` failed. (See above for error)
