@@ -120,6 +120,7 @@ def _dispersion(arr: np.ndarray, mode: str) -> float:
 
 
 def run_scores_for_fraction(
+    drive_idx: np.ndarray | None,
     ce_W_bio: np.ndarray,
     ce_ei: np.ndarray | None,    ## get the positive weights of w
     mixed_idx: np.ndarray,
@@ -152,13 +153,13 @@ def run_scores_for_fraction(
     for si in range(n_seeds):
             ei_seed = seed_base + si * seed_stride + 50_000
             rng_ei = np.random.default_rng(ei_seed)
-            #if ei_balance == 0:
-            #    neg = np.array([], dtype=int)
-            #else:
-            #    neg = rng_ei.choice(all_ind, replace=False, size=ei_balance)
-            #ce_ei_seed = np.abs(ce_ei).copy()
-            #ce_ei_seed[neg] = -1 * ce_ei_seed[neg]
-            ce_ei_seed = flip_ei_labels(ce_ei=ce_ei,n_flip=ei_balance,rng = rng_ei)
+            if ei_balance == 0:
+                neg = np.array([], dtype=int)
+            else:
+                neg = rng_ei.choice(all_ind, replace=False, size=ei_balance)
+            ce_ei_seed = np.abs(ce_ei).copy()
+            ce_ei_seed[neg] = -1 * ce_ei_seed[neg]
+            #ce_ei_seed = flip_ei_labels(ce_ei=ce_ei,n_flip=ei_balance,rng = rng_ei)
             per_seed_vals = {k: [] for k in metrics}
             for ci, (target_sr, leak, in_scale) in enumerate(col_params):
                     cur_seed = seed_base + si * seed_stride + ci
@@ -167,10 +168,24 @@ def run_scores_for_fraction(
                     #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local) partial_weight_randomization_stacked_gaus
                     #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
 
-                    
                     #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=1, rng = rng_local,ce_ei=ce_ei_seed)
 
                     #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
+                    Wt, Win, _, _ = build_reservoir( # type: ignore
+                            feature_conn="cel",
+                            feature_weights="bio",
+                            target_sr=None,
+                            N=ce_W_bio.shape[0],
+                            ce_W_bio=ce_W_bio,
+                            ce_ei=ce_ei_seed,
+                            ws_k=ws_k,
+                            input_scale=in_scale,
+                            seed=cur_seed,
+                            drive_idx=drive_idx,
+                            nnz_target=None,
+                            DEVICE=device,
+                            Normalize=False
+                        )      
                     '''
                     Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="cel",
@@ -189,6 +204,7 @@ def run_scores_for_fraction(
                             Normalize=False
                         )
                     '''
+                    '''
                     Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="er_p=0.1",
                             target_sr=target_sr,
@@ -201,6 +217,7 @@ def run_scores_for_fraction(
                             DEVICE=device,
                             Normalize=False
                         )
+                    '''
                     res = evaluate_reservoir(Wt, Win, leak, device)
 
                     for k in metrics:
@@ -610,7 +627,21 @@ def main():
         ap.error("--ce-adj and --ce-ei are required unless --plot-only is set.")
 
     device = _pick_device(args.cuda)
-    ce_W_bio, ce_ei, _ = load_connectome(args.ce_adj, args.ce_ei)
+    ce_W_bio, ce_ei, ce_name2idx = load_connectome(args.ce_adj, args.ce_ei)
+    if isinstance(ce_name2idx, dict):
+        touch_names = ("FLPR","FLPL","ASHL","ASHR","IL1VL","IL1VR","OLQDL","OLQDR","OLQVR","OLQVL")
+        food_names  = ("ADFL","ADFR","ASGR","ASGL","ASIL","ASIR","ASJR","ASJL")
+        sel = []
+        for n in list(touch_names) + list(food_names):
+            if n in ce_name2idx:
+                sel.append(ce_name2idx[n])
+        if len(sel) > 0:
+            cel_drive_idx = np.array(sorted(set(sel)), dtype=np.int32)
+            print(f"[INFO] Driving CE sensory neurons (count={len(cel_drive_idx)}).")
+        else:
+            print("[WARN] Names file present but none of the requested sensory names matched.")
+    elif ce_W_bio is not None:
+        print("[WARN] No CE names file found — CEL rows will use random Win.")
     ce_ei,mixed_idx = make_ei_from_count(ce_W_bio)      ## overrwrite because I dont like how the old one was handeled
     col_params = _build_col_params(args.rho_targets, args.leaks, args.input_scales)
 
@@ -618,7 +649,7 @@ def main():
     raw_rows = []
 
     #total_balances = np.count_nonzero(ce_ei != 0) + 1
-    ce_ei =np.ones(100) ## we are going to make them all exititory just to start then we willsee the the balence
+    #ce_ei =np.ones(100) ## we are going to make them all exititory just to start then we willsee the the balence
     total_balances = len(np.where(ce_ei > 0)[0])
     
     ei_balances = _split_indices(total_balances, args.split, args.rank)
@@ -629,7 +660,7 @@ def main():
     for ei_bal in ei_balances:
         means, disp, rows = run_scores_for_fraction(
             ce_W_bio=ce_W_bio,
-
+            
             ce_ei=ce_ei,
             mixed_idx = mixed_idx,
             col_params=col_params,
@@ -639,7 +670,8 @@ def main():
             seed_base=args.seed + ei_bal * 10_000,
             n_seeds=args.n_seeds,
             seed_stride=args.seed_stride,
-            ei_balance=ei_bal
+            ei_balance=ei_bal,
+            drive_idx = cel_drive_idx,
 
         )
         summary_rows.append(

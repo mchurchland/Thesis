@@ -54,8 +54,8 @@ def load_connectome(adj_path: str | None, ei_path: str | None):
         # try to load names from same folder as adj
         base_dir = os.path.dirname(adj_path)
         names = None
-        npy_path = os.path.join(base_dir, "ce_names.npy")
-        txt_path = os.path.join(base_dir, "ce_names.txt")
+        npy_path = os.path.join(base_dir, "ce_nodes.npy")
+        txt_path = os.path.join(base_dir, "ce_nodes.txt")
         if os.path.isfile(npy_path):
             names = np.load(npy_path)
         elif os.path.isfile(txt_path):
