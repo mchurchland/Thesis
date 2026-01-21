@@ -174,7 +174,7 @@ def run_scores_for_fraction(
                     Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="cel",
                             feature_weights="bio",
-                            target_sr=None,
+                            target_sr=target_sr,
                             N=ce_W_bio.shape[0],
                             ce_W_bio=ce_W_bio,
                             ce_ei=ce_ei_seed,
@@ -184,7 +184,7 @@ def run_scores_for_fraction(
                             drive_idx=drive_idx,
                             nnz_target=None,
                             DEVICE=device,
-                            Normalize=False
+                            Normalize=True
                         )      
                     '''
                     Wt, Win, _, _ = build_reservoir( # type: ignore
