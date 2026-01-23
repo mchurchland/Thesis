@@ -154,6 +154,36 @@ def run_one_cel_randN(
         append=append,
     )
 
+def run_one_sign_pres(
+    WS_K: int,
+    ce_W_bio: np.ndarray,
+    ce_ei: np.ndarray | None,
+    col_params: list[tuple[float, float, float]],
+    out_dir: str,
+    device: torch.device,
+    *,
+    seed: int = 0,
+    sid: int = -1,
+    csv_name: str = "cel_variants.csv",
+    src_tag: str = "chunk_0",
+    append: bool = False,
+):
+    return _run_and_save(
+        "local_sign_match_guas",
+        WS_K=WS_K,
+        ce_W_bio=ce_W_bio,
+        ce_ei=ce_ei,
+        col_params=col_params,
+        out_dir=out_dir,
+        device=device,
+        seed=seed,
+        sid=sid,
+        er_p=0,
+        ws_p=0.1,  
+        csv_name=csv_name,
+        src_tag=src_tag,
+        append=append,
+    )
 
 def run_one_esn_er_randN(
     WS_K: int,

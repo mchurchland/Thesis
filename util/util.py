@@ -168,7 +168,26 @@ def build_reservoir(
             else:
                 ei_t = None
 
+    elif feature_conn == 'local_sign_match_guas':
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+        nz = np.nonzero(W)
+        idx = np.arange(len(nz[0]))
+        rng.shuffle(idx)
 
+        sel_p = W > 0 ## get the positive weights of the selection
+        sel_n = W < 0 ## get the negative weights of the selection
+
+
+        # match cel+randN: N(0, 1) on existing edges
+        num_pos = int(sel_p.sum())
+        num_neg = int(sel_n.sum())
+        if num_pos:
+            W[sel_p] = np.abs(rng.normal(loc=0.0, scale=1.0, size=num_pos).astype(np.float32))
+        if num_neg:
+            W[sel_n] = -np.abs(rng.normal(loc=0.0, scale=1.0, size=num_neg).astype(np.float32))
+        
     elif feature_conn == "deg_shuffle":
         if ce_W_bio is None:
             raise ValueError("Degree-matched shuffle requires CE adjacency.")

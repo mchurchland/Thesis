@@ -11,6 +11,7 @@ Invariance sweeps for C. elegans reservoirs.
          * er_randN             (Std ESN, directed ER, Gaussian weights; nnz matched to CE)
          * ws_p01_randN         (WS p=0.1, Gaussian weights; nnz matched to CE)
          * conn_shuf            (CE weight multiset on degree-shuffled connections), repeated n_conn_shuf times
+         * local_sign           (CE adjacency; preserve sign pattern, replace magnitudes with N(0,1))
 """
 
 import os
@@ -290,6 +291,24 @@ def main():
         return
 
     if job_key == "conn_shuf":
+        for j in range(args.n_shuffles):
+            sid = args.sid if args.n_shuffles == 1 else (args.sid + j)
+            ctx = _build_ctx(
+                job_key,
+                WS_K,
+                ce_W_bio,
+                ce_ei,
+                col_params,
+                device,
+                seed=args.seed + 9_000 * j,
+                sid=sid,
+                er_p=args.er_p,
+                ws_p=args.ws_p,
+                src_tag=args.src_tag,
+            )
+            _run_and_save(job_key, ctx, out_dir, csv_name, append=(j > 0))
+        return
+    elif  job_key == "local_sign":
         for j in range(args.n_shuffles):
             sid = args.sid if args.n_shuffles == 1 else (args.sid + j)
             ctx = _build_ctx(
