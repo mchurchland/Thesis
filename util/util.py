@@ -136,6 +136,7 @@ def build_reservoir(
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
     Normalize: bool = True,
+    per_neg: float| None = None
 ) -> tuple[Tensor, Tensor, Tensor, float]:
     """
     Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
@@ -187,7 +188,9 @@ def build_reservoir(
             W[sel_p] = np.abs(rng.normal(loc=0.0, scale=1.0, size=num_pos).astype(np.float32))
         if num_neg:
             W[sel_n] = -np.abs(rng.normal(loc=0.0, scale=1.0, size=num_neg).astype(np.float32))
+        ei_t = None
         
+    
     elif feature_conn == "deg_shuffle":
         if ce_W_bio is None:
             raise ValueError("Degree-matched shuffle requires CE adjacency.")
@@ -225,8 +228,16 @@ def build_reservoir(
         if nnz_target is not None:
             mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
-        ei_t = None
-
+        if per_neg:
+            nz = np.nonzero(W)
+            n_neg = int(per_neg * len(nz[0]))
+            idx = np.arange(len(nz[0]))
+            rng.shuffle(idx)
+            sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
+            W = np.abs(W)
+            W[sel] = -1*W[sel]
+            ei_t = None
+        
     else:
         raise ValueError(f"Unknown feature_conn: {feature_conn}")
 
@@ -274,7 +285,7 @@ def build_reservoir(
         Win[torch.as_tensor(drive_idx, device=DEVICE, dtype=torch.long), 0] = 1.0
         Win = Win * (input_scale / (Win.norm() + 1e-12))
     else:
-        Win = torch.randn(Wt.shape[0], 1, device=DEVICE,dtype=torch.long) * input_scale
+        Win = torch.randn(Wt.shape[0], 1, device=DEVICE, dtype=Wt.dtype) * input_scale
 
     return Wt, Win, ei_t, rho_nat
 

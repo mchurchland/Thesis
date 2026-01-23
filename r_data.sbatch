@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=ce_real_inv
 #SBATCH --partition=normal
-#SBATCH --gres=gpu:l40s:1
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=1-00:00:00
@@ -28,7 +28,7 @@ mkdir -p "${OUTDIR}"
 SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 
 # choose which variant this script runs
-JOB_KIND="real"   # or shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf
+JOB_KIND="local_sign"   # or shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
@@ -41,6 +41,6 @@ conda run -n cel python inv_arc_test.py \
   --split "${SPLIT}" \
   --rank "${SLURM_ARRAY_TASK_ID}" \
   --ws-p 0.1 \
+  --n-shuffles 15 \
   --er-p 0.1 \
   --cuda 0
-

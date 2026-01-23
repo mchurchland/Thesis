@@ -24,28 +24,6 @@ from reservoir_variants import evaluate_reservoir
 from util.util import build_reservoir, load_connectome
 
 
-def gaus_m0_ei_pres(W_ce: np.ndarray,
-                                 frac_replace: float,
-                                 rng: np.random.Generator,
-                                 ce_ei: np.ndarray) -> np.ndarray:
-    """
-    Replace a fraction of existing C. elegans synaptic weights with Gaussian draws on the fixed topology
-    """
-    W = W_ce.copy().astype(np.float32)
-    W_bool = W_ce.copy().astype(np.bool_).astype(np.float32)
-    diag = np.diag(ce_ei) ## put the +1/-1 on the diag of a 299x299 matrix
-    ei_signs = np.matmul(diag,W_bool) ##im fucking cool ash
-    nz = np.nonzero(W)
-    idx = np.arange(len(nz[0]))
-    rng.shuffle(idx)
-    k = int(frac_replace * len(idx))
-    sel = (nz[0][idx[:k]], nz[1][idx[:k]]) ## these are rows and columns
-
-
-    #new_vals = np.abs(rng.normal(loc=0.0, scale=1.0, size=k).astype(np.float32))
-    #W[sel] = new_vals * ei_signs[sel]
-    W[sel] = W[sel] * ei_signs[sel]
-    return W
 def flip_ei_labels(ce_ei, n_flip, rng,):
     ce_ei = ce_ei.copy()
     mixed = np.where(ce_ei == 0)[0]
@@ -131,7 +109,8 @@ def run_scores_for_fraction(
     seed_base: int = 0,
     n_seeds: int = 1,
     seed_stride: int = 101,
-    ei_balance: int = 0
+    ei_balance: int = 0,
+    frac_replace: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float], list[tuple]]:
     """
     Sweep seeds/hyperparameters to compute MC/IPC/KR/GR reservoir metrics, following standard RC
@@ -151,6 +130,7 @@ def run_scores_for_fraction(
     #neuron_test(ce_W_bio,ce_ei) 
     #ce_W_bio = gaus_m0_sign_pres(ce_W_bio,1.0, np.random.default_rng(0))
     for si in range(n_seeds):
+            """
             ei_seed = seed_base + si * seed_stride + 50_000
             rng_ei = np.random.default_rng(ei_seed)
             if ei_balance == 0:
@@ -159,8 +139,9 @@ def run_scores_for_fraction(
                 neg = rng_ei.choice(all_ind, replace=False, size=ei_balance)
             ce_ei_seed = np.abs(ce_ei).copy()
             ce_ei_seed[neg] = -1 * ce_ei_seed[neg]
-            #ce_ei_seed = flip_ei_labels(ce_ei=ce_ei,n_flip=ei_balance,rng = rng_ei)
+            #ce_ei_seed = flip_ei_labels(ce_ei=ce_ei,n_flip=ei_balance,rng = rng_ei)"""
             per_seed_vals = {k: [] for k in metrics}
+            
             for ci, (target_sr, leak, in_scale) in enumerate(col_params):
                     cur_seed = seed_base + si * seed_stride + ci
                     rng_local = np.random.default_rng(cur_seed)
@@ -172,19 +153,17 @@ def run_scores_for_fraction(
 
                     #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
                     Wt, Win, _, _ = build_reservoir( # type: ignore
-                            feature_conn="cel",
-                            feature_weights="bio",
+                            feature_conn="er_p=0.1",
                             target_sr=target_sr,
-                            N=ce_W_bio.shape[0],
+                            N=100,
                             ce_W_bio=ce_W_bio,
-                            ce_ei=ce_ei_seed,
                             ws_k=ws_k,
                             input_scale=in_scale,
                             seed=cur_seed,
-                            drive_idx=drive_idx,
                             nnz_target=None,
                             DEVICE=device,
-                            Normalize=True
+                            Normalize=True,
+                            per_neg= frac_replace
                         )      
                     '''
                     Wt, Win, _, _ = build_reservoir( # type: ignore
@@ -223,9 +202,7 @@ def run_scores_for_fraction(
                     for k in metrics:
                         per_seed_vals[k].append(float(res[k]))
                     ##the 1 codes for frac replace
-                    if res["MC"] == float('nan'):
-                        raise RuntimeError("nan values")
-                    raw_rows.append((ei_balance, 1, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
+                    raw_rows.append((ei_balance, frac_replace, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
             for k in metrics:
                 seed_vals[k].append(per_seed_vals[k])
 
@@ -652,7 +629,7 @@ def main():
     #total_balances = np.count_nonzero(ce_ei != 0) + 1
     #ce_ei =np.ones(100) ## we are going to make them all exititory just to start then we willsee the the balence
     total_balances = len(np.where(ce_ei > 0)[0])
-    
+    total_balances = 100
     ei_balances = _split_indices(total_balances, args.split, args.rank)
     if not ei_balances:
         print("No EI balance indices assigned for this rank; exiting.")
@@ -668,16 +645,19 @@ def main():
             device=device,
             ws_k=args.ws_k,
             dispersion_mode=args.dispersion,
+            #seed_base=args.seed + ei_bal * 10_000,
             seed_base=args.seed + ei_bal * 10_000,
+
             n_seeds=args.n_seeds,
             seed_stride=args.seed_stride,
-            ei_balance=ei_bal,
-            drive_idx = cel_drive_idx,
+            #ei_balance=ei_bal,
+            frac_replace = ei_bal/100 
 
         )
         summary_rows.append(
             (
-                ei_bal,
+                #ei_bal,
+                ei_bal/100,
                 means["MC"],
                 disp["MC"],
                 means["IPC"],

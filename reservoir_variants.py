@@ -151,11 +151,9 @@ def _run_variant_row(
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
 
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
-        try:
             Wt, Win, _, _ = build_reservoir(
                 feature_conn=feature_conn,
                 feature_weights=feature_weights,
-                feature_dale="none",
                 target_sr=target_sr,
                 N=Nloc,
                 ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
@@ -181,10 +179,6 @@ def _run_variant_row(
                     float(scores["GR"]),
                     ctx.src_tag,
                 )
-            )
-        except Exception:
-            rows_local.append(
-                (mode_label, ctx.sid, target_sr, leak, in_scale, np.nan, np.nan, np.nan, np.nan, ctx.src_tag)
             )
     return rows_local
 
