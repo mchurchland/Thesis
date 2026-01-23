@@ -13,7 +13,7 @@ Inputs (defaults)
 Outputs (defaults)
   experiment_full_merged/combined.ALL.csv                         # row-wise merged runs
   experiment_full_merged/dispersion_by_group.ALL.csv              # per-group dispersion table
-  experiment_full_merged/all_arch_hist_<MC|IPC|KR|GR>.png         # overlaid histograms per metric
+  experiment_full_merged/all_arch_hist_grid[_pN].png              # overlaid histograms per metric (2x2 grid)
   experiment_full_merged/mc_vs_gr_all_arch.png                    # scatter across all modes
 """
 

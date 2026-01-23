@@ -11,14 +11,17 @@ Inputs (defaults)
 
 Outputs (defaults)
   experiment_full_merged/dispersion_by_group.ALL.csv
-  experiment_full_merged/all_arch_hist_<MC|IPC|KR|GR>.png
+  experiment_full_merged/all_arch_hist_grid[_pN].png
   experiment_full_merged/mc_vs_gr_all_arch.png
 """
 
 import os
 import argparse
 import numpy as np
-import pandas as pd
+import pandas as pd,itertools
+import pingouin as pg
+from scipy.stats import kruskal
+from researchpy import difference_test
 
 import matplotlib
 matplotlib.use("Agg")
@@ -98,36 +101,104 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
     modes = sorted(disp["mode"].unique())
+    if not metrics:
+        return
+    plt.rcParams.update({
+        "axes.titlesize": 18,
+        "axes.labelsize": 16,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
+    })
 
-    # common bin edges per metric across all modes; y-axis normalized by count (fractions)
-    for m in metrics:
-        all_vals = disp[disp["metric"] == m]["dispersion"].to_numpy()
-        if all_vals.size == 0:
-            continue
-        lo, hi = np.nanmin(all_vals), np.nanmax(all_vals)
-        if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
-            lo, hi = 0.0, 1.0
-        edges = np.linspace(lo, hi, bins + 1)
-        centers = 0.5 * (edges[:-1] + edges[1:])
+    per_fig = 4  # 2x2 grid
+    for start in range(0, len(metrics), per_fig):
+        chunk = metrics[start:start + per_fig]
+        fig, axes = plt.subplots(2, 2, figsize=(13, 11), squeeze=False,
+                                 sharex="col", sharey="row")
+        flat_axes = axes.ravel()
+        any_plotted = False
+        col_lo = [np.inf, np.inf]
+        col_hi = [-np.inf, -np.inf]
+        row_y_max = [0.0, 0.0]
+        legend_handles, legend_labels = None, None
+        data_mask = [False] * len(flat_axes)
 
-        plt.figure(figsize=(10, 6))
-        for mode in modes:
-            s = disp[(disp["metric"] == m) & (disp["mode"] == mode)]["dispersion"].to_numpy()
-            if s.size == 0:
+        for idx, m in enumerate(chunk):
+            ax = flat_axes[idx]
+            all_vals = disp[disp["metric"] == m]["dispersion"].to_numpy()
+            if all_vals.size == 0:
+                ax.axis("off")
                 continue
-            counts, _ = np.histogram(s, bins=edges)
-            frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
-            plt.plot(centers, frac, drawstyle="steps-mid", linewidth=1.8, alpha=0.95,
-                     label=f"{mode} (N={len(s)})")
+            lo, hi = np.nanmin(all_vals), np.nanmax(all_vals)
+            if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
+                lo, hi = 0.0, 1.0
+            edges = np.linspace(lo, hi, bins + 1)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            col = idx % 2
+            row = idx // 2
+            col_lo[col] = min(col_lo[col], lo)
+            col_hi[col] = max(col_hi[col], hi)
 
-        plt.title(f"Invariance dispersion by architecture — {m}")
-        plt.xlabel(f"dispersion = std({m}) across hyper-params") # / mean({m}) 
-        plt.ylabel("fraction (normalized by N)")
-        plt.legend(frameon=False, fontsize=9, ncol=2)
-        plt.tight_layout()
-        out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_{m}.png"))
-        plt.savefig(out_fig, dpi=200)
-        plt.close()
+            plotted = False
+            for mode in modes:
+                s = disp[(disp["metric"] == m) & (disp["mode"] == mode)]["dispersion"].to_numpy()
+                if s.size == 0:
+                    continue
+                counts, _ = np.histogram(s, bins=edges)
+                frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
+                ax.plot(centers, frac, drawstyle="steps-mid", linewidth=1.8, alpha=0.95,
+                        label=f"{mode} (N={len(s)})")
+                plotted = True
+                row_y_max[row] = max(row_y_max[row], float(np.max(frac)))
+
+            if not plotted:
+                ax.axis("off")
+                continue
+
+            if legend_handles is None:
+                legend_handles, legend_labels = ax.get_legend_handles_labels()
+            ax.set_title(f"Invariance dispersion by architecture — {m}")
+            if idx == 2 or idx ==3:
+                ax.set_xlabel(f"coefficient of variation")
+            if idx == 0 or idx ==2:
+                ax.set_ylabel("fraction (normalized by N)")
+            any_plotted = True
+            data_mask[idx] = True
+
+        for idx in range(len(chunk), len(flat_axes)):
+            flat_axes[idx].axis("off")
+
+        if not any_plotted:
+            plt.close(fig)
+            continue
+
+        for col in range(2):
+            if np.isfinite(col_lo[col]) and np.isfinite(col_hi[col]) and col_lo[col] != col_hi[col]:
+                for row in range(2):
+                    idx = row * 2 + col
+                    ax = flat_axes[idx]
+                    if data_mask[idx]:
+                        ax.set_xlim(col_lo[col], col_hi[col])
+        for row in range(2):
+            if row_y_max[row] > 0:
+                y_max = row_y_max[row] * 1.08
+                for col in range(2):
+                    idx = row * 2 + col
+                    ax = flat_axes[idx]
+                    if data_mask[idx]:
+                        ax.set_ylim(0, y_max)
+
+        if legend_handles:
+            fig.legend(legend_handles, legend_labels, frameon=False, loc="upper center",
+                       ncol=min(len(legend_handles), 3), bbox_to_anchor=(0.5, 1))
+
+        fig.tight_layout(rect=(0.02, 0.02, 0.98, 0.94))
+        page = start // per_fig + 1
+        suffix = "" if len(metrics) <= per_fig else f"_p{page}"
+        out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid{suffix}.png"))
+        fig.savefig(out_fig, dpi=200)
+        plt.close(fig)
         print(f"[saved] {out_fig}")
 
 def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
@@ -154,6 +225,56 @@ def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
     plt.close()
     print(f"[saved] {out_fig}")
 
+def print_kruskal_wallis_tables(disp: pd.DataFrame):
+    if kruskal is None:
+        print("[warn] scipy is not available; skipping Kruskal-Wallis tables.")
+        return
+    metrics_present = set(disp["metric"].unique())
+    metrics = [m for m in ["MC", "IPC", "KR", "GR"] if m in metrics_present]
+    modes = sorted(disp["mode"].unique())
+    if not metrics:
+        print("[warn] none of MC/IPC/KR/GR present for testing.")
+        return
+    if not modes:
+        print("[warn] no modes to test.")
+        return
+    print("\n=== Kruskal-Wallis tests (dispersion across modes within each metric) ===")
+    for m in metrics:
+        rows = []
+        groups = []
+        for mode in modes:
+            vals = disp[(disp["metric"] == m) & (disp["mode"] == mode)]["dispersion"].dropna().to_numpy()
+            if vals.size == 0:
+                continue
+            rows.append({"mode": mode,
+                         'metric': m,
+                         "N": len(vals),
+                         "median": float(np.median(vals)),
+                         "mean": float(np.mean(vals)),
+                         "std": float(np.std(vals))})
+            groups.append(vals)
+        if len(groups) < 2:
+            print(f"{m}: not enough non-empty modes for Kruskal-Wallis (need >=2).")
+            continue
+        H, p = kruskal(*groups)
+        df = pd.DataFrame(rows)
+        for a, b in itertools.combinations(df["mode"].unique(), 2):
+                    row_a = df[df["mode"] == a].iloc[0]
+                    row_b = df[df["mode"] == b].iloc[0]
+                    sd_ref = row_a["std"] if row_a["std"] > 0 else np.nan
+                    d_glass = (row_a["mean"] - row_b["mean"]) / sd_ref if np.isfinite(sd_ref) else np.nan
+                    vals_a = disp[(disp["metric"] == m) & (disp["mode"] == a)]["dispersion"].dropna().to_numpy()
+                    vals_b = disp[(disp["metric"] == m) & (disp["mode"] == b)]["dispersion"].dropna().to_numpy()
+                    vals_all = disp[(disp["metric"] == m)]["dispersion"].dropna().to_numpy()
+                    if a == "CE-real":
+                        #print(f"  {a} vs {b} (Glass Δ, SD from {a}, {m}): {d_glass:.4g}")
+                        tost = (pg.tost(vals_a,vals_b,np.abs(np.median(vals_all))*0.02,paired = False))
+                        print(rf"{m} & {a} vs {b} & {tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\")
+        #print(f"\n{m}")
+        #print(df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))  # one table per metric
+        #print(f"H = {H:.4g}, p = {p:.4g}")
+    print()
+
 
 # --------------------------- main ----------------------------
 
@@ -173,14 +294,17 @@ def main():
     print(f"[saved] {out_comb}  (rows={len(combined)})")
 
     # Compute and save dispersion table
-    disp = _compute_dispersion_table(combined,mode="v")
+    disp = _compute_dispersion_table(combined,mode="cv")
     out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))
     disp.to_csv(out_disp, index=False)
     print(f"[saved] {out_disp}  (rows={len(disp)})")
 
+    # Focus on CE-real, CE-shuffle, and CE-connshuff for plots/stats
+
     # Plots
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
+    print_kruskal_wallis_tables(disp)
 
 
 if __name__ == "__main__":
