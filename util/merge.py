@@ -22,7 +22,7 @@ import argparse
 
 import matplotlib
 matplotlib.use("Agg")
-from util.graph_utils import _safe_path, _read_glob, _build_combined, _compute_dispersion_table
+from graph_utils import _safe_path, _read_glob, _build_combined, _compute_dispersion_table
 
 # ---------------------------- CLI ----------------------------
 

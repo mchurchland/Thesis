@@ -1,0 +1,6 @@
+usage: merge.py [-h] [--glob-shuf GLOB_SHUF] [--glob-variants GLOB_VARIANTS]
+                [--out-dir OUT_DIR] [--bins BINS]
+                [--scatter-alpha SCATTER_ALPHA]
+merge.py: error: unrecognized arguments:  #--glob-shuf experiment_full_chunks/chunk_*/invariance_variants.csv
+
+ERROR conda.cli.main_run:execute(49): `conda run python util/merge.py  #--glob-shuf experiment_full_chunks/chunk_*/invariance_variants.csv --glob-variants experiment_full_chunks/chunk_*/ce_real_reps.csv --out-dir experiment_full_merged --bins 40 --scatter-alpha 0.6` failed. (See above for error)
