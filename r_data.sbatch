@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=1-00:00:00
-#SBATCH --array=0-19              # 20 chunks of the param grid
+#SBATCH --array=0-9              # 20 chunks of the param grid
 #SBATCH --output=logs/%x-%A_%a.out
 #SBATCH --error=logs/%x-%A_%a.err
 
@@ -41,6 +41,6 @@ conda run -n cel python inv_arc_test.py \
   --split "${SPLIT}" \
   --rank "${SLURM_ARRAY_TASK_ID}" \
   --ws-p 0.1 \
-  --n-shuffles 20 \
+  --n-shuffles 10 \
   --er-p 0.1 \
   --cuda 0
