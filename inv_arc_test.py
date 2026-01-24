@@ -312,12 +312,12 @@ def main():
         for j in range(args.n_shuffles):
             sid = args.sid if args.n_shuffles == 1 else (args.sid + j)
             ctx = _build_ctx(
-                job_key,
-                WS_K,
-                ce_W_bio,
-                ce_ei,
-                col_params,
-                device,
+                job_key=job_key,
+                WS_K=WS_K,
+                ce_W_bio=ce_W_bio,
+                ce_ei=None,
+                col_params=col_params,
+                device=device,
                 seed=args.seed + 9_000 * j,
                 sid=sid,
                 er_p=args.er_p,
