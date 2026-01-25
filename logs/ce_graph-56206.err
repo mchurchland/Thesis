@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/graph_hist.py", line 22, in <module>
+    import pingouin as pg
+ModuleNotFoundError: No module named 'pingouin'
+
+ERROR conda.cli.main_run:execute(49): `conda run python graph_hist.py --combined experiment_full_merged.v2_saved/combined.ALL.csv --out-dir experiment_full_merged.v2_saved --bins 100 --scatter-alpha 0.55` failed. (See above for error)
