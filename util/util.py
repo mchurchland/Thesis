@@ -124,10 +124,10 @@ def run_reservoir(W: torch.Tensor,
 
 def build_reservoir(
     target_sr: float | None,   # <--- scale by spectral radius to this (None = unchanged)
-    N: int,
     ce_ei: np.ndarray | None,
     input_scale: float,
     seed: int,
+    N: int| None = None,
     ws_k: int | None = None,
     ce_W_bio: np.ndarray | None = None,
     feature_conn: str | None = None,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
@@ -151,6 +151,8 @@ def build_reservoir(
     Returns:
       Wt, Win, ei_t, rho_nat, rho_post
     """
+    print(target_sr,ce_ei,input_scale,seed,N,ws_k,ce_W_bio,feature_conn,feature_weights,drive_idx,nnz_target,DEVICE,Normalize,per_neg)
+    quit()
     rng = np.random.default_rng(seed)
 
     # ---------- base adjacency/weights ----------

@@ -291,17 +291,16 @@ def run_scores_for_fraction(
             #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
             
             #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
-            W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
+            #W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
             try:
                 Wt, Win, _, _ = build_reservoir(
                     feature_conn="cel",
-                    feature_weights="bio",
-                    feature_dale="none",
+                    feature_weights="local_sign_match_guas",
                     target_sr=target_sr,
-                    N=W_mat.shape[0],
-                    ce_W_bio=W_mat,
-                    ce_ei=ce_ei,
+                    N=None,
+                    ce_W_bio=ce_W_bio,
+                    ce_ei=None,
                     ws_k=ws_k,
                     input_scale=in_scale,
                     seed=cur_seed,
