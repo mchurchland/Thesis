@@ -56,7 +56,7 @@ def main():
     combined.to_csv(out_comb, index=False)
     print(f"[saved] {out_comb}  (rows={len(combined)})")
 
-    disp = _compute_dispersion_table(combined,mode = "v")
+    disp = _compute_dispersion_table(combined,mode = "cv")
     out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))
     disp.to_csv(out_disp, index=False)
     print(f"[saved] {out_disp}  (rows={len(disp)})")
