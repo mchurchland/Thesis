@@ -142,7 +142,7 @@ def _run_variant_row(
     rows_local = []
 
     # choose CE matrix when needed
-    ce_for_conn = ce_override if feature_conn == "cel" else ctx.ce_W_bio
+    ce_for_conn =  ctx.ce_W_bio
     if feature_conn == "cel" and ce_for_conn is None:
         raise ValueError("feature_conn='cel' requires a CE adjacency matrix.")
     if ctx.ce_W_bio is None and feature_conn != "cel":

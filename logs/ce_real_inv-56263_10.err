@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 395, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 389, in main
+    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+  File "/home/milesc/Thesis/inv_arc_test.py", line 135, in _run_and_save
+    rows = run_variant(VARIANT_REGISTRY[job_key], ctx)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 200, in run_variant
+    return _run_variant_row(
+  File "/home/milesc/Thesis/reservoir_variants.py", line 147, in _run_variant_row
+    raise ValueError("feature_conn='cel' requires a CE adjacency matrix.")
+ValueError: feature_conn='cel' requires a CE adjacency matrix.
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job real --out-dir experiment_full_chunks/chunk_10 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_10 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 50 --repeat-split 20 --repeat-rank 10 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)

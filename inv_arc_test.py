@@ -34,9 +34,9 @@ from util.util import load_connectome
 
 WS_K = 40  # signature compatibility with util.build_reservoir
 
-SWEEP_SR   = [0.6, 0.8, 0.95, 1.05, 1.5, 2.0]
-SWEEP_LEAK = [0.1, 0.2, 0.6, 0.8, 1.0]
-SWEEP_U    = [0.1, 0.5, 1.0, 1.5, 3.0, 5.0]
+SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
+SWEEP_LEAK = [0.6, 0.8, 1.0]
+SWEEP_U    = [0.1, 0.5, 1.0, 1.5]
 
 
 # =================== Core helpers ===================
@@ -271,6 +271,7 @@ def main():
     #   3) load_connectome() default
     if args.ce_adj is not None and args.ce_ei is not None:
             ce_W_bio, ce_ei, _  = load_connectome(args.ce_adj, args.ce_ei)
+            print(ce_W_bio,ce_ei)
     else:
         raise ValueError(
             "You must pass both --ce-adj and --ce-ei, or --ce-path to load_connectome()."
