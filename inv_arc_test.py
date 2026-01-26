@@ -271,7 +271,6 @@ def main():
     #   3) load_connectome() default
     if args.ce_adj is not None and args.ce_ei is not None:
             ce_W_bio, ce_ei, _  = load_connectome(args.ce_adj, args.ce_ei)
-            print(ce_W_bio,ce_ei)
     else:
         raise ValueError(
             "You must pass both --ce-adj and --ce-ei, or --ce-path to load_connectome()."

@@ -232,7 +232,7 @@ def _conn_ws(ctx: VariantContext) -> str:
 
 
 def _conn_local_sign(_: VariantContext) -> str:
-    return "local_sign_match_guas"
+    return "cel"
 
 
 VARIANT_REGISTRY: dict[str, VariantSpec] = {
@@ -291,15 +291,6 @@ VARIANT_REGISTRY: dict[str, VariantSpec] = {
         ),
         seed_offset=50_000,
         sid_stride=911,
-    ),
-    # Sign-preserving CE adjacency with Gaussian magnitudes on existing edges
-    "local_sign": VariantSpec(
-        key="local_sign",
-        label="local_sign",
-        feature_weights="bio",
-        conn_fn=_conn_local_sign,
-        description="CE adjacency with edge signs preserved but magnitudes replaced by N(0,1) (local sign match).",
-        seed_offset=30_000,
     ),
     # Alias for compatibility with run_arc and older job keys
     "local_sign_match_guas": VariantSpec(
