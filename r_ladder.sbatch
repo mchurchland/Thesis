@@ -19,9 +19,9 @@ OUT_DIR="ladder_results"
 
 # --- sweep controls ---
 FRACTIONS="0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0"
-RHO_TARGETS="0.8 1.0 1.2"
-LEAKS="0.2 0.5 0.8"
-INPUT_SCALES="0.5 1.0 2.0"
+RHO_TARGETS="0.6 0.8 0.95 1.05"
+LEAKS="0.6 0.8 1.0"
+INPUT_SCALES="0.1 0.5 1.0 1.5"
 WS_K=40
 N_SEEDS=15
 SEED_STRIDE=101
