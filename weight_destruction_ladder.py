@@ -308,7 +308,6 @@ def run_scores_for_fraction(
                     DEVICE=device,
                 )
             res = evaluate_reservoir(Wt, Win, leak, device)
-            print(res); quit();
             for k in metrics:
                 per_seed_vals[k].append(float(res[k]))
             raw_rows.append((frac_replace, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
