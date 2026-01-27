@@ -354,7 +354,7 @@ def main():
                 _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
             continue
 
-        if job_key == "local_sign":
+        if job_key == "local_sign_match_guas":
             for j in range(args.n_shuffles):
                 sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
                 ctx = _build_ctx(
