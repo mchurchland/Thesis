@@ -151,8 +151,8 @@ def build_reservoir(
     Returns:
       Wt, Win, ei_t, rho_nat, rho_post
     """
-    print(target_sr,ce_ei,input_scale,seed,N,ws_k,ce_W_bio,feature_conn,feature_weights,drive_idx,nnz_target,DEVICE,Normalize,per_neg)
-    quit()
+    #print(target_sr,ce_ei,input_scale,seed,N,ws_k,ce_W_bio,feature_conn,feature_weights,drive_idx,nnz_target,DEVICE,Normalize,per_neg)
+    #quit()
     rng = np.random.default_rng(seed)
 
     # ---------- base adjacency/weights ----------
