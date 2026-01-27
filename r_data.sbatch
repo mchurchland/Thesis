@@ -27,14 +27,14 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=50
+TOTAL_REPEATS=10
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
 # choose which variant this script runs
-JOB_KIND="local_sign_match_guas"   # or shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign
+JOB_KIND="local_sign"   # or shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
