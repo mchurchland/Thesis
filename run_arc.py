@@ -7,7 +7,7 @@ import torch
 
 from reservoir_variants import (
     DEFAULT_SIM_PARAMS,
-    VARIANT_REGISTRY,
+    VARIANT_KEYS,
     VariantContext,
     run_variant,
     save_rows,
@@ -37,7 +37,6 @@ def _run_and_save(
     sim_params=DEFAULT_SIM_PARAMS,
     append: bool = False,
 ) -> list[tuple]:
-    spec = VARIANT_REGISTRY[variant_key]
     ctx = VariantContext(
         ce_W_bio=ce_W_bio,
         ce_ei=ce_ei,
@@ -51,7 +50,7 @@ def _run_and_save(
         src_tag=src_tag,
         sim_params=sim_params,
     )
-    rows = run_variant(spec, ctx)
+    rows = run_variant(variant_key, ctx)
     out_csv = _prepare_out_csv(out_dir, csv_name)
     save_rows(out_csv, rows, append=append)
     return rows
@@ -169,7 +168,7 @@ def run_one_sign_pres(
     append: bool = False,
 ):
     return _run_and_save(
-        "local_sign_match_guas",
+        "local_sign",
         WS_K=WS_K,
         ce_W_bio=ce_W_bio,
         ce_ei=ce_ei,

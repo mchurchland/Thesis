@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Sequence
 
 import numpy as np
 import torch
@@ -46,22 +46,6 @@ class VariantContext:
     ws_p: float = 0.1
     src_tag: str = "chunk_0"
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
-
-
-@dataclass(frozen=True)
-class VariantSpec:
-    """Defines how to instantiate a reservoir variant."""
-
-    key: str
-    label: str
-    feature_weights: str
-    conn_fn: Callable[[VariantContext], str]
-    description: str
-    nnz_match_ce: bool = False
-    custom_ce_fn: Callable[[VariantContext, np.random.Generator], np.ndarray] | None = None
-    seed_offset: int = 0
-    sid_stride: int = 0
-    requires_ce: bool = True
 
 
 def _count_edges(A: np.ndarray) -> int:
@@ -142,7 +126,7 @@ def _run_variant_row(
     rows_local = []
 
     # choose CE matrix when needed
-    ce_for_conn =  ctx.ce_W_bio
+    ce_for_conn = ce_override if ce_override is not None else ctx.ce_W_bio
     if feature_conn == "cel" and ce_for_conn is None:
         raise ValueError("feature_conn='cel' requires a CE adjacency matrix.")
     if ctx.ce_W_bio is None and feature_conn != "cel":
@@ -151,61 +135,36 @@ def _run_variant_row(
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
 
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
-            Wt, Win, _, _ = build_reservoir(
-                feature_conn=feature_conn,
-                feature_weights=feature_weights,
-                target_sr=target_sr,
-                N=Nloc,
-                ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
-                ce_ei=ctx.ce_ei,
-                ws_k=ctx.ws_k,
-                input_scale=in_scale,
-                seed=seed_base + ci * 101,
-                drive_idx=None,
-                nnz_target=nnz_target,
-                DEVICE=ctx.device,
+        Wt, Win, _, _ = build_reservoir(
+            feature_conn=feature_conn,
+            feature_weights=feature_weights,
+            target_sr=target_sr,
+            N=Nloc,
+            ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
+            ce_ei=ctx.ce_ei,
+            ws_k=ctx.ws_k,
+            input_scale=in_scale,
+            seed=seed_base + ci * 101,
+            drive_idx=None,
+            nnz_target=nnz_target,
+            DEVICE=ctx.device,
+        )
+        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        rows_local.append(
+            (
+                mode_label,
+                ctx.sid,
+                target_sr,
+                leak,
+                in_scale,
+                float(scores["MC"]),
+                float(scores["IPC"]),
+                float(scores["KR"]),
+                float(scores["GR"]),
+                ctx.src_tag,
             )
-            scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
-            rows_local.append(
-                (
-                    mode_label,
-                    ctx.sid,
-                    target_sr,
-                    leak,
-                    in_scale,
-                    float(scores["MC"]),
-                    float(scores["IPC"]),
-                    float(scores["KR"]),
-                    float(scores["GR"]),
-                    ctx.src_tag,
-                )
-            )
+        )
     return rows_local
-
-
-def run_variant(spec: VariantSpec, ctx: VariantContext) -> list[tuple]:
-    """Instantiate a variant (including CE preprocessing) and sweep col_params."""
-    if spec.requires_ce and ctx.ce_W_bio is None:
-        raise ValueError(f"Variant '{spec.key}' requires ce_W_bio but none was provided.")
-
-    feature_conn = spec.conn_fn(ctx)
-    seed_base = ctx.seed + spec.seed_offset + ctx.sid * spec.sid_stride
-    rng = np.random.default_rng(seed_base)
-    ce_override = spec.custom_ce_fn(ctx, rng) if spec.custom_ce_fn is not None else None
-
-    nnz_target = None
-    if spec.nnz_match_ce and ctx.ce_W_bio is not None and feature_conn != "cel":
-        nnz_target = _count_edges(ctx.ce_W_bio)
-
-    return _run_variant_row(
-        ctx,
-        feature_conn=feature_conn,
-        feature_weights=spec.feature_weights,
-        mode_label=spec.label,
-        ce_override=ce_override,
-        nnz_target=nnz_target,
-        seed_base=seed_base,
-    )
 
 
 def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
@@ -216,94 +175,163 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
         w = csv.writer(f)
         if mode == "w":
             w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR", "src"])
+        print(w)
         w.writerows(rows)
 
 
-def _conn_cel(_: VariantContext) -> str:
-    return "cel"
+# ------------------------ variant plumbing ------------------------
 
-
-def _conn_er(ctx: VariantContext) -> str:
-    return f"er_p={ctx.er_p}"
-
-
-def _conn_ws(ctx: VariantContext) -> str:
-    return f"ws_p={ctx.ws_p}"
-
-
-def _conn_local_sign(_: VariantContext) -> str:
-    return "local_sign_match_guas"
-
-
-VARIANT_REGISTRY: dict[str, VariantSpec] = {
-    "real": VariantSpec(
-        key="real",
-        label="real",
-        feature_weights="bio",
-        conn_fn=_conn_cel,
-        description="C. elegans adjacency with biological weights.",
-        seed_offset=123,
-    ),
-    "shuffle_weights": VariantSpec(
-        key="shuffle_weights",
-        label="shuffle",
-        feature_weights="bio",
-        conn_fn=_conn_cel,
-        description="CE adjacency with CE weight multiset shuffled across nonzeros.",
-        custom_ce_fn=lambda ctx, _rng: _shuffle_ce_weights(ctx.ce_W_bio, np.random.default_rng(ctx.seed)),
-        seed_offset=9_999,
-        sid_stride=1,
-    ),
-    "cel_randN": VariantSpec(
-        key="cel_randN",
-        label="cel+randN",
-        feature_weights="rand_gauss",
-        conn_fn=_conn_cel,
-        description="CE adjacency with Gaussian weights.",
-        seed_offset=10_000,
-    ),
-    "er_randN": VariantSpec(
-        key="er_randN",
-        label="er+randN",
-        feature_weights="rand_gauss",
-        conn_fn=_conn_er,
-        description="Directed ER topology with Gaussian weights; nnz matched to CE.",
-        nnz_match_ce=True,
-        seed_offset=20_000,
-    ),
-    "ws_p01_randN": VariantSpec(
-        key="ws_p01_randN",
-        label="ws_p0.1+randN",
-        feature_weights="rand_gauss",
-        conn_fn=_conn_ws,
-        description="WS topology (p from ctx) with Gaussian weights; nnz matched to CE.",
-        nnz_match_ce=True,
-        seed_offset=20_000,
-    ),
-    "conn_shuf": VariantSpec(
-        key="conn_shuf",
-        label="celW+connShuf",
-        feature_weights="bio",
-        conn_fn=_conn_cel,
-        description="Degree-matched shuffle of CE connections, CE weight multiset reassigned.",
-        custom_ce_fn=lambda ctx, _rng: _conn_shuffle_ce(
-            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 40_000 + ctx.sid)
-        ),
-        seed_offset=50_000,
-        sid_stride=911,
-    ),
-    # Alias for compatibility with run_arc and older job keys
-    "local_sign_match_guas": VariantSpec(
-        key="local_sign_match_guas",
-        label="local_sign",
-        feature_weights="local_sign_match_guas",
-        conn_fn=_conn_local_sign,
-        description="Alias: CE adjacency with edge signs preserved but magnitudes replaced by N(0,1) (local sign match).",
-        seed_offset=30_000,
-    ),
+# Human-facing labels for CSV output (mode column)
+VARIANT_LABELS = {
+    "real": "real",
+    "shuffle_weights": "shuffle",
+    "cel_randN": "cel+randN",
+    "er_randN": "er+randN",
+    "ws_p01_randN": "ws_p0.1+randN",
+    "conn_shuf": "celW+connShuf",
+    "local_sign": "local_sign",
 }
+
+# Short descriptions (used by list_variants/help text)
+VARIANT_DESCRIPTIONS = {
+    "real": "C. elegans adjacency with biological weights.",
+    "shuffle_weights": "CE adjacency with CE weight multiset shuffled across nonzeros.",
+    "cel_randN": "CE adjacency with Gaussian weights.",
+    "er_randN": "Directed ER topology with Gaussian weights; nnz matched to CE.",
+    "ws_p01_randN": "WS topology (p from ctx) with Gaussian weights; nnz matched to CE.",
+    "conn_shuf": "Degree-matched shuffle of CE connections, CE weight multiset reassigned.",
+    "local_sign": "CE adjacency; preserve sign pattern, replace magnitudes with N(0,1) (local sign match).",
+}
+
+# Backwards-compatible keys allowed for callers; resolve to canonical names above.
+VARIANT_ALIASES = {
+    "local_sign_match_guas": "local_sign",
+}
+
+VARIANT_KEYS: tuple[str, ...] = tuple(VARIANT_LABELS.keys())
+
+
+def _seed(ctx: VariantContext, *, offset: int, sid_stride: int = 0) -> int:
+    """Shared seed rule used across variants."""
+    return ctx.seed + offset + ctx.sid * sid_stride
+
+
+def _nnz_match_ce(ctx: VariantContext) -> int:
+    if ctx.ce_W_bio is None:
+        raise ValueError("nnz_match_ce requires ce_W_bio.")
+    return _count_edges(ctx.ce_W_bio)
+
+
+def _resolve_key(key: str) -> str:
+    return VARIANT_ALIASES.get(key, key)
+
+
+def _require_ce(ctx: VariantContext):
+    if ctx.ce_W_bio is None:
+        raise ValueError("This variant requires ce_W_bio (CE adjacency).")
+
+
+def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
+    """Instantiate a reservoir variant (direct dispatch, no VariantSpec indirection)."""
+    key = _resolve_key(key)
+    if key not in VARIANT_KEYS:
+        raise ValueError(f"Unknown variant key: {key}")
+
+    _require_ce(ctx)
+
+    if key == "real":
+        seed_base = _seed(ctx, offset=123)
+        return _run_variant_row(
+            ctx,
+            feature_conn="cel",
+            feature_weights="bio",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+
+    if key == "shuffle_weights":
+        # Shuffle CE weight magnitudes across the existing edge set.
+        ce_override = _shuffle_ce_weights(ctx.ce_W_bio, np.random.default_rng(ctx.seed))
+        seed_base = _seed(ctx, offset=9_999, sid_stride=1)
+        return _run_variant_row(
+            ctx,
+            feature_conn="cel",
+            feature_weights="bio",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=ce_override,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+
+    if key == "cel_randN":
+        seed_base = _seed(ctx, offset=10_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="cel",
+            feature_weights="rand_gauss",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+
+    if key == "er_randN":
+        seed_base = _seed(ctx, offset=20_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn=f"er_p={ctx.er_p}",
+            feature_weights="rand_gauss",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=_nnz_match_ce(ctx),
+            seed_base=seed_base,
+        )
+
+    if key == "ws_p01_randN":
+        seed_base = _seed(ctx, offset=20_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn=f"ws_p={ctx.ws_p}",
+            feature_weights="rand_gauss",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=_nnz_match_ce(ctx),
+            seed_base=seed_base,
+        )
+
+    if key == "conn_shuf":
+        ce_override = _conn_shuffle_ce(
+            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 40_000 + ctx.sid)
+        )
+        seed_base = _seed(ctx, offset=50_000, sid_stride=911)
+        return _run_variant_row(
+            ctx,
+            feature_conn="cel",
+            feature_weights="bio",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=ce_override,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+
+    if key == "local_sign":
+        seed_base = _seed(ctx, offset=30_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="local_sign",
+            feature_weights="bio",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+
+    # Defensive (should never reach here)
+    raise ValueError(f"Variant key not implemented: {key}")
 
 
 def list_variants() -> list[tuple[str, str]]:
     """Return (key, description) pairs sorted by key."""
-    return sorted(((k, v.description) for k, v in VARIANT_REGISTRY.items()), key=lambda kv: kv[0])
+    return sorted(((k, VARIANT_DESCRIPTIONS[k]) for k in VARIANT_KEYS), key=lambda kv: kv[0])

@@ -171,7 +171,7 @@ def build_reservoir(
             else:
                 ei_t = None
 
-    elif feature_conn == 'local_sign_match_guas':
+    elif feature_conn == 'local_sign':
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)

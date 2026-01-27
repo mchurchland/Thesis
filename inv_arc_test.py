@@ -25,7 +25,7 @@ matplotlib.use("Agg")  # safe for headless cluster
 
 import torch
 
-from reservoir_variants import VARIANT_REGISTRY, VariantContext, run_variant, save_rows
+from reservoir_variants import VARIANT_KEYS, VariantContext, run_variant, save_rows
 
 # ---- repo helpers (reuse your utils/stats) ----
 from util.util import load_connectome
@@ -113,7 +113,7 @@ def _build_ctx(
     ws_p: float,
     src_tag: str,
 ) -> VariantContext:
-    if job_key not in VARIANT_REGISTRY:
+    if job_key not in VARIANT_KEYS:
         raise ValueError(f"Unknown variant key: {job_key}")
     return VariantContext(
         ce_W_bio=ce_W_bio,
@@ -132,7 +132,7 @@ def _build_ctx(
 def _run_and_save(job_key: str, ctx: VariantContext, out_dir: str, csv_name: str, append: bool = False):
     os.makedirs(out_dir, exist_ok=True)
     out_csv = os.path.join(out_dir, csv_name)
-    rows = run_variant(VARIANT_REGISTRY[job_key], ctx)
+    rows = run_variant(job_key, ctx)
     save_rows(out_csv, rows, append=append)
 
 
@@ -143,7 +143,7 @@ def parse_args():
     # What to run
     p.add_argument(
         "--job",
-        choices=sorted(VARIANT_REGISTRY.keys()),
+        choices=sorted(VARIANT_KEYS),
         required=True,
         help="Select a single variant per invocation; use array jobs to sweep sids etc.",
     )
@@ -354,7 +354,7 @@ def main():
                 _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
             continue
 
-        if job_key == "local_sign_match_guas":
+        if job_key == "local_sign":
             for j in range(args.n_shuffles):
                 sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
                 ctx = _build_ctx(
