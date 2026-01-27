@@ -222,8 +222,6 @@ def cel_weight_global_sign_mixture_match(W_ce: np.ndarray,
         W[sel_n] = new_vals_n
     return W
 
-
-
 def _build_col_params(
     sr_grid: Iterable[float],
     leak_grid: Iterable[float],
@@ -291,24 +289,23 @@ def run_scores_for_fraction(
             #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
             
             #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
-            #W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
+            W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
             Wt, Win, _, _ = build_reservoir(
-                feature_conn="local_sign",
-                    feature_weights="local_sign",
-                    target_sr=target_sr,
-                    N=None,
-                    ce_W_bio=ce_W_bio,
-                    ce_ei=None,
-                    ws_k=ws_k,
-                    input_scale=in_scale,
-                    seed=12345,
-                    drive_idx=None,
-                    nnz_target=None,
-                    DEVICE=device,
-                )
+                feature_conn="cel",
+                feature_weights="bio",
+                target_sr=target_sr,
+                N=W_mat.shape[0],
+                ce_W_bio=W_mat,
+                ce_ei=ce_ei,
+                ws_k=ws_k,
+                input_scale=in_scale,
+                seed=cur_seed,
+                drive_idx=None,
+                nnz_target=None,
+                DEVICE=device,
+            )
             res = evaluate_reservoir(Wt, Win, leak, device)
-            print(res); quit();
             for k in metrics:
                 per_seed_vals[k].append(float(res[k]))
             raw_rows.append((frac_replace, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
