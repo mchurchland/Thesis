@@ -153,6 +153,7 @@ def build_reservoir(
     """
     #print(target_sr,ce_ei,input_scale,seed,N,ws_k,ce_W_bio,feature_conn,feature_weights,drive_idx,nnz_target,DEVICE,Normalize,per_neg)
     #quit()
+    torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
 
     # ---------- base adjacency/weights ----------

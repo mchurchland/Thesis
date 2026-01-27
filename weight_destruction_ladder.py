@@ -293,24 +293,22 @@ def run_scores_for_fraction(
             #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
             #W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
-            try:
-                Wt, Win, _, _ = build_reservoir(
-                    feature_conn="local_sign_match_guas",
-                    feature_weights="local_sign_match_guas",
+            Wt, Win, _, _ = build_reservoir(
+                feature_conn="local_sign",
+                    feature_weights="local_sign",
                     target_sr=target_sr,
                     N=None,
                     ce_W_bio=ce_W_bio,
                     ce_ei=None,
                     ws_k=ws_k,
                     input_scale=in_scale,
-                    seed=cur_seed,
+                    seed=12345,
                     drive_idx=None,
                     nnz_target=None,
                     DEVICE=device,
                 )
-                res = evaluate_reservoir(Wt, Win, leak, device)
-            except Exception:
-                res = dict(MC=np.nan, IPC=np.nan, KR=np.nan, GR=np.nan)
+            res = evaluate_reservoir(Wt, Win, leak, device)
+            print(res); quit();
             for k in metrics:
                 per_seed_vals[k].append(float(res[k]))
             raw_rows.append((frac_replace, si, target_sr, leak, in_scale, float(res["MC"]), float(res["IPC"]), float(res["KR"]), float(res["GR"])))
