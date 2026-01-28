@@ -175,7 +175,6 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
         w = csv.writer(f)
         if mode == "w":
             w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR", "src"])
-        print(w)
         w.writerows(rows)
 
 

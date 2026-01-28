@@ -169,7 +169,6 @@ def run_scores_for_fraction(
                     Wt, Win, _, _ = build_reservoir( # type: ignore
                             feature_conn="cel",
                             feature_weights="bio",
-                            feature_dale="none",
                             target_sr=None,
                             N=W_mat.shape[0],
                             ce_W_bio=W_mat,
