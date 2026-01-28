@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 395, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 389, in main
+    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+  File "/home/milesc/Thesis/inv_arc_test.py", line 135, in _run_and_save
+    rows = run_variant(job_key, ctx)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 281, in run_variant
+    return _run_variant_row(
+  File "/home/milesc/Thesis/reservoir_variants.py", line 138, in _run_variant_row
+    Wt, Win, _, _ = build_reservoir(
+  File "/home/milesc/Thesis/util/util.py", line 288, in build_reservoir
+    return Wt, Win, ei_t, rho_nat
+UnboundLocalError: local variable 'ei_t' referenced before assignment
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job er_randN --out-dir experiment_full_chunks/chunk_8 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_8 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 100 --repeat-split 20 --repeat-rank 8 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)

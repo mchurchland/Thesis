@@ -12,6 +12,7 @@ Invariance sweeps for C. elegans reservoirs.
          * ws_p01_randN         (WS p=0.1, Gaussian weights; nnz matched to CE)
          * conn_shuf            (CE weight multiset on degree-shuffled connections), repeated n_conn_shuf times
          * local_sign           (CE adjacency; preserve sign pattern, replace magnitudes with N(0,1))
+         * all                  (run every variant above; append to avoid clobbering)
 """
 
 import os
@@ -33,6 +34,16 @@ from util.util import load_connectome
 # =================== Defaults (match your diagnostics) ===================
 
 WS_K = 40  # signature compatibility with util.build_reservoir
+
+ALL_JOB_KEYS = (
+    "shuffle_weights",
+    "cel_randN",
+    "er_randN",
+    "ws_p01_randN",
+    "conn_shuf",
+    "local_sign",
+    "real",
+)
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
 SWEEP_LEAK = [0.6, 0.8, 1.0]
@@ -143,9 +154,9 @@ def parse_args():
     # What to run
     p.add_argument(
         "--job",
-        choices=sorted(VARIANT_KEYS),
+        choices=sorted(VARIANT_KEYS) + ["all"],
         required=True,
-        help="Select a single variant per invocation; use array jobs to sweep sids etc.",
+        help="Select a single variant or 'all' to run every variant.",
     )
     p.add_argument("--out-dir", required=True, help="Output directory for CSVs.")
 
@@ -281,12 +292,7 @@ def main():
     if args.csv_name is not None:
         csv_name = args.csv_name
     else:
-        if args.job in ("real", "shuffle_weights"):
-            csv_name = "bio_vs_shuffle_invariance.csv"
-        elif args.job in ("cel_randN", "er_randN", "ws_p01_randN"):
-            csv_name = "cel_variants.csv"
-        else:
-            csv_name = "invariance_variants.csv"
+        csv_name = "invariance_variants.csv"
 
     out_dir = args.out_dir
     os.makedirs(out_dir, exist_ok=True)
@@ -301,92 +307,100 @@ def main():
         return
 
     # ---------------- job dispatch ----------------
-    job_key = args.job
+    def _run_job(job_key: str, *, append_start: bool):
+        def _sid_base(rep_idx: int) -> int:
+            if job_key in ("shuffle_weights", "conn_shuf", "local_sign"):
+                return args.sid + rep_idx * max(1, args.n_shuffles)
+            if job_key == "real":
+                return args.sid + rep_idx
+            return -1
 
-    def _sid_base(rep_idx: int) -> int:
-        if job_key in ("shuffle_weights", "conn_shuf", "local_sign"):
-            return args.sid + rep_idx * max(1, args.n_shuffles)
-        if job_key == "real":
-            return args.sid + rep_idx
-        return -1
+        for rep_pos, rep_idx in enumerate(repeat_ids):
+            append_base = append_start or rep_pos > 0
+            seed_base = args.seed + rep_idx * args.repeat_seed_stride
+            set_seed(seed_base)
+            sid_base = _sid_base(rep_idx)
 
-    for rep_pos, rep_idx in enumerate(repeat_ids):
-        append_base = rep_pos > 0
-        seed_base = args.seed + rep_idx * args.repeat_seed_stride
-        set_seed(seed_base)
-        sid_base = _sid_base(rep_idx)
+            if job_key == "shuffle_weights":
+                for j in range(args.n_shuffles):
+                    sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
+                    ctx = _build_ctx(
+                        job_key,
+                        WS_K,
+                        ce_W_bio,
+                        ce_ei,
+                        col_params,
+                        device,
+                        seed=seed_base + 7_000 * j,
+                        sid=sid,
+                        er_p=args.er_p,
+                        ws_p=args.ws_p,
+                        src_tag=args.src_tag,
+                    )
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
+                continue
 
-        if job_key == "shuffle_weights":
-            for j in range(args.n_shuffles):
-                sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
-                ctx = _build_ctx(
-                    job_key,
-                    WS_K,
-                    ce_W_bio,
-                    ce_ei,
-                    col_params,
-                    device,
-                    seed=seed_base + 7_000 * j,
-                    sid=sid,
-                    er_p=args.er_p,
-                    ws_p=args.ws_p,
-                    src_tag=args.src_tag,
-                )
-                _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
-            continue
+            if job_key == "conn_shuf":
+                for j in range(args.n_shuffles):
+                    sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
+                    ctx = _build_ctx(
+                        job_key,
+                        WS_K,
+                        ce_W_bio,
+                        ce_ei,
+                        col_params,
+                        device,
+                        seed=seed_base + 9_000 * j,
+                        sid=sid,
+                        er_p=args.er_p,
+                        ws_p=args.ws_p,
+                        src_tag=args.src_tag,
+                    )
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
+                continue
 
-        if job_key == "conn_shuf":
-            for j in range(args.n_shuffles):
-                sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
-                ctx = _build_ctx(
-                    job_key,
-                    WS_K,
-                    ce_W_bio,
-                    ce_ei,
-                    col_params,
-                    device,
-                    seed=seed_base + 9_000 * j,
-                    sid=sid,
-                    er_p=args.er_p,
-                    ws_p=args.ws_p,
-                    src_tag=args.src_tag,
-                )
-                _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
-            continue
+            if job_key == "local_sign":
+                for j in range(args.n_shuffles):
+                    sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
+                    ctx = _build_ctx(
+                        job_key=job_key,
+                        WS_K=WS_K,
+                        ce_W_bio=ce_W_bio,
+                        ce_ei=None,
+                        col_params=col_params,
+                        device=device,
+                        seed=seed_base + 9_000 * j,
+                        sid=sid,
+                        er_p=args.er_p,
+                        ws_p=args.ws_p,
+                        src_tag=args.src_tag,
+                    )
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
+                continue
 
-        if job_key == "local_sign":
-            for j in range(args.n_shuffles):
-                sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
-                ctx = _build_ctx(
-                    job_key=job_key,
-                    WS_K=WS_K,
-                    ce_W_bio=ce_W_bio,
-                    ce_ei=None,
-                    col_params=col_params,
-                    device=device,
-                    seed=seed_base + 9_000 * j,
-                    sid=sid,
-                    er_p=args.er_p,
-                    ws_p=args.ws_p,
-                    src_tag=args.src_tag,
-                )
-                _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
-            continue
+            ctx = _build_ctx(
+                job_key,
+                WS_K,
+                ce_W_bio,
+                ce_ei,
+                col_params,
+                device,
+                seed=seed_base,
+                sid=sid_base,
+                er_p=args.er_p,
+                ws_p=args.ws_p,
+                src_tag=args.src_tag,
+            )
+            _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
 
-        ctx = _build_ctx(
-            job_key,
-            WS_K,
-            ce_W_bio,
-            ce_ei,
-            col_params,
-            device,
-            seed=seed_base,
-            sid=sid_base,
-            er_p=args.er_p,
-            ws_p=args.ws_p,
-            src_tag=args.src_tag,
-        )
-        _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+    if args.job == "all":
+        out_csv = os.path.join(out_dir, csv_name)
+        append_across = os.path.exists(out_csv)
+        for idx, job_key in enumerate(ALL_JOB_KEYS):
+            _run_job(job_key, append_start=(append_across or idx > 0))
+            append_across = True
+    else:
+        _run_job(args.job, append_start=False)
 
 
 # ------------------------------ CLI entry ------------------------------------

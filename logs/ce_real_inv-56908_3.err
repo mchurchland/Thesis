@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 409, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 400, in main
+    _run_job(job_key, append_start=(append_across or idx > 0))
+  File "/home/milesc/Thesis/inv_arc_test.py", line 359, in _run_job
+    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
+  File "/home/milesc/Thesis/inv_arc_test.py", line 146, in _run_and_save
+    rows = run_variant(job_key, ctx)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 304, in run_variant
+    ce_override = _conn_shuffle_ce(
+  File "/home/milesc/Thesis/reservoir_variants.py", line 73, in _conn_shuffle_ce
+    As = degree_matched_shuffle_directed(A_ce.astype(np.float32), tries=20_000, rng=rng).astype(bool)
+  File "/home/milesc/Thesis/util/util.py", line 389, in degree_matched_shuffle_directed
+    H = nx.directed_double_edge_swap(G.copy(), nswap=nswap, max_tries=max_tries, seed=rng)
+AttributeError: module 'networkx' has no attribute 'directed_double_edge_swap'
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job all --out-dir experiment_full_chunks/chunk_3 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_3 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 10 --repeat-split 20 --repeat-rank 3 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)

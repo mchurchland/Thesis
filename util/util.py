@@ -233,7 +233,7 @@ def build_reservoir(
             sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
             W = np.abs(W)
             W[sel] = -1*W[sel]
-            ei_t = None
+        ei_t = None
         
     else:
         W = ce_W_bio.copy().astype(np.float32)
