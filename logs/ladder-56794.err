@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/weight_destruction_ladder_sanity.py", line 612, in <module>
+    main()
+  File "/home/milesc/Thesis/weight_destruction_ladder_sanity.py", line 523, in main
+    means, disp, rows = run_scores_for_fraction(
+  File "/home/milesc/Thesis/weight_destruction_ladder_sanity.py", line 294, in run_scores_for_fraction
+    Wt, Win, _, _ = build_reservoir(
+  File "/home/milesc/Thesis/util/util.py", line 197, in build_reservoir
+    Wt = torch.from_numpy(W).to(DEVICE)
+UnboundLocalError: local variable 'W' referenced before assignment
+
+ERROR conda.cli.main_run:execute(49): `conda run python weight_destruction_ladder_sanity.py --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --out-dir ladder_results --fractions 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 --ws-k 40 --seed 12345 --n-seeds 3 --seed-stride 101 --cuda 0` failed. (See above for error)

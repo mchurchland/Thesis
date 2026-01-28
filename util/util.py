@@ -135,7 +135,6 @@ def build_reservoir(
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
-    Normalize: bool = True,
     per_neg: float| None = None
 ) -> tuple[Tensor, Tensor, Tensor, float]:
     """
@@ -165,12 +164,7 @@ def build_reservoir(
             N = W.shape[0]
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
-            if Normalize:
-                row_abs = np.sum(np.abs(W), axis=1, keepdims=True) + 1e-8
-                W = W / row_abs
-                ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
-            else:
-                ei_t = None
+            ei_t = None
 
     elif feature_conn == 'local_sign':
         if ce_W_bio is None:
@@ -242,7 +236,8 @@ def build_reservoir(
             ei_t = None
         
     else:
-        raise ValueError(f"Unknown feature_conn: {feature_conn}")
+        W = ce_W_bio.copy().astype(np.float32)
+        ei_t = None
 
     # Weight scheme overrides
     if feature_weights == "rand_disc":

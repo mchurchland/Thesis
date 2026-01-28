@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=ladder
-#SBATCH --partition=normal
+#SBATCH --partition=short
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=08:00:00
+#SBATCH --time=03:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
@@ -19,9 +19,6 @@ OUT_DIR="ladder_results"
 
 # --- sweep controls ---
 FRACTIONS="0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0"
-RHO_TARGETS="0.6 0.8 0.95 1.05"
-LEAKS="0.6 0.8 1.0"
-INPUT_SCALES="0.1 0.5 1.0 1.5"
 WS_K=40
 N_SEEDS=15
 SEED_STRIDE=101
@@ -31,7 +28,7 @@ BASE_SEED=12345
 CUDA_IDX=0  # set to -1 to force CPU
 
 # Activate your environment and run
-conda run -n cel python weight_destruction_ladder.py \
+conda run -n cel python weight_destruction_ladder_sanity.py \
   --ce-adj "${CE_ADJ}" \
   --ce-ei  "${CE_EI}" \
   --out-dir "${OUT_DIR}" \

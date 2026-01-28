@@ -286,18 +286,18 @@ def run_scores_for_fraction(
             rng_local = np.random.default_rng(cur_seed)
             #ce_W_bio=cel_weight_global_sign_mixture_match(ce_W_bio,1.0,rng_local)
             #W_mat = partial_weight_randomization(ce_W_bio, frac_replace, rng_local) partial_weight_randomization_stacked_gaus
-            #W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
+            W_mat = gaus_m0_sign_pres(ce_W_bio, frac_replace, rng_local)
             
             #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
-            W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
+            #_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
             Wt, Win, _, _ = build_reservoir(
                 feature_conn="cel",
                 feature_weights="bio",
                 target_sr=target_sr,
-                N=W_mat.shape[0],
+                N=None,
                 ce_W_bio=W_mat,
-                ce_ei=ce_ei,
+                ce_ei=None,
                 ws_k=ws_k,
                 input_scale=in_scale,
                 seed=cur_seed,
