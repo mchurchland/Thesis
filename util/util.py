@@ -371,24 +371,54 @@ def ws_adjacency(n: int, k: int, p: float, rng: np.random.Generator) -> np.ndarr
     return A
 
 
-def degree_matched_shuffle_directed(A: np.ndarray, tries: int = 10_000,
+def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
                                     rng: np.random.Generator | None = None) -> np.ndarray:
     """
-    Degree-preserving double-edge swaps for directed graphs (Milo et al., 2002, Science 298:824-827).
-    Uses NetworkX directed_double_edge_swap; see https://github.com/networkx/networkx/blob/main/networkx/algorithms/swap.py#L266
+    Degree-preserving double-edge swap randomization for directed graphs
+    (Milo et al., 2002, Science 298:824-827).
     """
+    def can_swap(a,b,c,d):
+        if (len({a,b,c,d}) < 4) or ( A[a,d] or A[c,b]): ## makes sure all the values are unique, if the connection between a and d already exists or c and b
+            return False
+        else:
+            return True
+    def edge_swap(a: int, b: int, c: int, d: int):
+        edge1_weight = A[a,b].copy()
+        edge2_weight = A[c,d].copy()
+        A[a,b] = 0  # remove edge 1
+        A[c,d] = 0  # remove edge 2
+        A[a,d] = edge1_weight  # add edge 1 to new nodes
+        A[c,b] = edge2_weight  # add edge 2 to new nodes
     if rng is None:
-        rng = np.random.default_rng()
-    G = nx.from_numpy_array(A.astype(bool), create_using=nx.DiGraph)
-    G.remove_edges_from(nx.selfloop_edges(G))
-    m = G.number_of_edges()
+        raise ValueError("Need to pass in a random number generator")
+    A = A.copy() ## make a copy of A
+    np.fill_diagonal(A, False)
+    edges = np.argwhere(A!=0)
+    m = edges.shape[0]
     if m < 2:
-        return nx.to_numpy_array(G, dtype=np.float32)
-    nswap = min(tries, max(1, m))
-    max_tries = max(tries, nswap * 10)
-    H = nx.directed_double_edge_swap(G.copy(), nswap=nswap, max_tries=max_tries, seed=rng)
-    H.remove_edges_from(nx.selfloop_edges(H))
-    return nx.to_numpy_array(H, dtype=np.float32)
+        raise ValueError(f"Not enough edges to perform randomization. Found {m} edges. make sure the matrix is correct")
+
+    retries = 0
+    
+    idx = rng.permutation(m)  
+    #while not(idx.isempty) and retries < max_retries:
+    i=0
+    
+    while i + 1 < len(idx) and retries < tries:
+        a, b = edges[idx[i]] ## edge 1
+        c, d = edges[idx[i+1]] ## edge 2
+        if can_swap(a,b,c,d):
+            edge_swap(a,b,c,d) ## swap the edges
+            edges[idx[i]] = [a,d]
+            edges[idx[i+1]] = [c,b]
+            i+=2
+            
+        else:
+            retries += 1
+            rem = idx[i:]
+            rng.shuffle(rem) ## shuffle the indices
+            idx[i:] = rem ## replace the indices with the shuffled one
+    return A.astype(np.float32)
 
 def spectral_norm(W: Tensor) -> float:
     """Spectral norm via leading singular value (Golub & Van Loan, 2013, Matrix Computations 4th ed.). See: https://github.com/pytorch/pytorch/blob/main/torch/nn/utils/spectral_norm.py"""

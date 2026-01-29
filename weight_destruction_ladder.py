@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 from reservoir_variants import evaluate_reservoir
-from util.util import build_reservoir, load_connectome
+from util.util import build_reservoir, load_connectome,degree_matched_shuffle_directed 
 
 
 def partial_weight_randomization(W_ce: np.ndarray,
@@ -556,59 +556,7 @@ def main():
     save_raw(os.path.join(args.out_dir, "ladder_raw_2.csv"), raw_rows)
     plot_dispersion(os.path.join(args.out_dir, "gaus_ei_pres_mixed_rand.png"), summary_rows)
 
-def degree_matched_shuffle_directed(A: np.ndarray, percent: float = 0.0,
-                                    rng: np.random.Generator | None = None) -> np.ndarray:
-    """
-    Degree-preserving double-edge swap randomization for directed graphs
-    (Milo et al., 2002, Science 298:824-827).
-    """
-    if percent == 0.0:
-        return A.copy().astype(np.float32)  # no change
-    def can_swap(a,b,c,d):
-        if (len({a,b,c,d}) < 4) or ( A[a,d] or A[c,b]): ## makes sure all the values are unique, if the connection between a and d already exists or c and b
-            return False
-        else:
-            return True
-    def edge_swap(a: int, b: int, c: int, d: int):
-        edge1_weight = A[a,b].copy()
-        edge2_weight = A[c,d].copy()
-        A[a,b] = 0  # remove edge 1
-        A[c,d] = 0  # remove edge 2
-        A[a,d] = edge1_weight  # add edge 1 to new nodes
-        A[c,b] = edge2_weight  # add edge 2 to new nodes
-    if rng is None:
-        raise ValueError("Need to pass in a random number generator")
-    A = A.copy() ## make a copy of A
-    np.fill_diagonal(A, False)
-    edges = np.argwhere(A)
-    m = edges.shape[0]
-    if m < 2:
-        raise ValueError(f"Not enough edges to perform randomization. Found {m} edges. make sure the matrix is correct")
-    if m* percent < 2:
-        return A.copy().astype(np.float32)  # not enough edges to swap, return original
-    #I dont need a for loop for this 
-    max_retries = m*2 ##arbitrary
-    retries = 0
-    
-    idx = rng.choice(m, size=np.floor(m * percent).astype(int), replace=False) ##i feel like this hsould be a stack
-    #while not(idx.isempty) and retries < max_retries:
-    i=0
-    
-    while i + 1 < len(idx) and retries < max_retries:
-        a, b = edges[idx[i]] ## edge 1
-        c, d = edges[idx[i+1]] ## edge 2
-        if can_swap(a,b,c,d):
-            edge_swap(a,b,c,d) ## swap the edges
-            edges[idx[i]] = [a,d]
-            edges[idx[i+1]] = [c,b]
-            i+=2
-            
-        else:
-            retries += 1
-            rem = idx[i:]
-            rng.shuffle(rem) ## shuffle the indices
-            idx[i:] = rem ## replace the indices with the shuffled one
-    return A.astype(np.float32)
+
 
 if __name__ == "__main__":
     main()
