@@ -52,4 +52,4 @@ conda run -n cel python inv_arc_test.py \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --ws-p 0.1 \
   --er-p 0.1 \
-  --cuda 0
+  --cuda ${SLURM_LOCALID}

@@ -203,9 +203,6 @@ def build_reservoir(
             W[mask != 0] = vals[: int(mask.sum())]
         else:
             W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
-        # row-normalize to avoid huge rows
-        row_abs = np.sum(np.abs(W), axis=1, keepdims=True) + 1e-8
-        W = W / row_abs
         ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
         N = W.shape[0]
 

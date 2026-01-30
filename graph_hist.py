@@ -100,7 +100,26 @@ def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
-    modes = sorted(disp["mode"].unique())
+    # Consistent ordering/colors to make panels easier to compare.
+    mode_order = [
+        "real",
+        "cel+randN",
+        "er+randN",
+        "ws_p0.1+randN",
+        "celW+connShuf",
+        "local_sign",
+        "shuffle",
+    ]
+    modes = [m for m in mode_order if m in set(disp["mode"].unique())]
+    color_map = {
+        "real": "#1f77b4",
+        "cel+randN": "#2ca02c",
+        "er+randN": "#17becf",
+        "ws_p0.1+randN": "#e377c2",
+        "celW+connShuf": "#ff7f0e",
+        "local_sign": "#8c564b",
+        "shuffle": "#7f7f7f",
+    }
     if not metrics:
         return
     plt.rcParams.update({
@@ -147,8 +166,19 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     continue
                 counts, _ = np.histogram(s, bins=edges)
                 frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
-                ax.plot(centers, frac, drawstyle="steps-mid", linewidth=1.8, alpha=0.95,
-                        label=f"{mode} (N={len(s)})")
+                color = color_map.get(mode, None)
+                ax.plot(
+                    centers,
+                    frac,
+                    drawstyle="steps-mid",
+                    linewidth=2.0,
+                    alpha=0.9,
+                    label=f"{mode} (N={len(s)})",
+                    color=color,
+                )
+                # Median marker to help compare shifts without cluttering the plot.
+                med = float(np.median(s))
+                ax.axvline(med, color=color, alpha=0.18, linewidth=1.2, linestyle="--")
                 plotted = True
                 row_y_max[row] = max(row_y_max[row], float(np.max(frac)))
 
@@ -163,6 +193,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 ax.set_xlabel(f"coefficient of variation")
             if idx == 0 or idx ==2:
                 ax.set_ylabel("fraction (normalized by N)")
+            ax.grid(True, which="both", axis="both", alpha=0.18, linestyle=":")
             any_plotted = True
             data_mask[idx] = True
 
@@ -191,7 +222,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 
         if legend_handles:
             fig.legend(legend_handles, legend_labels, frameon=False, loc="upper center",
-                       ncol=min(len(legend_handles), 3), bbox_to_anchor=(0.5, 1))
+                       ncol=4, bbox_to_anchor=(0.5, 1))
 
         fig.tight_layout(rect=(0.02, 0.02, 0.98, 0.94))
         page = start // per_fig + 1
@@ -266,9 +297,9 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
                     vals_a = disp[(disp["metric"] == m) & (disp["mode"] == a)]["dispersion"].dropna().to_numpy()
                     vals_b = disp[(disp["metric"] == m) & (disp["mode"] == b)]["dispersion"].dropna().to_numpy()
                     vals_all = disp[(disp["metric"] == m)]["dispersion"].dropna().to_numpy()
-                    if a == "CE-real":
+                    if a == "real" or b =="real":
                         #print(f"  {a} vs {b} (Glass Δ, SD from {a}, {m}): {d_glass:.4g}")
-                        tost = (pg.tost(vals_a,vals_b,np.abs(np.median(vals_all))*0.02,paired = False))
+                        tost = (pg.tost(vals_a,vals_b,np.abs(np.median(vals_all))*0.05,paired = False))
                         print(rf"{m} & {a} vs {b} & {tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\")
         #print(f"\n{m}")
         #print(df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))  # one table per metric
@@ -290,13 +321,13 @@ def main():
 
     # Save a copy (non-destructive; versioned if exists)
     out_comb = _safe_path(os.path.join(args.out_dir, "combined.ALL.csv"))
-    combined.to_csv(out_comb, index=False)
+    #combined.to_csv(out_comb, index=False)
     print(f"[saved] {out_comb}  (rows={len(combined)})")
 
     # Compute and save dispersion table
     disp = _compute_dispersion_table(combined,mode="cv")
     out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))
-    disp.to_csv(out_disp, index=False)
+    #disp.to_csv(out_disp, index=False)
     print(f"[saved] {out_disp}  (rows={len(disp)})")
 
     # Focus on CE-real, CE-shuffle, and CE-connshuff for plots/stats

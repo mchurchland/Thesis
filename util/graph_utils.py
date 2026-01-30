@@ -109,8 +109,32 @@ def _compute_dispersion_table(combined: pd.DataFrame,mode: str = "cv") -> pd.Dat
     Uses pandas groupby/melt pattern; see https://github.com/pandas-dev/pandas/blob/main/pandas/core/frame.py
     """
     df = combined.copy()
-    df["group_id"] = df["shuffle_id"].astype(str)
-    df.loc[df["shuffle_id"] == -1, "group_id"] = df["src"].astype(str)
+
+    # Start with provided shuffle/run ids.
+    df["group_id"] = df["shuffle_id"].astype(object)
+
+    # Some variants (e.g., cel+randN, er+randN, ws_p0.1+randN) store shuffle_id=-1
+    # even though they were repeated many times. Those repeats are laid out in
+    # blocks of one full hyperparameter grid per repeat inside each src chunk.
+    # Reconstruct a stable repeat id so N reflects the real number of runs.
+    mask_no_sid = df["shuffle_id"] == -1
+    if mask_no_sid.any():
+        hparam_cols = ["rho_target", "leak", "input_scale"]
+        # Number of unique hyperparameter combos per mode (assumed constant grid).
+        hparam_counts = {
+            mode_name: sub[hparam_cols].drop_duplicates().shape[0]
+            for mode_name, sub in df.loc[mask_no_sid].groupby("mode")
+        }
+        # Assign a synthetic repeat id per (mode, src) based on block position.
+        for (mode_name, src), sub in df.loc[mask_no_sid].groupby(["mode", "src"]):
+            block_size = hparam_counts.get(mode_name, 0)
+            # If we cannot evenly partition, fall back to src-level grouping.
+            if block_size <= 0 or len(sub) % block_size != 0:
+                continue
+            rep_idx = np.arange(len(sub)) // block_size
+            df.loc[sub.index, "group_id"] = [f"{src}_r{r}" for r in rep_idx]
+
+    df["group_id"] = df["group_id"].astype(str)
 
     # dedup repeated measurements within the same hyperparam triple
     keys = ["mode","src","group_id","rho_target","leak","input_scale"]
@@ -128,4 +152,3 @@ def _compute_dispersion_table(combined: pd.DataFrame,mode: str = "cv") -> pd.Dat
                           n_hparams=("value", "size"))
                      .reset_index())
     return disp
-
