@@ -63,28 +63,24 @@ def _shuffle_ce_weights(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarra
     return W
 
 
+def _conn_and_w_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Degree-matched shuffle of CE adjacency with CE weight multiset."""
+    W_s = degree_matched_shuffle_directed(Wbio.astype(np.float32), tries=20_000, rng=rng).astype(np.float32)
+    W =_shuffle_ce_weights(W_s,rng)
+    return W
+
 def _conn_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     """Degree-matched shuffle of CE adjacency with CE weight multiset."""
-    A_ce = (np.abs(Wbio) > 0)
-    np.fill_diagonal(A_ce, False)
-    nnz_target = int(A_ce.sum())
-    ce_weights_all = Wbio[A_ce].astype(np.float32)
+    W_s = degree_matched_shuffle_directed(Wbio.astype(np.float32), tries=20_000, rng=rng).astype(np.float32)
+    np.fill_diagonal(W_s, 0.0)
+    return W_s
 
-    As = degree_matched_shuffle_directed(A_ce.astype(np.float32), tries=20_000, rng=rng).astype(bool)
-    # Defensive: ensure edge count matches the original
-    if int(As.sum()) != nnz_target:
-        flat_idx = np.flatnonzero(As.ravel())
-        if len(flat_idx) > nnz_target:
-            As = As.ravel()
-            As[flat_idx[nnz_target:]] = False
-            As = As.reshape(A_ce.shape)
-
-    Wsh = np.zeros_like(Wbio, dtype=np.float32)
-    perm = rng.permutation(len(ce_weights_all))
-    Wsh[As] = ce_weights_all[perm][:nnz_target]
-    np.fill_diagonal(Wsh, 0.0)
-    return Wsh
-
+def _sample_from_cel(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    W = np.zeros_like(Wbio, dtype=np.float32)
+    nz = np.nonzero(Wbio)
+    sample_weights  = Wbio[nz].astype(np.float32)
+    W[nz] = rng.choice(sample_weights,sample_weights.size,replace = True)
+    return W
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -117,7 +113,7 @@ def _run_variant_row(
     ctx: VariantContext,
     *,
     feature_conn: str,
-    feature_weights: str,
+    feature_weights: str| None = None,
     mode_label: str,
     ce_override: np.ndarray | None,
     nnz_target: int | None,
@@ -189,6 +185,8 @@ VARIANT_LABELS = {
     "ws_p01_randN": "ws_p0.1+randN",
     "conn_shuf": "celW+connShuf",
     "local_sign": "local_sign",
+    "conn_shuf_only" : "conn_shuf_only",
+    "cel_sample" : "cel_sample",
 }
 
 # Short descriptions (used by list_variants/help text)
@@ -198,13 +196,14 @@ VARIANT_DESCRIPTIONS = {
     "cel_randN": "CE adjacency with Gaussian weights.",
     "er_randN": "Directed ER topology with Gaussian weights; nnz matched to CE.",
     "ws_p01_randN": "WS topology (p from ctx) with Gaussian weights; nnz matched to CE.",
-    "conn_shuf": "Degree-matched shuffle of CE connections, CE weight multiset reassigned.",
+    "conn_shuf": "Degree-matched shuffle of CE connections, CE weight shuffleed.",
     "local_sign": "CE adjacency; preserve sign pattern, replace magnitudes with N(0,1) (local sign match).",
+    "conn_shuf_only" : "just shuffle all of the connections dont do anyhting else, directed graph swap",
+    "cel_sample" : "resample the weights from the celegan weights keep the celegan connections",
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
 VARIANT_ALIASES = {
-    "local_sign_match_guas": "local_sign",
 }
 
 VARIANT_KEYS: tuple[str, ...] = tuple(VARIANT_LABELS.keys())
@@ -243,21 +242,20 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="cel",
-            feature_weights="bio",
+            feature_weights=None,
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,
             seed_base=seed_base,
         )
 
-    if key == "shuffle_weights":
+    if key == "shuffle_weights": ## investigate
         # Shuffle CE weight magnitudes across the existing edge set.
         ce_override = _shuffle_ce_weights(ctx.ce_W_bio, np.random.default_rng(ctx.seed))
         seed_base = _seed(ctx, offset=9_999, sid_stride=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
-            feature_weights="bio",
             mode_label=VARIANT_LABELS[key],
             ce_override=ce_override,
             nnz_target=None,
@@ -277,7 +275,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
 
     if key == "er_randN":
-        seed_base = _seed(ctx, offset=20_000)
+        seed_base = _seed(ctx, offset=21_000)
         return _run_variant_row(
             ctx,
             feature_conn=f"er_p={ctx.er_p}",
@@ -300,15 +298,14 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
 
-    if key == "conn_shuf":
-        ce_override = _conn_shuffle_ce(
+    if key == "conn_shuf": ## investigate
+        ce_override = _conn_and_w_shuffle_ce(
             ctx.ce_W_bio, np.random.default_rng(ctx.seed + 40_000 + ctx.sid)
         )
         seed_base = _seed(ctx, offset=50_000, sid_stride=911)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
-            feature_weights="bio",
             mode_label=VARIANT_LABELS[key],
             ce_override=ce_override,
             nnz_target=None,
@@ -320,12 +317,39 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="local_sign",
-            feature_weights="bio",
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,
             seed_base=seed_base,
         )
+    if key == "conn_shuf_only":
+        ce_override = _conn_shuffle_ce(
+            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 31_000 + ctx.sid)
+        )
+        seed_base = _seed(ctx, offset=31_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="cel",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=ce_override,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key == "cel_sample":
+        ce_override = _sample_from_cel(
+            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 32_000 + ctx.sid)
+        )
+        seed_base = _seed(ctx, offset=32_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="cel",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=ce_override,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    
+
 
     # Defensive (should never reach here)
     raise ValueError(f"Variant key not implemented: {key}")
@@ -334,3 +358,6 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
 def list_variants() -> list[tuple[str, str]]:
     """Return (key, description) pairs sorted by key."""
     return sorted(((k, VARIANT_DESCRIPTIONS[k]) for k in VARIANT_KEYS), key=lambda kv: kv[0])
+
+
+##redraw weights from cel, shuffle only 

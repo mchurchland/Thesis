@@ -43,6 +43,8 @@ ALL_JOB_KEYS = (
     "conn_shuf",
     "local_sign",
     "real",
+    "conn_shuf_only",
+    "cel_sample",
 )
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
@@ -311,9 +313,7 @@ def main():
         def _sid_base(rep_idx: int) -> int:
             if job_key in ("shuffle_weights", "conn_shuf", "local_sign"):
                 return args.sid + rep_idx * max(1, args.n_shuffles)
-            if job_key == "real":
-                return args.sid + rep_idx
-            return -1
+            return args.sid + rep_idx
 
         for rep_pos, rep_idx in enumerate(repeat_ids):
             append_base = append_start or rep_pos > 0

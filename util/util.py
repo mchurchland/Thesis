@@ -161,7 +161,6 @@ def build_reservoir(
             raise RuntimeError("you must pass in bio weights (ce_W_bio) to use the celegan reservoirs")
         else:
             W = ce_W_bio.copy().astype(np.float32)
-            N = W.shape[0]
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
             ei_t = None
@@ -204,7 +203,6 @@ def build_reservoir(
         else:
             W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
         ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
-        N = W.shape[0]
 
     elif feature_conn.startswith("ws_p="):
         p = float(feature_conn.split("=")[1])
@@ -243,19 +241,6 @@ def build_reservoir(
     elif feature_weights == "rand_gauss":
         mags = rng.normal(0.0, 1.0, size=W.shape).astype(np.float32)
         W = (np.abs(W) > 0).astype(np.float32) * mags
-    elif feature_weights == "bio":
-        if ce_W_bio is None and feature_conn != "cel":
-            # emulate heavy-tail signed weights if no CE magnitudes
-            """
-            mask = (np.abs(W) > 0).astype(np.float32)
-            m = int(mask.sum())
-            mags  = rng.lognormal(mean=-1.0, sigma=0.5, size=m).astype(np.float32)
-            signs = rng.choice([-1.0, 1.0], size=m).astype(np.float32)
-            W2 = np.zeros_like(W, dtype=np.float32)
-            W2[mask != 0] = mags * signs
-            W = W2
-            """
-            raise RuntimeError("you must pass in ce_W_bi")
         
         # else: 'cel' with CE weights already prepared
 
