@@ -109,16 +109,22 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "celW+connShuf",
         "local_sign",
         "shuffle",
+        "cel_sample",
+        "conn_shuf_only",
+
     ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     color_map = {
         "real": "#1f77b4",
         "cel+randN": "#2ca02c",
         "er+randN": "#17becf",
-        "ws_p0.1+randN": "#e377c2",
+        "ws_p0.1+randN": "#000000",
         "celW+connShuf": "#ff7f0e",
-        "local_sign": "#8c564b",
-        "shuffle": "#7f7f7f",
+        "local_sign": "#FFC800",
+        "shuffle": "#FF5100",
+        "cel_sample": "#8d3b3b",
+        "conn_shuf_only": "#8b2182",
+
     }
     if not metrics:
         return
