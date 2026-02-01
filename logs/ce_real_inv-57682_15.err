@@ -1,0 +1,12 @@
+usage: inv_arc_test.py [-h] --job
+                       {cel_randN,cel_sample,conn_shuf,conn_shuf_only,er_randN,local_sign,real,shuffle_weights,ws_p01_randN,all}
+                       --out-dir OUT_DIR [--ce-adj CE_ADJ] [--ce-ei CE_EI]
+                       [--csv-name CSV_NAME] [--src-tag SRC_TAG] [--seed SEED]
+                       [--sid SID] [--n-shuffles N_SHUFFLES] [--er-p ER_P]
+                       [--ws-p WS_P] [--split SPLIT] [--rank RANK]
+                       [--n-repeats N_REPEATS] [--repeat-split REPEAT_SPLIT]
+                       [--repeat-rank REPEAT_RANK]
+                       [--repeat-seed-stride REPEAT_SEED_STRIDE] [--cuda CUDA]
+inv_arc_test.py: error: argument --job: invalid choice: 'inv_arc_testall' (choose from 'cel_randN', 'cel_sample', 'conn_shuf', 'conn_shuf_only', 'er_randN', 'local_sign', 'real', 'shuffle_weights', 'ws_p01_randN', 'all')
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job inv_arc_testall --out-dir experiment_full_chunks/chunk_15 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_15 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 150 --repeat-split 20 --repeat-rank 15 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)
