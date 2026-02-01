@@ -37,7 +37,7 @@ SID_BASE=0
 JOB_KIND="all"   # or all / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
 
 conda run -n cel python inv_arc_test.py \
-  --job "inv_arc_test${JOB_KIND}" \
+  --job "${JOB_KIND}" \
   --out-dir "${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
