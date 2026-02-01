@@ -131,6 +131,7 @@ def _run_variant_row(
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
 
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
+        assert ctx.ce_ei==None
         Wt, Win, _, _ = build_reservoir(
             feature_conn=feature_conn,
             feature_weights=feature_weights,
