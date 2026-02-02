@@ -430,14 +430,12 @@ def make_ei_from_count(W_ce):
     return np.sign(ei_label).astype(np.float32), ei_mixed
 
 
-def neuron_test(W_ce,ce_ei):
-    print(make_ei_from_count(np.array([[1,2],[-3,2]])))
-    quit()
-    
+def neuron_test(W_ce,ce_ei):    
     print(ce_ei.shape)
     W = W_ce.copy().astype(np.float32)
     c_pos,c_neg,c_zero,c_both = 0,0,0,0
     print(len(W))
+    
     print(len(np.where(ce_ei==0))) ###need to do a pause here and verify that everything lines up
     #quit()
     for e,nur in enumerate(W):
@@ -447,28 +445,24 @@ def neuron_test(W_ce,ce_ei):
 
         if pos_conn_count>0 and neg_conn_count>0:
             c_both+=1
-            if (nur.sum()<0) and  ce_ei[e] >0:
-                print("err")
-            if (nur.sum()>0) and  ce_ei[e] <0:
-                print("err")
-            if (nur.sum()==0):
-                print(pos_conn_count,neg_conn_count) ## more to be uncovered here
-                print("0gfdsgfds")
 
         elif neg_conn_count > 0:
-            if ce_ei[e] >0:
-                print("err")
             c_neg+=1
         elif pos_conn_count > 0:
-            if ce_ei[e] <0:
-                print("err")
             c_pos+=1
 
         else:
             c_zero+=1
             pass ## neurons with no outgoing connections
             print(nur,nur.sum()==0)
-    print(c_pos,c_neg,c_both,c_zero,c_neg+c_pos+c_both)
+    print(
+        f"pos={c_pos:6d} | "
+        f"neg={c_neg:6d} | "
+        f"both={c_both:6d} | "
+        f"zero={c_zero:6d} | "
+        f"total(nonzero)={c_neg + c_pos + c_both:6d} | "
+        f"total={c_neg + c_pos + c_both + c_zero:6d}"
+    )
     quit()
 
 
@@ -515,7 +509,8 @@ def main():
 
     device = _pick_device(args.cuda)
     ce_W_bio, ce_ei, _ = load_connectome(args.ce_adj, args.ce_ei)
-
+    neuron_test(ce_ei=ce_ei,W_ce=ce_W_bio)
+    quit()
     col_params = _build_col_params(args.rho_targets, args.leaks, args.input_scales)
 
     summary_rows = []
