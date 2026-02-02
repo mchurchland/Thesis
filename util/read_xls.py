@@ -2,7 +2,6 @@
 # ------------------------------------------------------------
 # Parse CElegansNeuronTables.xls and produce:
 #   ce_adj.npy        (float32 NxN adjacency with signed synapse counts)
-#   ce_adj_sr099.npy  (same, scaled to spectral radius ~0.99)
 #   ce_nodes.txt      (node names, one per line, same order as matrix)
 #   ce_ei.npy         (length N, +1=exc, -1=inh, 0=unknown inferred from outgoing edges)
 #
@@ -11,7 +10,7 @@
 #   - "NeuronsToMuscle"    with columns: Neuron, Muscle, Number of Connections, Neurotransmitter
 #
 # Notes
-# - Edge sign rule: GABA → negative; ACh/Glutamate → positive; others default to + (changeable).
+# - Edge sign rule: GABA → negative; ACh/Glutamate → positive; others default to 0 (changeable).
 # - Duplicate edges are summed.
 # - Muscles can be included or dropped via flag.
 # - Dale label per neuron is inferred from the sign of its outgoing weights; near-zero → 0.
@@ -23,7 +22,7 @@
 # Requirements:
 #   pip/conda: pandas numpy xlrd (for .xls)  OR openpyxl (for .xlsx with engine="openpyxl")
 # ------------------------------------------------------------
-
+import warnings
 import argparse
 import numpy as np
 import pandas as pd
@@ -39,6 +38,8 @@ def canonical_nt(x: str) -> str:
     # common variants
     if s in {"gaba"}:
         return "GABA"
+    if s in {"Acetylcholine_Tyramine"}:
+        return "TYR"
     if s in {"acetylcholine", "ach", "aCh".lower()}:
         return "ACh"
     if s in {"glutamate", "glu", "glutamatergic"}:
@@ -58,10 +59,10 @@ def canonical_nt(x: str) -> str:
     # fallback: keep original upper
     return x.strip().upper()
 
-def nt_to_edge_sign(nt: str, default_pos_if_unknown: bool = True) -> int:
+def nt_to_edge_sign(nt: str, default_pos_if_unknown: bool = False) -> int:
     """
     Map neurotransmitter → edge sign.
-    GABA -> -1; ACh/GLU -> +1; others → +1 by default (set default_pos_if_unknown=False to make 0).
+    GABA -> -1; ACh/GLU -> +1; others → 0 by default (set default_pos_if_unknown=False to make 0).
     """
     c = canonical_nt(nt)
     if c == "GABA":
@@ -75,26 +76,7 @@ def add_edge(acc: Dict[str, Dict[str, float]], src: str, dst: str, w: float):
         acc[src] = {}
     acc[src][dst] = acc[src].get(dst, 0.0) + float(w)
 
-def spectral_radius_numpy(W: np.ndarray) -> float:
-    if W.size == 0:
-        return 0.0
-    # power iteration for stability
-    v = np.random.default_rng(0).standard_normal(W.shape[0]).astype(np.float64)
-    v /= (np.linalg.norm(v) + 1e-12)
-    for _ in range(100):
-        v = W @ v
-        n = np.linalg.norm(v)
-        if n < 1e-12:
-            break
-        v /= n
-    lam = float(v @ (W @ v) / (v @ v + 1e-12))
-    return abs(lam)
 
-def scale_to_sr(W: np.ndarray, target: float = 0.99) -> np.ndarray:
-    sr = spectral_radius_numpy(W.astype(np.float64))
-    if sr < 1e-12:
-        return W.copy()
-    return (target / sr) * W
 
 # ------------- core parsing -------------
 
@@ -186,15 +168,33 @@ def build_matrix(edge_map: Dict[str, Dict[str, float]], include_nodes: Optional[
             W[i, j] += float(w)
     return W, names
 
-def infer_ei_labels(W: np.ndarray, names: List[str], zero_tol: float = 1e-6) -> np.ndarray:
+def infer_ei_labels(W_ce: np.ndarray, names: List[str], zero_tol: float = 1e-6) -> np.ndarray:
     """
     +1 if sum(outgoing weights) > 0, -1 if < 0, else 0.
     """
-    out_sum = W.sum(axis=1)
-    ei = np.zeros(W.shape[0], dtype=np.float32)
-    ei[out_sum > zero_tol] = +1.0
-    ei[out_sum < -zero_tol] = -1.0
-    return ei
+
+    W = W_ce.copy().astype(np.float32)
+    W_ind_normal =np.sign(W) ## handel naan
+    ei_label = W_ind_normal @ np.ones(W_ind_normal.shape[0])
+    ei_mixed = np.where(ei_label == 0)[0]
+    for idx in ei_mixed:
+        if not np.any(W[idx]):
+            continue
+        else:
+            r_sum = W[idx].sum()
+            if r_sum==0:
+                warnings.warn("When generating EI from count you had a row that had an equal number of\
+                               positive and negative weights whos sum was 0,\
+                               we set this EI value to 0 but this could change topology of the network\
+                               you may want to rewrite this code if this behavior is not suitable for you")
+                #this dosent happen in the celegan connectome and is just here defensivly
+                #row_sum[idx] = 0 ##gross but lets just assume if both sum is the same and pos_neg count is same its non
+                continue ## does the same thing as the line above
+            else:
+                ei_label[idx] = r_sum
+
+    return np.sign(ei_label).astype(np.float32)
+
 
 # ------------- main  -------------
 
@@ -204,7 +204,6 @@ def main():
     ap.add_argument("--out", default="ce", help="Output prefix (default: ce)")
     ap.add_argument("--include-muscles", action="store_true", help="Include neuron→muscle edges/nodes")
     ap.add_argument("--engine", default=None, help='pandas Excel engine (auto; use "xlrd" for .xls or "openpyxl" for .xlsx)')
-    ap.add_argument("--sr", type=float, default=0.99, help="Target spectral radius for scaled matrix")
     args = ap.parse_args()
 
     # Read sheets
@@ -239,16 +238,10 @@ def main():
     print(f"Saved: {args.out}_adj.npy  {args.out}_ei.npy  {args.out}_nodes.txt")
 
     # Save SR=target-scaled version
-    print(f"Scaling to spectral radius ≈ {args.sr} …")
-    W_scaled = scale_to_sr(W.astype(np.float64), target=args.sr).astype(np.float32)
-    np.save(f"{args.out}_adj_sr{str(args.sr).replace('.','')}.npy", W_scaled)
-    print(f"Saved: {args.out}_adj_sr{str(args.sr).replace('.','')}.npy")
 
-    # Quick stats
-    sr_nat = spectral_radius_numpy(W.astype(np.float64))
-    sr_scl = spectral_radius_numpy(W_scaled.astype(np.float64))
+
     nnz = int((np.abs(W) > 0).sum())
-    print(f"Nodes: {W.shape[0]} | Edges: {nnz} | SR(natural)={sr_nat:.3f} | SR(scaled)={sr_scl:.3f}")
+    print(f"Nodes: {W.shape[0]} | Edges: {nnz}")
     print("Done.")
 
 if __name__ == "__main__":
