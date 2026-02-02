@@ -59,7 +59,7 @@ def canonical_nt(x: str) -> str:
     # fallback: keep original upper
     return x.strip().upper()
 
-def nt_to_edge_sign(nt: str, default_pos_if_unknown: bool = False) -> int:
+def nt_to_edge_sign(nt: str, default_pos_if_unknown: bool = True) -> int:
     """
     Map neurotransmitter → edge sign.
     GABA -> -1; ACh/GLU -> +1; others → 0 by default (set default_pos_if_unknown=False to make 0).

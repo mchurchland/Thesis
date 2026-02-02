@@ -20,6 +20,7 @@ import argparse
 import numpy as np
 import pandas as pd,itertools
 import pingouin as pg
+import warnings
 from scipy.stats import kruskal
 from researchpy import difference_test
 
@@ -304,9 +305,12 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
                     vals_b = disp[(disp["metric"] == m) & (disp["mode"] == b)]["dispersion"].dropna().to_numpy()
                     vals_all = disp[(disp["metric"] == m)]["dispersion"].dropna().to_numpy()
                     if a == "real" or b =="real":
-                        #print(f"  {a} vs {b} (Glass Δ, SD from {a}, {m}): {d_glass:.4g}")
-                        tost = (pg.tost(vals_a,vals_b,np.abs(np.median(vals_all))*0.05,paired = False))
+                        # pg.tost can emit overflow RuntimeWarnings for extreme t values; suppress locally
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", category=RuntimeWarning, module="pingouin")
+                            tost = (pg.tost(vals_a, vals_b, np.abs(np.median(vals_all)) * 0.05, paired=False))
                         print(rf"{m} & {a} vs {b} & {tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\")
+
         #print(f"\n{m}")
         #print(df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))  # one table per metric
         #print(f"H = {H:.4g}, p = {p:.4g}")

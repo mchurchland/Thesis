@@ -39,8 +39,8 @@ JOB_KIND="all"   # or all / shuffle_weights / cel_randN / er_randN / ws_p01_rand
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
   --out-dir "${OUTDIR}" \
-  --ce-adj Connectome/ce_adj_strip.npy \
-  --ce-ei  Connectome/ce_ei_strip.npy \
+  --ce-adj Connectome/ce_adj.npy \
+  --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
   --seed "${START_SEED}" \
   --sid "${SID_BASE}" \
