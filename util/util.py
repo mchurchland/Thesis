@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from torch import Tensor
 import torch
 import os
-from reservoir_variants import _shuffle_ce_weights
 import networkx as nx
 
 def imsave_heatmap(data: np.ndarray, row_labels, col_labels, title: str, fname: str):
@@ -185,6 +184,7 @@ def build_reservoir(
         ei_t = None
     
     elif feature_conn == 'local_sign+shuffle':
+        from reservoir_variants import _shuffle_ce_weights
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
