@@ -62,6 +62,14 @@ def _shuffle_ce_weights(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarra
     W[nz] = vals
     return W
 
+def _shuffle_ce_weights_except_1(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    W = Wbio.copy().astype(np.float32)
+    nz = np.where(np.abs(W)>1)[0]
+    vals = W[nz].copy()
+    rng.shuffle(vals)
+    W[nz] = vals
+    return W
+
 
 def _conn_and_w_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     """Degree-matched shuffle of CE adjacency with CE weight multiset."""
