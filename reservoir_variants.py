@@ -90,6 +90,9 @@ def _sample_from_cel(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     W[nz] = rng.choice(sample_weights,sample_weights.size,replace = True)
     return W
 
+def _sample_from_cel_sign(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    return Wbio.astype(bool).astype(np.float32)
+
 def evaluate_reservoir(
     Wt: torch.Tensor,
     Win: torch.Tensor,
