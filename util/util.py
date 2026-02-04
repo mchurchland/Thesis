@@ -184,7 +184,7 @@ def build_reservoir(
         ei_t = None
     
     elif feature_conn == 'local_sign+shuffle':
-        from reservoir_variants import _shuffle_ce_weights_except_1
+        #from reservoir_variants import _shuffle_ce_weights_except_1
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
@@ -192,7 +192,9 @@ def build_reservoir(
         sel_p = W > 0 ## get the positive weights of the selection
         sel_n = W < 0 ## get the negative weights of the selection
 
-        W = _shuffle_ce_weights_except_1(Wbio = W,rng=rng)
+        #W = _shuffle_ce_weights_except_1(Wbio = W,rng=rng)
+        mags = rng.uniform(0.0, 1.0, size=W.shape).astype(np.float32)
+        W = (np.abs(W) > 0).astype(np.float32) * mags
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
         ei_t = None
