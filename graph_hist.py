@@ -112,6 +112,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "shuffle",
         "cel_sample",
         "conn_shuf_only",
+        "local_sign+shuffle"
 
     ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
@@ -125,7 +126,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "shuffle": "#FF5100",
         "cel_sample": "#fe9292",
         "conn_shuf_only": "#ff9752",
-
+        "local_sign+shuffle":  "#C8FF00",
     }
     if not metrics:
         return
@@ -184,8 +185,11 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     "local_sign": "Local Sign Preserved + N(0,1)",
                     "ws_p0.1+randN": "WS p=0.1 + N(0,1)",
                     "cel_sample": "Sampled weights",
-                }
+                    "local_sign+shuffle": "Local Sign + CEL Shuffle"
+                    
 
+                }
+                print(mode)
                 mode = name_remap[mode]
                 ax.plot(
                     centers,

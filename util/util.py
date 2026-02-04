@@ -192,7 +192,9 @@ def build_reservoir(
         sel_p = W > 0 ## get the positive weights of the selection
         sel_n = W < 0 ## get the negative weights of the selection
 
-        W = _shuffle_ce_weights(Wbio = W,rng=rng)
+        #W = _shuffle_ce_weights(Wbio = W,rng=rng)
+        mags = rng.normal(0.0, 1.0, size=W.shape).astype(np.float32)
+        W = (np.abs(W) > 0).astype(np.float32) * mags
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
         ei_t = None
