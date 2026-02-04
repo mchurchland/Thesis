@@ -188,6 +188,7 @@ VARIANT_LABELS = {
     "local_sign": "local_sign",
     "conn_shuf_only" : "conn_shuf_only",
     "cel_sample" : "cel_sample",
+    "local_sign+shuffle" : "local_sign+shuffle"
 }
 
 # Short descriptions (used by list_variants/help text)
@@ -201,6 +202,7 @@ VARIANT_DESCRIPTIONS = {
     "local_sign": "CE adjacency; preserve sign pattern, replace magnitudes with N(0,1) (local sign match).",
     "conn_shuf_only" : "just shuffle all of the connections dont do anyhting else, directed graph swap",
     "cel_sample" : "resample the weights from the celegan weights keep the celegan connections",
+    "local_sign+shuffle" : "local_sign preserved with a celegan weight shuff"
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
@@ -349,6 +351,17 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             nnz_target=None,
             seed_base=seed_base,
         )
+    if key == "local_sign+shuffle":
+        seed_base = _seed(ctx, offset=33_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="local_sign+shuffle",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    
     
 
 

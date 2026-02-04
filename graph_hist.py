@@ -117,24 +117,24 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     color_map = {
         "real": "#1f77b4",
-        "cel+randN": "#2ca02c",
-        "er+randN": "#17becf",
-        "ws_p0.1+randN": "#000000",
-        "celW+connShuf": "#ff7f0e",
-        "local_sign": "#FFC800",
+        "cel+randN": "#0a490a",
+        "er+randN": "#6eb775",
+        "ws_p0.1+randN": "#40FF00",
+        "celW+connShuf": "#ff0e0e",
+        "local_sign": "#00FFFF",
         "shuffle": "#FF5100",
-        "cel_sample": "#8d3b3b",
-        "conn_shuf_only": "#8b2182",
+        "cel_sample": "#fe9292",
+        "conn_shuf_only": "#ff9752",
 
     }
     if not metrics:
         return
     plt.rcParams.update({
         "axes.titlesize": 18,
-        "axes.labelsize": 16,
-        "xtick.labelsize": 14,
-        "ytick.labelsize": 14,
-        "legend.fontsize": 14,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 20,
     })
 
     per_fig = 4  # 2x2 grid
@@ -174,13 +174,26 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 counts, _ = np.histogram(s, bins=edges)
                 frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
                 color = color_map.get(mode, None)
+                name_remap = {
+                    "real": "C. elegans",
+                    "cel+randN": "C. elegans + N(0,1)",
+                    "er+randN": "ER + N(0,1)",
+                    "celW+connShuf": "Conn+wt shuffle",
+                    "shuffle": "Weight shuffle",
+                    "conn_shuf_only": "Connection shuffle",
+                    "local_sign": "Local Sign Preserved + N(0,1)",
+                    "ws_p0.1+randN": "WS p=0.1 + N(0,1)",
+                    "cel_sample": "Sampled weights",
+                }
+
+                mode = name_remap[mode]
                 ax.plot(
                     centers,
                     frac,
                     drawstyle="steps-mid",
-                    linewidth=2.0,
-                    alpha=0.9,
-                    label=f"{mode} (N={len(s)})",
+                    linewidth=3.0,
+                    alpha=0.7,
+                    label=f"{mode}",
                     color=color,
                 )
                 # Median marker to help compare shifts without cluttering the plot.
@@ -228,14 +241,24 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                         ax.set_ylim(0, y_max)
 
         if legend_handles:
-            fig.legend(legend_handles, legend_labels, frameon=False, loc="upper center",
-                       ncol=4, bbox_to_anchor=(0.5, 1))
+            fig.legend(
+                legend_handles,
+                legend_labels,
+                frameon=False,
+                loc="upper center",
+                ncol=3,
+                bbox_to_anchor=(0.5, 1.00),
+                columnspacing=1.2,
+                handlelength=2.0,
+                handletextpad=0.6,
+                borderaxespad=0.8,
+            )
 
-        fig.tight_layout(rect=(0.02, 0.02, 0.98, 0.94))
+        fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.88))
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
         out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid{suffix}.png"))
-        fig.savefig(out_fig, dpi=200)
+        fig.savefig(out_fig, dpi=300)
         plt.close(fig)
         print(f"[saved] {out_fig}")
 
@@ -259,7 +282,7 @@ def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
     plt.legend()
     plt.tight_layout()
     out_fig = _safe_path(os.path.join(out_dir, "mc_vs_gr_all_arch.png"))
-    plt.savefig(out_fig, dpi=200)
+    plt.savefig(out_fig, dpi=300)
     plt.close()
     print(f"[saved] {out_fig}")
 
