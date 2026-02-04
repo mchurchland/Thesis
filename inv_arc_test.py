@@ -46,6 +46,7 @@ ALL_JOB_KEYS = (
     "conn_shuf_only",
     "cel_sample",
     "local_sign+flat",
+    "local_sign+sample",
 )
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
