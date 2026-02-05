@@ -91,7 +91,19 @@ def _sample_from_cel(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return W
 
 def _sample_from_cel_sign(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    return Wbio.astype(bool).astype(np.float32)
+    W = np.zeros_like(Wbio, dtype=np.float32)
+    pos_idx = Wbio>0
+    neg_idx = Wbio<0
+    pos_weights = Wbio[pos_idx].astype(np.float32)
+    neg_weights = Wbio[neg_idx].astype(np.float32)
+
+    W[pos_idx] = rng.choice(pos_weights,pos_weights.size,replace = True)
+    W[neg_idx] = rng.choice(neg_weights,neg_weights.size,replace = True)
+
+    return W
+
+def _cel_to_bin(Wbio: np.ndarray) -> np.ndarray:
+    return Wbio.astype(np.bool).astype(np.float32)
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -200,7 +212,9 @@ VARIANT_LABELS = {
     "conn_shuf_only" : "conn_shuf_only",
     "cel_sample" : "cel_sample",
     "local_sign+flat" : "local_sign+flat",
-    "local_sign+sample" : "local_sign+sample"
+    "local_sign+sample" : "local_sign+sample",
+    "local_sign+binary" : "local_sign+binary",
+
 }
 
 # Short descriptions (used by list_variants/help text)
@@ -216,6 +230,7 @@ VARIANT_DESCRIPTIONS = {
     "cel_sample" : "resample the weights from the celegan weights keep the celegan connections",
     "local_sign+flat" : "local_sign preserved with a weights from flat dist",
     "local_sign+sample" : "local_sign preserved with a celegan weight sample",
+    "local_sign+binary" : "local_sign preserved with a binary weight sample, +1 or -1",
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
@@ -384,9 +399,17 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             nnz_target=None,
             seed_base=seed_base,
         )
+    if key == "local_sign+binary":
+        seed_base = _seed(ctx, offset=35_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="local_sign+binary",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
     
-    
-
 
     # Defensive (should never reach here)
     raise ValueError(f"Variant key not implemented: {key}")

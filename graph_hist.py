@@ -112,21 +112,26 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "shuffle",
         "cel_sample",
         "conn_shuf_only",
-        "local_sign+flat"
+        "local_sign+flat",
+        "local_sign+sample",
+        "local_sign+binary"
 
     ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     color_map = {
-        "real": "#1f77b4",
-        "cel+randN": "#0a490a",
+        "real": "#32a2f2",
+        "cel+randN": "#127212",
         "er+randN": "#6eb775",
         "ws_p0.1+randN": "#40FF00",
         "celW+connShuf": "#ff0e0e",
-        "local_sign": "#00FFFF",
+        "local_sign": "#027979",
         "shuffle": "#FF5100",
-        "cel_sample": "#fe9292",
+        "cel_sample": "#ff6565",
         "conn_shuf_only": "#ff9752",
-        "local_sign+flat":  "#C8FF00",
+        "local_sign+flat":  "#002CF1",
+        "local_sign+sample": "#AF7DF5",
+        "local_sign+binary": "#8ADEF3",
+
     }
     if not metrics:
         return
@@ -185,11 +190,13 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     "local_sign": "Local Sign Preserved + N(0,1)",
                     "ws_p0.1+randN": "WS p=0.1 + N(0,1)",
                     "cel_sample": "Sampled weights",
-                    "local_sign+flat": "Local Sign + F(0,1)"
-                    
+                    "local_sign+flat": "Local Sign + U(0,1)",
+                    "local_sign+sample": "Local Sign + Sampled",
+                    "local_sign+binary": "Local Sign + wt +1,-1"
+
+
 
                 }
-                print(mode)
                 mode = name_remap[mode]
                 ax.plot(
                     centers,
@@ -251,14 +258,14 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 frameon=False,
                 loc="upper center",
                 ncol=3,
-                bbox_to_anchor=(0.5, 1.00),
+                bbox_to_anchor=(0.5, 1.02),
                 columnspacing=1.2,
                 handlelength=2.0,
                 handletextpad=0.6,
                 borderaxespad=0.8,
             )
 
-        fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.88))
+        fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
         out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid{suffix}.png"))
@@ -371,7 +378,7 @@ def main():
 
     # Plots
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
-    plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
+    #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_kruskal_wallis_tables(disp)
 
 
