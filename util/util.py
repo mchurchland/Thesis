@@ -439,6 +439,17 @@ def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
             idx[i:] = rem ## replace the indices with the shuffled one
     return A.astype(np.float32)
 
+def flip_percent(Wbio:np.ndarray,per:np.float32,rng:np.random.Generator):
+    assert per >0 and per < 1
+    W = Wbio.copy().astype(np.float32)
+    nz = np.nonzero(W)
+    num_to_flip = int(len(nz[0])*per)
+    ind_to_flip  = rng.choice(nz,num_to_flip,replace=False)
+    W[ind_to_flip] = -W[ind_to_flip]
+    return W
+
+
+
 def spectral_norm(W: Tensor) -> float:
     """Spectral norm via leading singular value (Golub & Van Loan, 2013, Matrix Computations 4th ed.). See: https://github.com/pytorch/pytorch/blob/main/torch/nn/utils/spectral_norm.py"""
     return float(torch.linalg.svdvals(W)[0])
@@ -448,3 +459,4 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
