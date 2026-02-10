@@ -27,7 +27,7 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=150
+TOTAL_REPEATS=250
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
@@ -53,4 +53,4 @@ conda run -n cel python inv_arc_test.py \
   --ws-p 0.1 \
   --er-p 0.1 \
   --cuda ${SLURM_LOCALID}\
-  --sign-flip-frac 0.0 0.2 0.4 0.6 0.8 1.0
+  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
