@@ -18,7 +18,6 @@ if not os.environ.get("MPLBACKEND"):
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from mpl_toolkits.mplot3d import Axes3D
 
 from reservoir_variants import evaluate_reservoir
 from util.util import build_reservoir, load_connectome
@@ -152,7 +151,7 @@ def run_scores_for_fraction(
                     #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace=1, rng = rng_local,ce_ei=ce_ei_seed)
 
                     #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
-                    Wt, Win, _, _ = build_reservoir( # type: ignore
+                    Wt, Win = build_reservoir( # type: ignore
                             feature_conn="er_p=0.1",
                             target_sr=target_sr,
                             N=100,
@@ -166,7 +165,7 @@ def run_scores_for_fraction(
                             per_neg= frac_replace
                         )      
                     '''
-                    Wt, Win, _, _ = build_reservoir( # type: ignore
+                    Wt, Win = build_reservoir( # type: ignore
                             feature_conn="cel",
                             feature_weights="bio",
                             target_sr=None,
@@ -183,7 +182,7 @@ def run_scores_for_fraction(
                         )
                     '''
                     '''
-                    Wt, Win, _, _ = build_reservoir( # type: ignore
+                    Wt, Win = build_reservoir( # type: ignore
                             feature_conn="er_p=0.1",
                             target_sr=target_sr,
                             N=100,
@@ -646,7 +645,7 @@ def main():
             dispersion_mode=args.dispersion,
             #seed_base=args.seed + ei_bal * 10_000,
             seed_base=args.seed + ei_bal * 10_000,
-
+            drive_idx=None
             n_seeds=args.n_seeds,
             seed_stride=args.seed_stride,
             #ei_balance=ei_bal,

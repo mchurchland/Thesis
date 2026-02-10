@@ -18,11 +18,11 @@ Outputs (defaults)
 import os
 import argparse
 import numpy as np
-import pandas as pd,itertools
+import pandas as pd
+import itertools
 import pingouin as pg
 import warnings
 from scipy.stats import kruskal
-from researchpy import difference_test
 
 import matplotlib
 matplotlib.use("Agg")
@@ -221,7 +221,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 legend_handles, legend_labels = ax.get_legend_handles_labels()
             ax.set_title(f"Invariance dispersion by architecture — {m}")
             if idx == 2 or idx ==3:
-                ax.set_xlabel(f"coefficient of variation")
+                ax.set_xlabel("coefficient of variation")
             if idx == 0 or idx ==2:
                 ax.set_ylabel("fraction (normalized by N)")
             ax.grid(True, which="both", axis="both", alpha=0.18, linestyle=":")
@@ -279,13 +279,13 @@ def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
     os.makedirs(out_dir, exist_ok=True)
     plt.figure(figsize=(11, 6))
     # light grey background points for all runs
-    plt.scatter(combined["GR"], combined["MC"], s=8, c="#bbbbbb", alpha=alpha, label="all")
+    plt.scatter(combined["GR"], combined["IPC"], s=8, c="#bbbbbb", alpha=alpha, label="all")
     # emphasize CE-real and CE-shuffle if present
-    for cname, color in [("CE-real", "#1f77b4"), ("CE-shuffle", "#d62728")]:
+    for cname, color in [("local_sign+binary", "#1f77b4"), ("real", "#d62728")]:
         sub = combined[combined["mode"] == cname]
         if not sub.empty:
             sub_u = _unique_hparam_rows(sub)
-            plt.scatter(sub_u["GR"], sub_u["MC"], s=36, alpha=0.95, label=cname, c=color)
+            plt.scatter(sub_u["GR"], sub_u["MC"], s=36, alpha=0.5, label=cname, c=color)
     plt.title("MC vs GR across all architectures")
     plt.xlabel("GR (effective rank of Δstate)")
     plt.ylabel("MC (linear memory capacity)")
@@ -378,7 +378,7 @@ def main():
 
     # Plots
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
-    #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
+    plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_kruskal_wallis_tables(disp)
 
 

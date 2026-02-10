@@ -297,7 +297,7 @@ def main(ri: int = RI, ci: int = CI, out_path: str = OUT_PATH, fps: int = FPS):
     seed_bio = SEED + ri*37 + ci*101
 
     # BIO reservoir
-    W_bio, Win_bio, _ = build_reservoir(
+    W_bio, Win_bio = build_reservoir(
         feature_conn=rconf_bio["conn"],
         feature_weights=rconf_bio["weights"],
         feature_dale=cconf_bio["dale"],

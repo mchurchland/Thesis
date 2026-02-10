@@ -12,6 +12,7 @@ Invariance sweeps for C. elegans reservoirs.
          * ws_p01_randN         (WS p=0.1, Gaussian weights; nnz matched to CE)
          * conn_shuf            (CE weight multiset on degree-shuffled connections), repeated n_conn_shuf times
          * local_sign           (CE adjacency; preserve sign pattern, replace magnitudes with N(0,1))
+         * sign_test            (CE adjacency; flip the sign on fraction(s) via --sign-flip-frac, 
          * all                  (run every variant above; append to avoid clobbering)
 """
 
@@ -47,6 +48,7 @@ ALL_JOB_KEYS = (
     "cel_sample",
     "local_sign+flat",
     "local_sign+sample",
+    "sign_test",
 )
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
@@ -127,9 +129,11 @@ def _build_ctx(
     er_p: float,
     ws_p: float,
     src_tag: str,
+    per_neg: float | None = None,
 ) -> VariantContext:
     if job_key not in VARIANT_KEYS:
-        raise ValueError(f"Unknown variant key: {job_key}")
+        if not job_key.startswith("sign_test"):
+            raise ValueError(f"Unknown variant key: {job_key}")
     return VariantContext(
         ce_W_bio=ce_W_bio,
         ce_ei=ce_ei,
@@ -141,6 +145,7 @@ def _build_ctx(
         er_p=er_p,
         ws_p=ws_p,
         src_tag=src_tag,
+        per_neg=per_neg,
     )
 
 
@@ -208,6 +213,13 @@ def parse_args():
         default=0.1,
         help="WS rewiring probability for ws_p01_randN (accepted for compatibility).",
     )
+    p.add_argument(
+        "--sign-flip-frac",
+        type=float,
+        nargs="+",
+        default=[0.1],
+        help="Space-separated fraction(s) of CE edges whose sign is flipped for sign_test (0 <= frac <= 1).",
+    )
 
 
     # Array-job partitioning of the parameter grid
@@ -266,7 +278,10 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    sign_flip_fracs = list(args.sign_flip_frac if isinstance(args.sign_flip_frac, (list, tuple)) else [args.sign_flip_frac])
+    for frac in sign_flip_fracs:
+        if not (0.0 <= frac <= 1.0):
+            raise ValueError("--sign-flip-frac values must be between 0 and 1 inclusive for sign_test.")
     # Build parameter grid and optionally slice for array jobs
     sr_grid   = SWEEP_SR
     leak_grid = SWEEP_LEAK
@@ -376,10 +391,28 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
+                        per_neg=None,
                     )
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
                 continue
-
+            if args.job == "sign_test":
+                for idx, frac in enumerate(sign_flip_fracs):
+                    ctx = _build_ctx(
+                        job_key + str(frac),
+                        WS_K,
+                        ce_W_bio,
+                        None,
+                        col_params,
+                        device,
+                        seed=seed_base,
+                        sid=sid_base,
+                        er_p=args.er_p,
+                        ws_p=args.ws_p,
+                        src_tag=args.src_tag,
+                        per_neg=frac
+                    )
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                continue
             ctx = _build_ctx(
                 job_key,
                 WS_K,
@@ -392,6 +425,7 @@ def main():
                 er_p=args.er_p,
                 ws_p=args.ws_p,
                 src_tag=args.src_tag,
+                per_neg=None
             )
             _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
 

@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 from reservoir_variants import evaluate_reservoir
-from util.util import build_reservoir, load_connectome,degree_matched_shuffle_directed 
+from util.util import build_reservoir, load_connectome 
 
 
 def partial_weight_randomization(W_ce: np.ndarray,
@@ -293,7 +293,7 @@ def run_scores_for_fraction(
             #W_mat = gaus_m0_ei_pres(ce_W_bio, frac_replace, rng_local,ce_ei)
             #W_mat = gaus_m0_ei_pres_mixed_rand(ce_W_bio, frac_replace, rng_local,ce_ei,mixed_idx) # pyright: ignore[reportArgumentType]
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
-            Wt, Win, _, _ = build_reservoir(
+            Wt, Win = build_reservoir(
                 feature_conn="local_sign",
                     feature_weights="local_sign",
                     target_sr=target_sr,

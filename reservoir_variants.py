@@ -44,6 +44,7 @@ class VariantContext:
     sid: int
     er_p: float = 0.1
     ws_p: float = 0.1
+    per_neg: float | None = None
     src_tag: str = "chunk_0"
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
 
@@ -155,7 +156,7 @@ def _run_variant_row(
 
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
         assert ctx.ce_ei==None
-        Wt, Win, _, _ = build_reservoir(
+        Wt, Win = build_reservoir(
             feature_conn=feature_conn,
             feature_weights=feature_weights,
             target_sr=target_sr,
@@ -168,6 +169,7 @@ def _run_variant_row(
             drive_idx=None,
             nnz_target=nnz_target,
             DEVICE=ctx.device,
+            per_neg=ctx.per_neg
         )
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
         rows_local.append(
@@ -214,6 +216,7 @@ VARIANT_LABELS = {
     "local_sign+flat" : "local_sign+flat",
     "local_sign+sample" : "local_sign+sample",
     "local_sign+binary" : "local_sign+binary",
+    "sign_test" : "sign_test",
 
 }
 
@@ -231,6 +234,7 @@ VARIANT_DESCRIPTIONS = {
     "local_sign+flat" : "local_sign preserved with a weights from flat dist",
     "local_sign+sample" : "local_sign preserved with a celegan weight sample",
     "local_sign+binary" : "local_sign preserved with a binary weight sample, +1 or -1",
+    "sign_test" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions"
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
@@ -404,6 +408,16 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="local_sign+binary",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key.startswith("sign_test"):
+        seed_base = _seed(ctx, offset=36_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="sign_test",
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,

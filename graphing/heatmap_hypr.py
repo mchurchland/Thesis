@@ -163,7 +163,7 @@ def main():
             hdr = f"\n=== ROW '{rname}' × COL ρ*={target_sr:.2f}, leak={leak:.1f}, U={in_scale:.2f} ==="
             try:
                 drive_idx = cel_drive_idx if (rconf.get("use_cel_drive", False) and ce_W_bio is not None) else None
-                Wt, Win, _, rho_nat  = build_reservoir(
+                Wt, Win  = build_reservoir(
                     feature_conn=rconf["conn"],
                     feature_weights=rconf["weights"],
                     feature_dale=DALE_MODE,

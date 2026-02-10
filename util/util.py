@@ -136,7 +136,7 @@ def build_reservoir(
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
     per_neg: float| None = None
-) -> tuple[Tensor, Tensor, Tensor, float]:
+) -> tuple[Tensor, Tensor]:
     """
     Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
     ER (Erdos & Renyi, 1959, Publ. Math. Debrecen 6:290-297), WS (Watts & Strogatz, 1998, Nature 393:440-442),
@@ -146,7 +146,7 @@ def build_reservoir(
          https://github.com/networkx/networkx/blob/main/networkx/generators/smallworld.py (WS),
          https://github.com/networkx/networkx/blob/main/networkx/algorithms/swap.py (degree-preserving swaps),
          https://github.com/cknd/pyESN/blob/master/pyESN.py (spectral-radius scaling / ESN setup).
-
+    remove ei_t its not used
     Returns:
       Wt, Win, ei_t, rho_nat, rho_post
     """
@@ -164,6 +164,14 @@ def build_reservoir(
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
             ei_t = None
+    if feature_conn == "sign_test":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        print(per_neg,feature_conn)
+        if per_neg == None:
+            raise ValueError("Per neg required for sign_test")
+        W = flip_percent(ce_W_bio,per=per_neg,rng=rng)
+        ei_t = None
 
     elif feature_conn == 'local_sign':
         if ce_W_bio is None:
@@ -304,7 +312,7 @@ def build_reservoir(
     else:
         Win = torch.randn(Wt.shape[0], 1, device=DEVICE, dtype=Wt.dtype) * input_scale
 
-    return Wt, Win, ei_t, rho_nat
+    return Wt, Win
 
 @torch.no_grad()
 def spectral_radius_power(W: Tensor, iters: int = 200) -> float:
@@ -439,13 +447,15 @@ def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
             idx[i:] = rem ## replace the indices with the shuffled one
     return A.astype(np.float32)
 
-def flip_percent(Wbio:np.ndarray,per:np.float32,rng:np.random.Generator):
-    assert per >0 and per < 1
+def flip_percent(Wbio:np.ndarray,per:float,rng:np.random.Generator):
+    assert per >=0 and per <= 1
+    if per ==0:
+        return Wbio
     W = Wbio.copy().astype(np.float32)
     nz = np.nonzero(W)
     num_to_flip = int(len(nz[0])*per)
-    ind_to_flip  = rng.choice(nz,num_to_flip,replace=False)
-    W[ind_to_flip] = -W[ind_to_flip]
+    ind_to_flip_row  = rng.choice(len(nz[0]),num_to_flip,replace=False)
+    W[nz[0][ind_to_flip_row],nz[1][ind_to_flip_row]] = -W[nz[0][ind_to_flip_row],nz[1][ind_to_flip_row]]
     return W
 
 
