@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 445, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 439, in main
+    _run_job(args.job, append_start=False)
+  File "/home/milesc/Thesis/inv_arc_test.py", line 414, in _run_job
+    _run_and_save(job_key+str(frac), ctx, out_dir, csv_name, append=append_base)
+  File "/home/milesc/Thesis/inv_arc_test.py", line 155, in _run_and_save
+    rows = run_variant(job_key, ctx)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 271, in run_variant
+    raise ValueError(f"Unknown variant key: {key}")
+ValueError: Unknown variant key: sign_test0.1
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job sign_test --out-dir experiment_full_chunks/chunk_5 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_5 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 10 --repeat-split 20 --repeat-rank 5 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0 --sign-flip-frac 0.1 0.2` failed. (See above for error)

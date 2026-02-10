@@ -268,7 +268,8 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
     """Instantiate a reservoir variant (direct dispatch, no VariantSpec indirection)."""
     key = _resolve_key(key)
     if key not in VARIANT_KEYS:
-        raise ValueError(f"Unknown variant key: {key}")
+        if not key.startswith("sign_test"):
+            raise ValueError(f"Unknown variant key: {key}")
 
     _require_ce(ctx)
 
@@ -418,7 +419,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="sign_test",
-            mode_label=VARIANT_LABELS[key],
+            mode_label=key,
             ce_override=None,
             nnz_target=None,
             seed_base=seed_base,

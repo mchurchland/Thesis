@@ -97,7 +97,151 @@ def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------- plots ---------------------------
+def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
+    os.makedirs(out_dir, exist_ok=True)
+    metrics = sorted(disp["metric"].unique())
+    # Consistent ordering/colors to make panels easier to compare.
+    mode_order = [
+        "sign_test0.0",
+        "sign_test0.2",
+        "sign_test0.4",
+        "sign_test0.6",
+        "sign_test0.8",
+        "sign_test1.0",
+    ]
+    modes = [m for m in mode_order if m in set(disp["mode"].unique())]
+    color_map = {
+        "sign_test0.0": "#32a2f2",
+        "sign_test0.2": "#3255f2",
+        "sign_test0.4": "#6c32f2",
+        "sign_test0.6": "#c532f2",
+        "sign_test0.8": "#f2329f",
+        "sign_test1.0": "#f23232",
 
+
+    }
+    if not metrics:
+        return
+    plt.rcParams.update({
+        "axes.titlesize": 18,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 20,
+    })
+
+    per_fig = 4  # 2x2 grid
+    for start in range(0, len(metrics), per_fig):
+        chunk = metrics[start:start + per_fig]
+        fig, axes = plt.subplots(2, 2, figsize=(13, 11), squeeze=False,
+                                 sharex="col", sharey="row")
+        flat_axes = axes.ravel()
+        any_plotted = False
+        col_lo = [np.inf, np.inf]
+        col_hi = [-np.inf, -np.inf]
+        row_y_max = [0.0, 0.0]
+        legend_handles, legend_labels = None, None
+        data_mask = [False] * len(flat_axes)
+
+        for idx, m in enumerate(chunk):
+            ax = flat_axes[idx]
+            all_vals = disp[disp["metric"] == m]["dispersion"].to_numpy()
+            if all_vals.size == 0:
+                ax.axis("off")
+                continue
+            lo, hi = np.nanmin(all_vals), np.nanmax(all_vals)
+            if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
+                lo, hi = 0.0, 1.0
+            edges = np.linspace(lo, hi, bins + 1)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            col = idx % 2
+            row = idx // 2
+            col_lo[col] = min(col_lo[col], lo)
+            col_hi[col] = max(col_hi[col], hi)
+
+            plotted = False
+            for mode in modes:
+                s = disp[(disp["metric"] == m) & (disp["mode"] == mode)]["dispersion"].to_numpy()
+                if s.size == 0:
+                    continue
+                counts, _ = np.histogram(s, bins=edges)
+                frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
+                color = color_map.get(mode, None)
+
+                ax.plot(
+                    centers,
+                    frac,
+                    drawstyle="steps-mid",
+                    linewidth=3.0,
+                    alpha=0.7,
+                    label=f"{mode}",
+                    color=color,
+                )
+                # Median marker to help compare shifts without cluttering the plot.
+                med = float(np.median(s))
+                ax.axvline(med, color=color, alpha=0.18, linewidth=1.2, linestyle="--")
+                plotted = True
+                row_y_max[row] = max(row_y_max[row], float(np.max(frac)))
+
+            if not plotted:
+                ax.axis("off")
+                continue
+
+            if legend_handles is None:
+                legend_handles, legend_labels = ax.get_legend_handles_labels()
+            ax.set_title(f"Invariance dispersion by architecture — {m}")
+            if idx == 2 or idx ==3:
+                ax.set_xlabel("coefficient of variation")
+            if idx == 0 or idx ==2:
+                ax.set_ylabel("fraction (normalized by N)")
+            ax.grid(True, which="both", axis="both", alpha=0.18, linestyle=":")
+            any_plotted = True
+            data_mask[idx] = True
+
+        for idx in range(len(chunk), len(flat_axes)):
+            flat_axes[idx].axis("off")
+
+        if not any_plotted:
+            plt.close(fig)
+            continue
+
+        for col in range(2):
+            if np.isfinite(col_lo[col]) and np.isfinite(col_hi[col]) and col_lo[col] != col_hi[col]:
+                for row in range(2):
+                    idx = row * 2 + col
+                    ax = flat_axes[idx]
+                    if data_mask[idx]:
+                        ax.set_xlim(col_lo[col], col_hi[col])
+        for row in range(2):
+            if row_y_max[row] > 0:
+                y_max = row_y_max[row] * 1.08
+                for col in range(2):
+                    idx = row * 2 + col
+                    ax = flat_axes[idx]
+                    if data_mask[idx]:
+                        ax.set_ylim(0, y_max)
+
+        if legend_handles:
+            fig.legend(
+                legend_handles,
+                legend_labels,
+                frameon=False,
+                loc="upper center",
+                ncol=3,
+                bbox_to_anchor=(0.5, 1.02),
+                columnspacing=1.2,
+                handlelength=2.0,
+                handletextpad=0.6,
+                borderaxespad=0.8,
+            )
+
+        fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
+        page = start // per_fig + 1
+        suffix = "" if len(metrics) <= per_fig else f"_p{page}"
+        out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid{suffix}.png"))
+        fig.savefig(out_fig, dpi=300)
+        plt.close(fig)
+        print(f"[saved] {out_fig}")
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
@@ -377,7 +521,8 @@ def main():
     # Focus on CE-real, CE-shuffle, and CE-connshuff for plots/stats
 
     # Plots
-    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    plot_frac_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_kruskal_wallis_tables(disp)
 

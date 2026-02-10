@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 445, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 317, in main
+    os.makedirs(out_dir, exist_ok=True)
+  File "/home/milesc/.conda/envs/cel/lib/python3.10/os.py", line 225, in makedirs
+    mkdir(name, mode)
+FileNotFoundError: [Errno 2] No such file or directory: 'experiment_full_chunks/chunk_1'
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job sign_test --out-dir experiment_full_chunks/chunk_1 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_1 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 10 --repeat-split 20 --repeat-rank 1 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0 --sign-flip-frac 0.1 0.2` failed. (See above for error)

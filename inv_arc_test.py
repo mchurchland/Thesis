@@ -396,7 +396,8 @@ def main():
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
                 continue
             if args.job == "sign_test":
-                for idx, frac in enumerate(sign_flip_fracs):
+                for frac_idx, frac in enumerate(sign_flip_fracs):
+                    print(frac)
                     ctx = _build_ctx(
                         job_key + str(frac),
                         WS_K,
@@ -411,7 +412,13 @@ def main():
                         src_tag=args.src_tag,
                         per_neg=frac
                     )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                    _run_and_save(
+                        job_key + str(frac),
+                        ctx,
+                        out_dir,
+                        csv_name,
+                        append=(append_base or frac_idx > 0),
+                    )
                 continue
             ctx = _build_ctx(
                 job_key,
