@@ -163,7 +163,7 @@ def build_reservoir(
             W = ce_W_bio.copy().astype(np.float32)
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
-            ei_t = None
+            
     if feature_conn == "sign_test":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
@@ -171,7 +171,7 @@ def build_reservoir(
         if per_neg == None:
             raise ValueError("Per neg required for sign_test")
         W = flip_percent(ce_W_bio,per=per_neg,rng=rng)
-        ei_t = None
+        
 
     elif feature_conn == 'local_sign':
         if ce_W_bio is None:
@@ -189,7 +189,7 @@ def build_reservoir(
             W[sel_p] = np.abs(rng.normal(loc=0.0, scale=1.0, size=num_pos).astype(np.float32))
         if num_neg:
             W[sel_n] = -np.abs(rng.normal(loc=0.0, scale=1.0, size=num_neg).astype(np.float32))
-        ei_t = None
+        
     
     elif feature_conn == 'local_sign+flat':
         #from reservoir_variants import _shuffle_ce_weights_except_1
@@ -205,7 +205,7 @@ def build_reservoir(
         W = (np.abs(W) > 0).astype(np.float32) * mags
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
-        ei_t = None
+        
     
     elif feature_conn == "local_sign+sample":
         from reservoir_variants import _sample_from_cel_sign
@@ -215,7 +215,7 @@ def build_reservoir(
 
         W = _sample_from_cel_sign(Wbio = W,rng=rng)
 
-        ei_t = None
+        
 
     elif feature_conn == "local_sign+binary":
         from reservoir_variants import _cel_to_bin
@@ -225,12 +225,24 @@ def build_reservoir(
 
         sel_p = W > 0 ## get the positive weights of the selection
         sel_n = W < 0 ## get the negative weights of the selection
+        
 
         W = _cel_to_bin(Wbio = W)
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
-        ei_t = None
-    
+        
+    elif feature_conn == "global_sign_pres":
+        from reservoir_variants import _cel_to_bin
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+        nz = np.nonzero(W)
+        count_n = np.count_nonzero(W < 0)
+
+        sel_n  = rng.choice(len(nz[0]),count_n,replace=False)
+        W = _cel_to_bin(Wbio = W)
+        W[nz[0][sel_n],nz[1][sel_n]] = -W[nz[0][sel_n],nz[1][sel_n]]
+
     
     elif feature_conn == "deg_shuffle":
         if ce_W_bio is None:
@@ -247,7 +259,6 @@ def build_reservoir(
             W[mask != 0] = vals[: int(mask.sum())]
         else:
             W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
-        ei_t = torch.from_numpy(ce_ei) if ce_ei is not None else None
 
     elif feature_conn.startswith("ws_p="):
         p = float(feature_conn.split("=")[1])
@@ -256,7 +267,7 @@ def build_reservoir(
         if nnz_target is not None:
             mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
-        ei_t = None
+        
 
     elif feature_conn.startswith("er_p="):
         p = float(feature_conn.split("=")[1])
@@ -273,11 +284,9 @@ def build_reservoir(
             sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
             W = np.abs(W)
             W[sel] = -1*W[sel]
-        ei_t = None
-        
     else:
         W = ce_W_bio.copy().astype(np.float32)
-        ei_t = None
+        
 
     # Weight scheme overrides
     if feature_weights == "rand_disc":

@@ -216,6 +216,7 @@ VARIANT_LABELS = {
     "local_sign+flat" : "local_sign+flat",
     "local_sign+sample" : "local_sign+sample",
     "local_sign+binary" : "local_sign+binary",
+    "global_sign_pres" : "global_sign_pres",
     "sign_test" : "sign_test",
 
 }
@@ -234,7 +235,8 @@ VARIANT_DESCRIPTIONS = {
     "local_sign+flat" : "local_sign preserved with a weights from flat dist",
     "local_sign+sample" : "local_sign preserved with a celegan weight sample",
     "local_sign+binary" : "local_sign preserved with a binary weight sample, +1 or -1",
-    "sign_test" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions"
+    "sign_test" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions",
+    "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
@@ -347,7 +349,6 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             nnz_target=None,
             seed_base=seed_base,
         )
-
     if key == "local_sign":
         seed_base = _seed(ctx, offset=30_000)
         return _run_variant_row(
@@ -414,6 +415,17 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             nnz_target=None,
             seed_base=seed_base,
         )
+    if key == "global_sign_pres":
+        seed_base = _seed(ctx, offset=35_500)
+        return _run_variant_row(
+            ctx,
+            feature_conn="global_sign_pres",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+
     if key.startswith("sign_test"):
         seed_base = _seed(ctx, offset=36_000)
         return _run_variant_row(
@@ -428,7 +440,6 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
 
     # Defensive (should never reach here)
     raise ValueError(f"Variant key not implemented: {key}")
-
 
 def list_variants() -> list[tuple[str, str]]:
     """Return (key, description) pairs sorted by key."""
