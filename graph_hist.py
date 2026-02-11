@@ -337,7 +337,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "conn_shuf_only",
         "local_sign+flat",
         "local_sign+sample",
-        "local_sign+binary"
+        "local_sign+binary",
+        "global_sign_pres"
 
     ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
@@ -354,6 +355,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "local_sign+flat":  "#002CF1",
         "local_sign+sample": "#AF7DF5",
         "local_sign+binary": "#8ADEF3",
+        "global_sign_pres" : "#1C373D",
 
     }
     if not metrics:
@@ -415,7 +417,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     "cel_sample": "Sampled weights",
                     "local_sign+flat": "Local Sign + U(0,1)",
                     "local_sign+sample": "Local Sign + Sampled",
-                    "local_sign+binary": "Local Sign + wt +1,-1"
+                    "local_sign+binary": "Local Sign + wt +1,-1",
+                    "global_sign_pres" : "Global sign",
 
 
 
@@ -597,9 +600,9 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    plot_frac_cv_meanline(disp, combined, args.out_dir)
-    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_frac_cv_meanline(disp, combined, args.out_dir)
+    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)
 
