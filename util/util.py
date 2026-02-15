@@ -167,7 +167,6 @@ def build_reservoir(
     if feature_conn == "sign_test":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
-        print(per_neg,feature_conn)
         if per_neg == None:
             raise ValueError("Per neg required for sign_test")
         W = flip_percent(ce_W_bio,per=per_neg,rng=rng)

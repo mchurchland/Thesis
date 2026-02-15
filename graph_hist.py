@@ -333,7 +333,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "celW+connShuf",
         "local_sign",
         "shuffle",
-        "cel_sample",
+        #"cel_sample", temporaroly removed
         "conn_shuf_only",
         "local_sign+flat",
         "local_sign+sample",
@@ -350,7 +350,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "celW+connShuf": "#ff0e0e",
         "local_sign": "#027979",
         "shuffle": "#FF5100",
-        "cel_sample": "#ff6565",
+        #"cel_sample": "#ff6565",
         "conn_shuf_only": "#ff9752",
         "local_sign+flat":  "#002CF1",
         "local_sign+sample": "#AF7DF5",
@@ -604,7 +604,7 @@ def main():
     #plot_frac_cv_meanline(disp, combined, args.out_dir)
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    #print_kruskal_wallis_tables(disp)
+    print_kruskal_wallis_tables(disp)
 
 
 if __name__ == "__main__":
