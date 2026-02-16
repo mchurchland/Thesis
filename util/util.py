@@ -169,6 +169,9 @@ def build_reservoir(
             raise ValueError("Local sign match requires CE adjacency.")
         if per_neg == None:
             raise ValueError("Per neg required for sign_test")
+        from reservoir_variants import _cel_to_bin
+        W = ce_W_bio.copy().astype(np.float32)
+        W = _cel_to_bin(W)
         W = flip_percent(ce_W_bio,per=per_neg,rng=rng)
         
 
