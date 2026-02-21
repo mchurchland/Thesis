@@ -153,7 +153,7 @@ def _run_and_save(job_key: str, ctx: VariantContext, out_dir: str, csv_name: str
     os.makedirs(out_dir, exist_ok=True)
     out_csv = os.path.join(out_dir, csv_name)
     rows = run_variant(job_key, ctx)
-    save_rows(out_csv, rows, append=append)
+    #save_rows(out_csv, rows, append=append)
 
 
 def parse_args():

@@ -159,19 +159,23 @@ def _run_variant_row(
         Wt, Win = build_reservoir(
             feature_conn=feature_conn,
             feature_weights=feature_weights,
-            target_sr=target_sr,
+            target_sr=None,
             N=Nloc,
             ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
             ce_ei=ctx.ce_ei,
             ws_k=ctx.ws_k,
-            input_scale=in_scale,
-            seed=seed_base + ci * 101,
+            input_scale=1,
+            seed=seed_base + (ci) * 101,
             drive_idx=None,
             nnz_target=nnz_target,
             DEVICE=ctx.device,
             per_neg=ctx.per_neg
         )
-        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        #scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        from util.util import spectral_radius_power
+        rho_nat = spectral_radius_power(Wt)
+        
+        """
         rows_local.append(
             (
                 mode_label,
@@ -185,8 +189,9 @@ def _run_variant_row(
                 float(scores["GR"]),
                 ctx.src_tag,
             )
-        )
-    return rows_local
+        )"""
+    print(rho_nat)
+    return []
 
 
 def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
@@ -428,6 +433,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
 
     if key.startswith("sign_test"):
         seed_base = _seed(ctx, offset=36_000)
+        print(key)
         return _run_variant_row(
             ctx,
             feature_conn="sign_test",
