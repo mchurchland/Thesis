@@ -135,7 +135,8 @@ def build_reservoir(
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
-    per_neg: float| None = None
+    per_neg: float| None = None,
+    alpha: float| None = None,
 ) -> tuple[Tensor, Tensor]:
     """
     Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
@@ -163,8 +164,17 @@ def build_reservoir(
             W = ce_W_bio.copy().astype(np.float32)
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
-            
-    if feature_conn == "sign_test":
+    if feature_conn == "weight_test": 
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+
+        assert alpha != None
+        from reservoir_variants import _cel_to_bin
+        W = ce_W_bio.copy().astype(np.float32)
+        W = _cel_to_bin(W)
+        W = scale_weights(W,alpha=alpha,rng=rng)
+        
+    elif feature_conn == "sign_test":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         if per_neg == None:
@@ -286,9 +296,8 @@ def build_reservoir(
             sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
             W = np.abs(W)
             W[sel] = -1*W[sel]
-    else:
-        W = ce_W_bio.copy().astype(np.float32)
-        
+
+    
 
     # Weight scheme overrides
     if feature_weights == "rand_disc":
@@ -301,13 +310,11 @@ def build_reservoir(
         # else: 'cel' with CE weights already prepared
 
     # Torchify
-    
 
     # Apply Dale's Law from ce_ei 
     if ce_ei is not None:
         diag = np.diag(ce_ei).astype(np.float32)
         W  = np.matmul(diag,np.abs(W)).astype(np.float32)
-
     Wt = torch.from_numpy(W).to(DEVICE)
     # --- scale by spectral radius (this is the requested change) ---
     Wt = scale_to_sr(Wt, target_sr)
@@ -469,6 +476,18 @@ def flip_percent(Wbio:np.ndarray,per:float,rng:np.random.Generator):
     return W
 
 
+def scale_weights(Wbio: np.ndarray, alpha: float, rng: np.random.Generator):
+    assert alpha >= 0
+    if alpha == 0:
+        return Wbio
+
+    W = Wbio.astype(np.float32, copy=True)
+    mask = W != 0
+    s = np.sign(W[mask])                      # original sign
+    mag = np.abs(W[mask])
+    mag = mag + np.abs(rng.normal(0, 1, size=mask.sum())) * alpha
+    W[mask] = s * mag
+    return W
 
 def spectral_norm(W: Tensor) -> float:
     """Spectral norm via leading singular value (Golub & Van Loan, 2013, Matrix Computations 4th ed.). See: https://github.com/pytorch/pytorch/blob/main/torch/nn/utils/spectral_norm.py"""

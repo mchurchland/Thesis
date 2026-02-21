@@ -45,6 +45,7 @@ class VariantContext:
     er_p: float = 0.1
     ws_p: float = 0.1
     per_neg: float | None = None
+    alpha: float | None = None
     src_tag: str = "chunk_0"
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
 
@@ -169,9 +170,11 @@ def _run_variant_row(
             drive_idx=None,
             nnz_target=nnz_target,
             DEVICE=ctx.device,
-            per_neg=ctx.per_neg
+            per_neg=ctx.per_neg,
+            alpha = ctx.alpha
         )
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        # Optional debug: inspect metrics, mean weight, and alpha (works on CPU/GPU).
         rows_local.append(
             (
                 mode_label,
@@ -218,6 +221,7 @@ VARIANT_LABELS = {
     "local_sign+binary" : "local_sign+binary",
     "global_sign_pres" : "global_sign_pres",
     "sign_test" : "sign_test",
+    "weight_test" : "weight_test",
 
 }
 
@@ -236,6 +240,7 @@ VARIANT_DESCRIPTIONS = {
     "local_sign+sample" : "local_sign preserved with a celegan weight sample",
     "local_sign+binary" : "local_sign preserved with a binary weight sample, +1 or -1",
     "sign_test" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions",
+    "weight_test" : "celegan connectome, can pass in an alpha to add a guasian dist times that alpha to the weights",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
 }
 
@@ -270,7 +275,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
     """Instantiate a reservoir variant (direct dispatch, no VariantSpec indirection)."""
     key = _resolve_key(key)
     if key not in VARIANT_KEYS:
-        if not key.startswith("sign_test"):
+        if (not key.startswith("sign_test") and (not key.startswith("weight_test"))):
             raise ValueError(f"Unknown variant key: {key}")
 
     _require_ce(ctx)
@@ -431,6 +436,16 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="sign_test",
+            mode_label=key,
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key.startswith("weight_test"):
+        seed_base = _seed(ctx, offset=36_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="weight_test",
             mode_label=key,
             ce_override=None,
             nnz_target=None,

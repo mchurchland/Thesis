@@ -130,9 +130,10 @@ def _build_ctx(
     ws_p: float,
     src_tag: str,
     per_neg: float | None = None,
+    alpha: float | None = None,
 ) -> VariantContext:
     if job_key not in VARIANT_KEYS:
-        if not job_key.startswith("sign_test"):
+        if (not job_key.startswith("sign_test")) and (not job_key.startswith("weight_test")):
             raise ValueError(f"Unknown variant key: {job_key}")
     return VariantContext(
         ce_W_bio=ce_W_bio,
@@ -146,6 +147,7 @@ def _build_ctx(
         ws_p=ws_p,
         src_tag=src_tag,
         per_neg=per_neg,
+        alpha=alpha
     )
 
 
@@ -217,8 +219,15 @@ def parse_args():
         "--sign-flip-frac",
         type=float,
         nargs="+",
-        default=[0.1],
+        default=0.0,
         help="Space-separated fraction(s) of CE edges whose sign is flipped for sign_test (0 <= frac <= 1).",
+    )
+    p.add_argument(
+        "--alphas",
+        type=float,
+        nargs="+",
+        default=0.0,
+        help="alphas for the weight test",
     )
 
 
@@ -279,6 +288,7 @@ def parse_args():
 def main():
     args = parse_args()
     sign_flip_fracs = list(args.sign_flip_frac if isinstance(args.sign_flip_frac, (list, tuple)) else [args.sign_flip_frac])
+    alphas = list(args.alphas if isinstance(args.alphas, (list, tuple)) else [args.alphas])
     for frac in sign_flip_fracs:
         if not (0.0 <= frac <= 1.0):
             raise ValueError("--sign-flip-frac values must be between 0 and 1 inclusive for sign_test.")
@@ -395,9 +405,32 @@ def main():
                     )
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
                 continue
+            if args.job == "weight_test":
+                for frac_idx, alpha in enumerate(alphas):
+                    ctx = _build_ctx(
+                        job_key + str(alpha),
+                        WS_K,
+                        ce_W_bio,
+                        None,
+                        col_params,
+                        device,
+                        seed=seed_base,
+                        sid=sid_base,
+                        er_p=args.er_p,
+                        ws_p=args.ws_p,
+                        src_tag=args.src_tag,
+                        alpha=alpha
+                    )
+                    _run_and_save(
+                        job_key + str(alpha),
+                        ctx,
+                        out_dir,
+                        csv_name,
+                        append=(append_base or frac_idx > 0),
+                    )
+                continue
             if args.job == "sign_test":
                 for frac_idx, frac in enumerate(sign_flip_fracs):
-                    print(frac)
                     ctx = _build_ctx(
                         job_key + str(frac),
                         WS_K,
