@@ -310,7 +310,6 @@ def build_reservoir(
 
     Wt = torch.from_numpy(W).to(DEVICE)
     # --- scale by spectral radius (this is the requested change) ---
-    rho_nat = spectral_radius_power(Wt)
     Wt = scale_to_sr(Wt, target_sr)
     #rho_post = spectral_radius_power(Wt)
 
