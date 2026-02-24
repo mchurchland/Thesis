@@ -186,7 +186,7 @@ def _run_variant_row(
                 float(scores["IPC"]),
                 float(scores["KR"]),
                 float(scores["GR"]),
-                float(mean_Wt = Wt.mean().item()),
+                float(Wt.mean().item()),
                 ctx.src_tag,
             )
         )
