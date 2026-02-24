@@ -108,25 +108,56 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     if not metrics:
         return
 
+    #mode_order = [
+    #    "sign_test0.0","sign_test0.1","sign_test0.2","sign_test0.3","sign_test0.4",
+    #    "sign_test0.5","sign_test0.6","sign_test0.7","sign_test0.8","sign_test0.9","sign_test1.0",
+    #]
     mode_order = [
-        "sign_test0.0","sign_test0.1","sign_test0.2","sign_test0.3","sign_test0.4",
-        "sign_test0.5","sign_test0.6","sign_test0.7","sign_test0.8","sign_test0.9","sign_test1.0",
+        "weight_test0.0","weight_test1.0","weight_test5.0","weight_test10.0","weight_test100.0",
+        "weight_test1000.0", "weight_test10000.0",
     ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     if not modes:
         return
 
-    def mode_to_z(mode: str) -> float:
-        m = re.search(r"sign_test([0-9]*\.?[0-9]+)", mode)
+    def mode_to_value(mode: str) -> float:
+        """Extract numeric value from a mode name.
+
+        Supports both legacy "sign_testX" and current "weight_testX" patterns.
+        Falls back to the first numeric token if no known prefix matches.
+        Returns NaN when no numeric component is present.
+        """
+        mode_str = str(mode)
+        for prefix in ("sign_test", "weight_test"):
+            m = re.search(rf"{prefix}([0-9]*\.?[0-9]+)", mode_str)
+            if m:
+                return float(m.group(1))
+        m = re.search(r"([0-9]*\.?[0-9]+)", mode_str)
         return float(m.group(1)) if m else np.nan
 
-    z_vals = np.array([mode_to_z(m) for m in modes], dtype=float)
-    z_vals = z_vals[np.isfinite(z_vals)]
+    mode_values = {m: mode_to_value(m) for m in modes}
+    z_vals = np.array([v for v in mode_values.values() if np.isfinite(v)], dtype=float)
+
+    # If nothing numeric was found, fall back to ordinal positions so the
+    # plotting code remains robust instead of crashing.
+    if z_vals.size == 0:
+        mode_values = {m: float(i) for i, m in enumerate(modes)}
+        z_vals = np.array(list(mode_values.values()), dtype=float)
+
     zmin, zmax = float(np.min(z_vals)), float(np.max(z_vals))
+    if zmax == zmin:
+        zmax = zmin + 1.0
 
     cmap = mpl.colormaps["viridis"]
-    norm = mpl.colors.Normalize(vmin=zmin, vmax=(zmax if zmax > zmin else zmin + 1.0))
-    color_for_mode = {m: cmap(norm(mode_to_z(m))) for m in modes}
+    norm = mpl.colors.Normalize(vmin=zmin, vmax=zmax)
+    color_for_mode = {m: cmap(norm(mode_values[m])) for m in modes}
+
+    if all(str(m).startswith("sign_test") for m in modes):
+        x_label = "sign_test frac (x)"
+    elif all(str(m).startswith("weight_test") for m in modes):
+        x_label = "weight_test value (x)"
+    else:
+        x_label = "mode value (x)"
 
     plt.rcParams.update({
         "axes.titlesize": 16,
@@ -165,7 +196,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 
                 counts, _ = np.histogram(s, bins=edges)
                 z = counts.astype(float) / max(len(s), 1)  # histogram fraction -> now z
-                x = mode_to_z(mode)                          # DISCRETE mode value (0.1, 0.2, ...)
+                x = mode_values.get(mode, np.nan)          # numeric mode value
                 if not np.isfinite(x):
                     continue
 
@@ -189,16 +220,18 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 
             any_plotted = True
             ax.set_title(f"{metric}")
-            ax.set_xlabel("sign_test frac (x)")
+            ax.set_xlabel(x_label)
             ax.set_ylabel("coefficient of variation (y)")
             ax.set_zlabel("fraction (hist, z)")
 
             # Make x discrete and readable
-            xticks = [mode_to_z(m) for m in modes]
-            xticks = sorted({float(v) for v in xticks if np.isfinite(v)})
-            ax.set_xticks(xticks)
-
-            ax.set_xlim(-0.05, 1.05)
+            xticks = [mode_values[m] for m in modes if np.isfinite(mode_values[m])]
+            xticks = sorted({float(v) for v in xticks})
+            if xticks:
+                ax.set_xticks(xticks)
+                span = max(xticks) - min(xticks)
+                pad = 0.05 * span if span > 0 else 1.0
+                ax.set_xlim(min(xticks) - pad, max(xticks) + pad)
             group_max = (
                 disp.loc[disp["metric"] == metric]
                 .groupby("mode")["dispersion"]
@@ -245,7 +278,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
     """
     Single 3D plot with one colored line per metric (MC, IPC, KR, GR):
-      x = sign_test fraction (parsed from mode name)
+      x = mode value (parsed numeric component)
       y = mean CV (dispersion) across groups
       z = mean performance across runs
     """
@@ -254,22 +287,29 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     # Expected metrics present in both tables.
     metric_cols = [m for m in ("MC", "IPC", "KR", "GR") if m in combined.columns]
     if not metric_cols:
+        print("[warn] plot_frac_cv_meanline: no MC/IPC/KR/GR columns found.")
         return
     metrics_disp = set(disp["metric"].unique())
     metrics = [m for m in metric_cols if m in metrics_disp]
     if not metrics:
+        print("[warn] plot_frac_cv_meanline: dispersion table missing MC/IPC/KR/GR metrics.")
         return
 
-    # Fractions from mode names.
-    def mode_to_frac(mode: str) -> float:
-        m = re.search(r"sign_test([0-9]*\.?[0-9]+)", mode)
+    def mode_to_value(mode: str) -> float:
+        mode_str = str(mode)
+        for prefix in ("sign_test", "weight_test"):
+            m = re.search(rf"{prefix}([0-9]*\.?[0-9]+)", mode_str)
+            if m:
+                return float(m.group(1))
+        m = re.search(r"([0-9]*\.?[0-9]+)", mode_str)
         return float(m.group(1)) if m else np.nan
 
-    modes = sorted(
-        {m for m in disp["mode"].unique() if re.match(r"sign_test", str(m))},
-        key=lambda x: mode_to_frac(str(x)),
-    )
+    # Keep only modes we can assign a numeric position to; sort by that value.
+    mode_values = {m: mode_to_value(m) for m in disp["mode"].unique()}
+    modes = [m for m, v in mode_values.items() if np.isfinite(v)]
+    modes = sorted(modes, key=lambda m: mode_values[m])
     if not modes:
+        print("[warn] plot_frac_cv_meanline: no modes with numeric value; skipping.")
         return
 
     # Mean performance and mean CV lookups.
@@ -283,34 +323,44 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     colors = mpl.colormaps["tab10"]
     plotted_any = False
     for idx, metric in enumerate(metrics):
-        xs, ys, zs = [], [], []
+        rows = []
         for mode in modes:
-            frac = mode_to_frac(mode)
+            frac = mode_values.get(mode, np.nan)
             y = mean_cv.get((mode, metric), np.nan)
             z = mean_perf.get((mode, metric), np.nan)
             if not (np.isfinite(frac) and np.isfinite(y) and np.isfinite(z)):
                 continue
-            xs.append(frac)
-            ys.append(y)
-            zs.append(z)
-        if not xs:
+            rows.append((frac, y, z))
+        if not rows:
             continue
-        order = np.argsort(xs)
-        xs = np.asarray(xs)[order]
-        ys = np.asarray(ys)[order]
-        zs = np.asarray(zs)[order]
+        rows = sorted(rows, key=lambda t: t[0])
+        xs, ys, zs = map(np.asarray, zip(*rows))
         ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
         plotted_any = True
 
     if not plotted_any:
         plt.close(fig)
+        print("[warn] plot_frac_cv_meanline: no finite data to plot.")
         return
 
-    ax.set_xlabel("sign_test frac (x)")
+    if all(str(m).startswith("sign_test") for m in modes):
+        x_label = "sign_test frac (x)"
+    elif all(str(m).startswith("weight_test") for m in modes):
+        x_label = "weight_test value (x)"
+    else:
+        x_label = "mode value (x)"
+
+    # Use the full set of mode positions for x-limits.
+    x_positions = [mode_values[m] for m in modes if np.isfinite(mode_values[m])]
+    x_min, x_max = min(x_positions), max(x_positions)
+    span = x_max - x_min
+    pad = 0.05 * span if span > 0 else 1.0
+
+    ax.set_xlabel(x_label)
     ax.set_ylabel("mean CV (y)")
     ax.set_zlabel("mean performance (z)")
-    ax.set_title("Mean performance vs CV vs sign_test fraction")
-    ax.set_xlim(-0.05, 1.05)
+    ax.set_title("Mean performance vs CV vs mode value")
+    ax.set_xlim(x_min - pad, x_max + pad)
     ax.legend()
     fig.tight_layout()
 
@@ -320,7 +370,8 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
         plt.show()
     plt.close(fig)
     print(f"[saved] {out_fig}")
-    print(f"[saved] {out_fig}")
+
+
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
@@ -600,7 +651,7 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    plot_frac_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     plot_frac_cv_meanline(disp, combined, args.out_dir)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)

@@ -174,7 +174,7 @@ def _run_variant_row(
             alpha = ctx.alpha
         )
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
-        # Optional debug: inspect metrics, mean weight, and alpha (works on CPU/GPU).
+
         rows_local.append(
             (
                 mode_label,
@@ -186,6 +186,7 @@ def _run_variant_row(
                 float(scores["IPC"]),
                 float(scores["KR"]),
                 float(scores["GR"]),
+                float(mean_Wt = Wt.mean().item()),
                 ctx.src_tag,
             )
         )
@@ -199,7 +200,7 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR", "src"])
+            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","mean" "src"])
         w.writerows(rows)
 
 
