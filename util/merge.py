@@ -12,6 +12,7 @@ Inputs (defaults)
 
 Outputs (defaults)
   experiment_full_merged/combined.ALL.csv                         # row-wise merged runs
+  experiment_full_merged/mean_by_group.ALL.csv                    # per-group means (incl. invariant mean col)
   experiment_full_merged/dispersion_by_group.ALL.csv              # per-group dispersion table
   experiment_full_merged/all_arch_hist_grid[_pN].png              # overlaid histograms per metric (2x2 grid)
   experiment_full_merged/mc_vs_gr_all_arch.png                    # scatter across all modes
@@ -22,7 +23,13 @@ import argparse
 
 import matplotlib
 matplotlib.use("Agg")
-from graph_utils import _safe_path, _read_glob, _build_combined, _compute_dispersion_table
+from graph_utils import (
+    _safe_path,
+    _read_glob,
+    _build_combined,
+    _compute_dispersion_table,
+    _compute_mean_table,
+)
 
 # ---------------------------- CLI ----------------------------
 
@@ -55,6 +62,11 @@ def main():
     out_comb = _safe_path(os.path.join(args.out_dir, "combined.ALL.csv"))
     combined.to_csv(out_comb, index=False)
     print(f"[saved] {out_comb}  (rows={len(combined)})")
+
+    mean_tbl = _compute_mean_table(combined)
+    out_mean = _safe_path(os.path.join(args.out_dir, "mean_by_group.ALL.csv"))
+    mean_tbl.to_csv(out_mean, index=False)
+    print(f"[saved] {out_mean}  (rows={len(mean_tbl)})")
 
     disp = _compute_dispersion_table(combined,mode = "cv")
     out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))

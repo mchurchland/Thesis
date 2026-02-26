@@ -23,48 +23,24 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
         Pre[t] = pre
     return X, Pre
 
-@torch.no_grad()
-def controllability_erank(W: Tensor, Win: Tensor, leak: float, Ddiag_mean: Tensor, K: int) -> float:
-    """
-    Effective rank of the controllability matrix (entropic rank).
-    Controllability construction mirrors standard discrete-time linear systems; see:
-    https://github.com/pytorch/pytorch/blob/main/torch/linalg/__init__.py for SVD utilities.
-    """
-    N = W.shape[0]
-    I = torch.eye(N, device=W.device)
-    A = (1 - leak) * I + leak * (Ddiag_mean @ W)
-    cols = []
-    v = Win
-    for _ in range(K + 1):
-        cols.append(v)
-        v = A @ v
-    C = torch.cat(cols, dim=1)  # [N, K+1]
-    s = torch.linalg.svdvals(C)
-    s = torch.clamp(s, min=1e-12)
-    p = s / torch.sum(s)
-    H = -torch.sum(p * torch.log(p))
-    return float(torch.exp(H))
 
 def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: int,
             PERTURB_STD: float, T_TRAIN: int, T_TEST: int,
             MC_MAX_DELAY: int, IPC_MAX_DELAY: int, IPC_MAX_ORDER: int,
-            RIDGE_ALPHA: float, K_CONTROLLABILITY: int,
-            SAT_THRESH: float, NEAR_ZERO_STD: float) -> dict:
+            RIDGE_ALPHA: float) -> dict:
     """
     End-to-end reservoir evaluation computing MC/IPC/KR/GR and controllability metrics.
     Wraps the ESN update plus metrics pipeline; see reservoirpy/pyESN for similar evaluation flows:
-    https://github.com/reservoirpy/reservoirpy/blob/master/reservoirpy/metrics/memory_capacity.py
-    """
+    [1] Jaeger, H. (2001). Short term memory in echo state networks.    """
     T_total = WASHOUT + T_TRAIN + T_TEST
     u = (torch.rand(T_total, 1, device=device) * 2.0 - 1.0) ## rescale to [-1, 1]
     u = u - u.mean()
 
-    X, Pre = run_reservoir_with_pre(W, Win, u, leak)
+    X, _ = run_reservoir_with_pre(W, Win, u, leak)
     Xn, _  = run_reservoir_with_pre(W, Win, u + PERTURB_STD * torch.randn_like(u), leak)
 
     Xtr = X[WASHOUT:WASHOUT+T_TRAIN] ## t_train
     Xte = X[WASHOUT+T_TRAIN:] ## t_test
-    Pre_tr = Pre[WASHOUT:WASHOUT+T_TRAIN]
     utr = u[WASHOUT:WASHOUT+T_TRAIN] ## u_train
     ute = u[WASHOUT+T_TRAIN:] ## u_test
 
@@ -72,16 +48,6 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
     IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, IPC_MAX_ORDER, RIDGE_ALPHA,device)
     KR_val      = compute_KR(Xtr)
     GR_val      = compute_GR(Xtr, Xn[WASHOUT:WASHOUT+T_TRAIN])
-    Dbar_diag = (1.0 - torch.tanh(Pre_tr)**2).mean(dim=0)
-    Dbar = torch.diag(Dbar_diag)
-    rank_k = controllability_erank(W, Win, leak, Dbar, K_CONTROLLABILITY)
-    std_per_unit = Xtr.std(dim=0)
-
     return dict(
         MC=MC_total, IPC=IPC_total, KR=KR_val, GR=GR_val,
-        sat_frac=float((Pre_tr.abs() > SAT_THRESH).float().mean()),
-        erank_X=effective_rank(Xtr),
-        erank_pre=effective_rank(Pre_tr),
-        rank_k=rank_k,
-        frac_near_zero=float((std_per_unit < NEAR_ZERO_STD).float().mean())
     )

@@ -332,27 +332,9 @@ def build_reservoir(
     return Wt, Win
 
 @torch.no_grad()
-def spectral_radius_power(W: Tensor, iters: int = 200) -> float:
-    """
-    Spectral radius via torch.linalg.eigvals with a power-iteration fallback
-    (Golub & Van Loan, 2013, Matrix Computations 4th ed.).
-    """
-    try:
-        eigs = torch.linalg.eigvals(W)
-        return float(torch.max(torch.abs(eigs)).item())
-    except Exception:
-        n = W.shape[0]
-        v = torch.randn(n, device=W.device)
-        v = v / (v.norm() + 1e-12)
-        lam = 0.0
-        for _ in range(iters):
-            v = W @ v
-            nrm = v.norm()
-            if float(nrm) < 1e-12:
-                break
-            v = v / nrm
-            lam = float((v @ (W @ v)) / (v @ v + 1e-12))
-        return abs(lam)
+def spectral_radius_power(W: Tensor) -> float:
+    eigs = torch.linalg.eigvals(W)
+    return float(torch.max(torch.abs(eigs)).item())
 
 @torch.no_grad()
 def scale_to_sr(W: torch.Tensor, target_sr: float | None):

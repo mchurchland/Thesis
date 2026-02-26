@@ -4,7 +4,6 @@ import torch
 def legendre_P(x: Tensor, order: int) -> Tensor:
     """
     Low-order Legendre polynomials P_n on [-1, 1] (n=1..3) via torch.special.legendre_polynomial_p.
-    See: https://github.com/pytorch/pytorch/blob/main/torch/special/__init__.py
     """
     if order > 3 or order < 0:
         raise ValueError("Supported orders: 1..3")
@@ -85,13 +84,3 @@ def r2_score(y_true: Tensor, y_pred: Tensor) -> float:
     ss_res = torch.sum((y_true - y_pred)**2)
     ss_tot = torch.sum(y_true_c**2) + 1e-12
     return float(1.0 - (ss_res / ss_tot))
-
-@torch.no_grad()
-def effective_rank(X: Tensor) -> float:
-    """Effective rank helper (same as effective_rank_from_states)."""
-    Xc = X - X.mean(dim=0, keepdim=True)
-    s = torch.linalg.svdvals(Xc)
-    s = torch.clamp(s, min=1e-12)
-    p = s / torch.sum(s)
-    H = -torch.sum(p * torch.log(p))
-    return float(torch.exp(H))

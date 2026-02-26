@@ -23,9 +23,6 @@ class SimulationParams:
     ipc_max_delay: int = 50
     ipc_max_order: int = 3
     ridge_alpha: float = 1e-4
-    k_controllability: int = 100
-    sat_thresh: float = 2.0
-    near_zero_std: float = 1e-3
 
 
 DEFAULT_SIM_PARAMS = SimulationParams()
@@ -128,9 +125,6 @@ def evaluate_reservoir(
         sim_params.ipc_max_delay,
         sim_params.ipc_max_order,
         sim_params.ridge_alpha,
-        sim_params.k_controllability,
-        sim_params.sat_thresh,
-        sim_params.near_zero_std,
     )
 
 
@@ -174,7 +168,6 @@ def _run_variant_row(
             alpha = ctx.alpha
         )
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
-
         rows_local.append(
             (
                 mode_label,

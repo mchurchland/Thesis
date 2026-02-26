@@ -32,7 +32,7 @@ if not os.environ.get("MPLBACKEND"):
         matplotlib.use("Agg")
         
 
-from util.graph_utils import _compute_dispersion_table
+from util.graph_utils import _compute_dispersion_table, _compute_mean_table
 
 # ---------------------------- CLI ----------------------------
 
@@ -66,6 +66,7 @@ def _safe_path(path: str) -> str:
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     needed = ["mode","shuffle_id","rho_target","leak","input_scale","MC","IPC","KR","GR","src"]
+    df = df.copy()
     for c in needed:
         if c not in df.columns:
             if c in ("MC","IPC","KR","GR"):
@@ -80,7 +81,8 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
                 raise ValueError(f"Missing required column: {c}")
     # types
     df["mode"] = df["mode"].astype(str)
-    return df[needed].copy()
+    extras = [c for c in df.columns if c not in needed]
+    return df[needed + extras].copy()
 
 def _dispersion(a: np.ndarray) -> float:
     a = np.asarray(a, float).ravel()
@@ -372,6 +374,206 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     print(f"[saved] {out_fig}")
 
 
+def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
+    """
+    3D line plot for weight_test (and other numeric modes):
+      x = Gaussian magnitude (alpha) on log scale (log10 transform)
+      y = mean CV (dispersion) per metric (MC/IPC/KR/GR)
+      z = mean of the invariance `mean` column (per mode)
+    CV is not computed for `mean`; we reuse the dispersion table for MC/IPC/KR/GR only.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    def mode_to_value(mode: str) -> float:
+        mode_str = str(mode)
+        nums = re.findall(r"[0-9]+(?:\\.[0-9]+)?", mode_str)
+        for tok in nums:
+            try:
+                return float(tok)
+            except Exception:
+                continue
+        return np.nan
+
+    mode_vals = []
+    for m in combined["mode"].unique():
+        v = mode_to_value(m)
+        if np.isfinite(v):
+            mode_vals.append((m, v))
+    if not mode_vals:
+        print("[warn] plot_weight_gauss_mean_cv: no modes with numeric values found.")
+        return
+    mode_vals = sorted(mode_vals, key=lambda t: t[1])
+    modes = [m for m, _ in mode_vals]
+
+    if "mean" not in combined.columns:
+        print("[warn] plot_weight_gauss_mean_cv: 'mean' column missing; skipping.")
+        return
+
+    mean_tbl = _compute_mean_table(combined)
+    mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
+    mean_mean_lookup = (
+        mean_tbl[mean_tbl["metric"] == "mean"]
+        .groupby("mode")["mean"]
+        .mean()
+    )
+    cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
+
+    # Metrics that have both mean and cv
+    metrics = [m for m in ("MC", "IPC", "KR", "GR") if (m in mean_tbl["metric"].unique()) and (m in disp["metric"].unique())]
+    if not metrics:
+        print("[warn] plot_weight_gauss_mean_cv: no overlapping metrics with mean+CV.")
+        return
+
+    # Choose a scaling for the mean column so z-values stay in a readable range.
+    max_mean = np.nanmax(mean_mean_lookup.values) if len(mean_mean_lookup) else np.nan
+    if np.isfinite(max_mean) and max_mean > 0:
+        z_power = int(np.floor(np.log10(max_mean)))
+        z_scale = 10.0 ** z_power
+    else:
+        z_power = 0
+        z_scale = 1.0
+
+    fig = plt.figure(figsize=(8, 6), dpi=140)
+    ax = fig.add_subplot(111, projection="3d")
+    colors = mpl.colormaps["tab10"]
+    plotted = False
+
+    for idx, metric in enumerate(metrics):
+        rows = []
+        for mode, x_raw in mode_vals:
+            y_cv = cv_lookup.get((mode, metric), np.nan)
+            z_mean = mean_mean_lookup.get(mode, np.nan)
+            if not (np.isfinite(y_cv) and np.isfinite(z_mean) and x_raw > 0):
+                continue
+            rows.append((np.log10(x_raw), y_cv, z_mean / z_scale))
+        if not rows:
+            continue
+        rows = sorted(rows, key=lambda t: t[0])
+        xs, ys, zs = map(np.asarray, zip(*rows))
+        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        print("[warn] plot_weight_gauss_mean_cv: no finite data to plot.")
+        return
+
+    ax.set_xlabel("log10(weight_test alpha)")
+    ax.set_ylabel("mean CV (y)")
+    ax.set_zlabel(f"mean (×1e{z_power})")
+    ax.set_title("weight_test mean column vs CV vs Gaussian magnitude")
+    # helpful x ticks at common magnitudes if they are within range
+    xticks = [v for v in (1, 5, 10, 100, 1000) if np.isfinite(np.log10(v))]
+    ax.set_xticks(np.log10(xticks))
+    ax.set_xticklabels([str(v) for v in xticks])
+    ax.legend()
+    fig.tight_layout()
+
+    out_fig = _safe_path(os.path.join(out_dir, "weight_mean_cv_log3d.png"))
+    fig.savefig(out_fig, dpi=300)
+    if show:
+        plt.show()
+    plt.close(fig)
+    print(f"[saved] {out_fig}")
+
+
+def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
+    """
+    3D line plot like plot_weight_gauss_mean_cv but using mean performance instead of mean CV:
+      x = Gaussian magnitude (alpha) on log scale
+      y = mean performance (per metric MC/IPC/KR/GR)
+      z = invariance `mean` column (scaled with scientific factor in label)
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    def mode_to_value(mode: str) -> float:
+        mode_str = str(mode)
+        nums = re.findall(r"[0-9]+(?:\\.[0-9]+)?", mode_str)
+        for tok in nums:
+            try:
+                return float(tok)
+            except Exception:
+                continue
+        return np.nan
+
+    mode_vals = []
+    for m in combined["mode"].unique():
+        v = mode_to_value(m)
+        if np.isfinite(v):
+            mode_vals.append((m, v))
+    if not mode_vals:
+        print("[warn] plot_weight_gauss_mean_perf: no modes with numeric values found.")
+        return
+    mode_vals = sorted(mode_vals, key=lambda t: t[1])
+
+    if "mean" not in combined.columns:
+        print("[warn] plot_weight_gauss_mean_perf: 'mean' column missing; skipping.")
+        return
+
+    mean_tbl = _compute_mean_table(combined)
+    mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
+    mean_mean_lookup = (
+        mean_tbl[mean_tbl["metric"] == "mean"]
+        .groupby("mode")["mean"]
+        .mean()
+    )
+
+    # Determine z scaling for nicer scientific-label axis
+    max_mean = np.nanmax(mean_mean_lookup.values) if len(mean_mean_lookup) else np.nan
+    if np.isfinite(max_mean) and max_mean > 0:
+        z_power = int(np.floor(np.log10(max_mean)))
+        z_scale = 10.0 ** z_power
+    else:
+        z_power = 0
+        z_scale = 1.0
+
+    # Metrics present in mean table (performance means)
+    metrics = [m for m in ("MC", "IPC", "KR", "GR") if m in mean_tbl["metric"].unique()]
+    if not metrics:
+        print("[warn] plot_weight_gauss_mean_perf: no metrics with mean values found.")
+        return
+
+    fig = plt.figure(figsize=(8, 6), dpi=140)
+    ax = fig.add_subplot(111, projection="3d")
+    colors = mpl.colormaps["tab10"]
+    plotted = False
+
+    for idx, metric in enumerate(metrics):
+        rows = []
+        for mode, x_raw in mode_vals:
+            y_mean = mean_lookup.get((mode, metric), np.nan)
+            z_mean = mean_mean_lookup.get(mode, np.nan)
+            if not (np.isfinite(y_mean) and np.isfinite(z_mean) and x_raw > 0):
+                continue
+            rows.append((np.log10(x_raw), y_mean, z_mean / z_scale))
+        if not rows:
+            continue
+        rows = sorted(rows, key=lambda t: t[0])
+        xs, ys, zs = map(np.asarray, zip(*rows))
+        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        print("[warn] plot_weight_gauss_mean_perf: no finite data to plot.")
+        return
+
+    ax.set_xlabel("log10(weight_test alpha)")
+    ax.set_ylabel("mean performance (y)")
+    ax.set_zlabel(f"mean (×1e{z_power})")
+    ax.set_title("weight_test mean column vs performance vs Gaussian magnitude")
+    xticks = [v for v in (1, 5, 10, 100, 1000) if np.isfinite(np.log10(v))]
+    ax.set_xticks(np.log10(xticks))
+    ax.set_xticklabels([str(v) for v in xticks])
+    fig.tight_layout()
+
+    out_fig = _safe_path(os.path.join(out_dir, "weight_mean_perf_log3d.png"))
+    fig.savefig(out_fig, dpi=300)
+    if show:
+        plt.show()
+    plt.close(fig)
+    print(f"[saved] {out_fig}")
+
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
@@ -652,7 +854,9 @@ def main():
 
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    plot_frac_cv_meanline(disp, combined, args.out_dir)
+    #plot_frac_cv_meanline(disp, combined, args.out_dir)
+    plot_weight_gauss_mean_cv(disp, combined, args.out_dir)
+    plot_weight_gauss_mean_perf(disp, combined, args.out_dir)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_kruskal_wallis_tables(disp)
