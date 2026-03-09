@@ -790,6 +790,7 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
         print("[warn] no modes to test.")
         return
     print("\n=== Kruskal-Wallis tests (dispersion across modes within each metric) ===")
+    
     for m in metrics:
         rows = []
         groups = []
@@ -809,6 +810,7 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
             continue
         H, p = kruskal(*groups)
         df = pd.DataFrame(rows)
+        print(df['mode'].unique())
         for a, b in itertools.combinations(df["mode"].unique(), 2):
                     row_a = df[df["mode"] == a].iloc[0]
                     row_b = df[df["mode"] == b].iloc[0]
@@ -855,8 +857,8 @@ def main():
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_frac_cv_meanline(disp, combined, args.out_dir)
-    plot_weight_gauss_mean_cv(disp, combined, args.out_dir)
-    plot_weight_gauss_mean_perf(disp, combined, args.out_dir)
+    #plot_weight_gauss_mean_cv(disp, combined, args.out_dir)
+    #plot_weight_gauss_mean_perf(disp, combined, args.out_dir)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_kruskal_wallis_tables(disp)
