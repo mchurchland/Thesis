@@ -3,7 +3,6 @@ from torch import Tensor
 
 # ---- repo helpers (reuse your utils/stats) ----
 from network_stats.stats import compute_IPC, compute_KR, compute_GR, compute_MC
-from network_stats.stats_util import  effective_rank
 @torch.no_grad()
 def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tuple[Tensor, Tensor]:
     """

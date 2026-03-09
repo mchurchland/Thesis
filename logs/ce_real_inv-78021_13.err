@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 30, in <module>
+    from reservoir_variants import VARIANT_KEYS, VariantContext, run_variant, save_rows
+  File "/home/milesc/Thesis/reservoir_variants.py", line 10, in <module>
+    from network_stats.run_one import run_one
+  File "/home/milesc/Thesis/network_stats/run_one.py", line 6, in <module>
+    from network_stats.stats_util import  effective_rank
+ImportError: cannot import name 'effective_rank' from 'network_stats.stats_util' (/home/milesc/Thesis/network_stats/stats_util.py)
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job ws_p01_randN --out-dir experiment_full_chunks/chunk_13 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_13 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 500 --repeat-split 20 --repeat-rank 13 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)
