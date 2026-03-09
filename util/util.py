@@ -276,8 +276,6 @@ def build_reservoir(
         p = float(feature_conn.split("=")[1])
         A = ws_adjacency(N, ws_k, p, rng).astype(np.float32)
         mask = (A != 0).astype(np.float32)
-        if nnz_target is not None:
-            mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
         
 

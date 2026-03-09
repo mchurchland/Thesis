@@ -34,7 +34,7 @@ from util.util import load_connectome
 
 # =================== Defaults (match your diagnostics) ===================
 
-WS_K = 40  # signature compatibility with util.build_reservoir
+WS_K = 10  # signature compatibility with util.build_reservoir
 
 ALL_JOB_KEYS = (
     "shuffle_weights",

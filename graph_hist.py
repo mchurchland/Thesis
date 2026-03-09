@@ -26,11 +26,11 @@ from scipy.stats import kruskal
 import matplotlib as mpl
 import re
 
-import matplotlib.pyplot as plt
 if not os.environ.get("MPLBACKEND"):
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
-        matplotlib.use("Agg")
-        
+        mpl.use("Agg")
+
+import matplotlib.pyplot as plt
 
 from util.graph_utils import _compute_dispersion_table, _compute_mean_table
 
@@ -63,6 +63,142 @@ def _safe_path(path: str) -> str:
         if not os.path.exists(cand):
             return cand
         k += 1
+
+
+def _save_publication_figure(fig, out_path: str, dpi: int = 600):
+    """Save figure using paper-friendly defaults."""
+    fig.savefig(
+        out_path,
+        dpi=dpi,
+        bbox_inches="tight",
+        pad_inches=0.02,
+        facecolor="white",
+        edgecolor="white",
+    )
+
+
+def _tight_layout_quiet(fig):
+    """Apply tight layout while suppressing benign layout warnings."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Tight layout not applied.*", category=UserWarning)
+        fig.tight_layout()
+
+
+def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
+    """Apply a cleaner, publication-friendly 3D style."""
+    ax.grid(True, which="major", linestyle=":", alpha=0.28)
+    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=tick_pad)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=tick_pad)
+    ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=2)
+    try:
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+            axis.pane.set_facecolor((1.0, 1.0, 1.0, 1.0))
+            axis.pane.set_edgecolor((0.85, 0.85, 0.85, 1.0))
+    except Exception:
+        pass
+
+
+def _capture_figure_rgba(fig):
+    """Render a figure and return an RGBA image array."""
+    fig.canvas.draw()
+    w, h = fig.canvas.get_width_height()
+    return np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4).copy()
+
+
+def _trim_white_border(img: np.ndarray, tol: int = 250, pad: int = 20) -> np.ndarray:
+    """Trim mostly-white border from an RGBA image."""
+    if img.ndim != 3 or img.shape[2] < 3:
+        return img
+    rgb = img[..., :3]
+    alpha = img[..., 3] if img.shape[2] >= 4 else np.full(img.shape[:2], 255, dtype=np.uint8)
+    mask = (np.any(rgb < tol, axis=2)) & (alpha > 0)
+
+    ys = np.where(mask.any(axis=1))[0]
+    xs = np.where(mask.any(axis=0))[0]
+    if ys.size == 0 or xs.size == 0:
+        return img
+
+    y0 = max(int(ys[0]) - pad, 0)
+    y1 = min(int(ys[-1]) + pad + 1, img.shape[0])
+    x0 = max(int(xs[0]) - pad, 0)
+    x1 = min(int(xs[-1]) + pad + 1, img.shape[1])
+    return img[y0:y1, x0:x1]
+
+
+def _pad_height_center(img: np.ndarray, target_h: int) -> np.ndarray:
+    """Pad image to target height with white background, centered vertically."""
+    h, w = img.shape[:2]
+    if h >= target_h:
+        return img
+    out = np.full((target_h, w, 4), 255, dtype=np.uint8)
+    top = (target_h - h) // 2
+    out[top:top + h, :w] = img
+    return out
+
+
+def _save_3d_front_back(
+    fig,
+    axes,
+    out_png: str,
+    front_view=(22, -35),
+    back_view=(22, 145),
+    dpi: int = 600,
+    tick_labelsize: int = 11,
+    tick_pad: int = 2,
+):
+    """Save one publication PNG with front/back views side-by-side."""
+    if isinstance(axes, (list, tuple, np.ndarray)):
+        axes_list = [ax for ax in axes if ax is not None]
+    else:
+        axes_list = [axes] if axes is not None else []
+
+    for ax in axes_list:
+        _style_3d_axis(ax, tick_labelsize=tick_labelsize, tick_pad=tick_pad)
+
+    front_png = _safe_path(out_png)
+    front_root, front_ext = os.path.splitext(front_png)
+    if not front_ext:
+        front_ext = ".png"
+        front_png = f"{front_png}{front_ext}"
+        front_root, _ = os.path.splitext(front_png)
+
+    original_views = []
+    for ax in axes_list:
+        original_views.append((ax.elev, ax.azim))
+
+    for ax in axes_list:
+        ax.view_init(elev=front_view[0], azim=front_view[1])
+    img_front = _trim_white_border(_capture_figure_rgba(fig))
+
+    for ax in axes_list:
+        ax.view_init(elev=back_view[0], azim=back_view[1])
+    img_back = _trim_white_border(_capture_figure_rgba(fig))
+
+    target_h = max(img_front.shape[0], img_back.shape[0])
+    img_front = _pad_height_center(img_front, target_h)
+    img_back = _pad_height_center(img_back, target_h)
+
+    gap_px = 0
+    canvas_w = img_front.shape[1] + gap_px + img_back.shape[1]
+    canvas = np.full((target_h, canvas_w, 4), 255, dtype=np.uint8)
+    canvas[:, :img_front.shape[1]] = img_front
+    canvas[:, img_front.shape[1] + gap_px:] = img_back
+
+    panel_fig = plt.figure(
+        figsize=(canvas.shape[1] / float(dpi), canvas.shape[0] / float(dpi)),
+        dpi=dpi,
+    )
+    ax_panel = panel_fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax_panel.imshow(canvas)
+    ax_panel.axis("off")
+
+    _save_publication_figure(panel_fig, front_png, dpi=dpi)
+    plt.close(panel_fig)
+
+    for ax, (elev, azim) in zip(axes_list, original_views):
+        ax.view_init(elev=elev, azim=azim)
+
+    return [front_png]
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     needed = ["mode","shuffle_id","rho_target","leak","input_scale","MC","IPC","KR","GR","src"]
@@ -206,11 +342,11 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 c = color_for_mode[mode]
 
                 # 3D polyline at constant x
-                ax.plot([x] * len(y), y, zs=z, zdir="z", linewidth=2.5, alpha=0.9, color=c)
+                ax.plot([x] * len, y, zs=z, zdir="z", linewidth=2.5, alpha=0.9, color=c)
 
                 # Median CV marker line at constant x, spanning z
                 #med = float(np.median(s))
-                #z_max_local = float(np.max(z)) if len(z) else 0.0
+                #z_max_local = float(np.max) if len else 0.0
                 #ax.plot([x, x], [med, med], zs=[0.0, z_max_local], zdir="z",
                 #        linewidth=1.2, alpha=0.5, color=c, linestyle="--")
 
@@ -223,7 +359,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
             any_plotted = True
             ax.set_title(f"{metric}")
             ax.set_xlabel(x_label)
-            ax.set_ylabel("coefficient of variation (y)")
+            ax.set_ylabel("coefficient of variation ")
             ax.set_zlabel("fraction (hist, z)")
 
             # Make x discrete and readable
@@ -261,16 +397,24 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
         sm.set_array([])
         #cbar = fig.colorbar(sm, ax=axes, fraction=0.025, pad=0.02)
-        #cbar.set_label("sign_test frac (z)")
+        #cbar.set_label("sign_test frac ")
 
         fig.tight_layout()
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
-        out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid_3d{suffix}.png"))
-        fig.savefig(out_fig, dpi=300)
+        out_fig = os.path.join(out_dir, f"all_arch_hist_grid_3d{suffix}.png")
+        saved_paths = _save_3d_front_back(
+            fig,
+            axes,
+            out_fig,
+            front_view=(22, -35),
+            back_view=(22, 145),
+            dpi=600,
+        )
         plt.show()
         plt.close(fig)
-        print(f"[saved] {out_fig}")
+        for out_path in saved_paths:
+            print(f"[saved] {out_path}")
 
 
 
@@ -319,7 +463,7 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     mean_perf = comb_long.groupby(["mode", "metric"])["value"].mean()
     mean_cv = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
-    fig = plt.figure(figsize=(8, 6), dpi=140)
+    fig = plt.figure(figsize=(8, 6), dpi=300)
     ax = fig.add_subplot(111, projection="3d")
 
     colors = mpl.colormaps["tab10"]
@@ -330,7 +474,7 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
             frac = mode_values.get(mode, np.nan)
             y = mean_cv.get((mode, metric), np.nan)
             z = mean_perf.get((mode, metric), np.nan)
-            if not (np.isfinite(frac) and np.isfinite(y) and np.isfinite(z)):
+            if not (np.isfinite(frac) and np.isfinite and np.isfinite):
                 continue
             rows.append((frac, y, z))
         if not rows:
@@ -346,11 +490,11 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
         return
 
     if all(str(m).startswith("sign_test") for m in modes):
-        x_label = "sign_test frac (x)"
+        x_label = "sign_test frac"
     elif all(str(m).startswith("weight_test") for m in modes):
-        x_label = "weight_test value (x)"
+        x_label = "weight_test value"
     else:
-        x_label = "mode value (x)"
+        x_label = "mode value"
 
     # Use the full set of mode positions for x-limits.
     x_positions = [mode_values[m] for m in modes if np.isfinite(mode_values[m])]
@@ -358,20 +502,30 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     span = x_max - x_min
     pad = 0.05 * span if span > 0 else 1.0
 
-    ax.set_xlabel(x_label)
-    ax.set_ylabel("mean CV (y)")
-    ax.set_zlabel("mean performance (z)")
-    ax.set_title("Mean performance vs CV vs mode value")
+    ax.set_xlabel(x_label, fontsize=18, labelpad=2)
+    ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
+    ax.set_zlabel("mean performance", fontsize=18, labelpad=2)
+    ax.set_title("Mean performance vs CV vs mode value",fontsize=18)
     ax.set_xlim(x_min - pad, x_max + pad)
     ax.legend()
-    fig.tight_layout()
+    _tight_layout_quiet(fig)
 
-    out_fig = _safe_path(os.path.join(out_dir, "meanpoint_frac_cv_lines.png"))
-    fig.savefig(out_fig, dpi=300)
+    out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
+    saved_paths = _save_3d_front_back(
+        fig,
+        ax,
+        out_fig,
+        front_view=(22, -35),
+        back_view=(22, 145),
+        dpi=600,
+        tick_labelsize=16,
+        tick_pad=-4,
+    )
     if show:
         plt.show()
     plt.close(fig)
-    print(f"[saved] {out_fig}")
+    for out_path in saved_paths:
+        print(f"[saved] {out_path}")
 
 
 def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
@@ -405,17 +559,26 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     mode_vals = sorted(mode_vals, key=lambda t: t[1])
     modes = [m for m, _ in mode_vals]
 
-    if "mean" not in combined.columns:
-        print("[warn] plot_weight_gauss_mean_cv: 'mean' column missing; skipping.")
-        return
-
     mean_tbl = _compute_mean_table(combined)
-    mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
-    mean_mean_lookup = (
-        mean_tbl[mean_tbl["metric"] == "mean"]
-        .groupby("mode")["mean"]
-        .mean()
-    )
+    if "mean" in combined.columns:
+        mean_mean_lookup = (
+            mean_tbl[mean_tbl["metric"] == "mean"]
+            .groupby("mode")["mean"]
+            .mean()
+        )
+        z_label_base = "mean"
+        title_z_src = "mean column"
+    else:
+        # Fallback for legacy combined tables: use the per-mode average of
+        # MC/IPC/KR/GR means as the z dimension proxy.
+        mean_mean_lookup = (
+            mean_tbl[mean_tbl["metric"].isin(["MC", "IPC", "KR", "GR"])]
+            .groupby("mode")["mean"]
+            .mean()
+        )
+        z_label_base = "avg metric mean"
+        title_z_src = "avg metric mean"
+        print("[info] plot_weight_gauss_mean_cv: 'mean' missing; using avg(MC,IPC,KR,GR) for z.")
     cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
     # Metrics that have both mean and cv
@@ -458,23 +621,32 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
         print("[warn] plot_weight_gauss_mean_cv: no finite data to plot.")
         return
 
-    ax.set_xlabel("log10(weight_test alpha)")
-    ax.set_ylabel("mean CV (y)")
-    ax.set_zlabel(f"mean (×1e{z_power})")
-    ax.set_title("weight_test mean column vs CV vs Gaussian magnitude")
+    ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=10)
+    ax.set_ylabel("mean CV ", fontsize=18, labelpad=10)
+    ax.set_zlabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=2)
     # helpful x ticks at common magnitudes if they are within range
-    xticks = [v for v in (1, 5, 10, 100, 1000) if np.isfinite(np.log10(v))]
+    xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
     ax.set_xticks(np.log10(xticks))
     ax.set_xticklabels([str(v) for v in xticks])
-    ax.legend()
-    fig.tight_layout()
+    #ax.legend()
+    _tight_layout_quiet(fig)
 
-    out_fig = _safe_path(os.path.join(out_dir, "weight_mean_cv_log3d.png"))
-    fig.savefig(out_fig, dpi=300)
+    out_fig = os.path.join(out_dir, "weight_mean_cv_log3d.png")
+    saved_paths = _save_3d_front_back(
+        fig,
+        ax,
+        out_fig,
+        front_view=(22, -35),
+        back_view=(22, 145),
+        dpi=600,
+        tick_labelsize=16,
+        tick_pad=2,
+    )
     if show:
         plt.show()
     plt.close(fig)
-    print(f"[saved] {out_fig}")
+    for out_path in saved_paths:
+        print(f"[saved] {out_path}")
 
 
 def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
@@ -506,17 +678,27 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
         return
     mode_vals = sorted(mode_vals, key=lambda t: t[1])
 
-    if "mean" not in combined.columns:
-        print("[warn] plot_weight_gauss_mean_perf: 'mean' column missing; skipping.")
-        return
-
     mean_tbl = _compute_mean_table(combined)
     mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
-    mean_mean_lookup = (
-        mean_tbl[mean_tbl["metric"] == "mean"]
-        .groupby("mode")["mean"]
-        .mean()
-    )
+    if "mean" in combined.columns:
+        mean_mean_lookup = (
+            mean_tbl[mean_tbl["metric"] == "mean"]
+            .groupby("mode")["mean"]
+            .mean()
+        )
+        z_label_base = "mean"
+        title_z_src = "mean column"
+    else:
+        # Fallback for legacy combined tables: use the per-mode average of
+        # MC/IPC/KR/GR means as the z dimension proxy.
+        mean_mean_lookup = (
+            mean_tbl[mean_tbl["metric"].isin(["MC", "IPC", "KR", "GR"])]
+            .groupby("mode")["mean"]
+            .mean()
+        )
+        z_label_base = "avg metric mean"
+        title_z_src = "avg metric mean"
+        print("[info] plot_weight_gauss_mean_perf: 'mean' missing; using avg(MC,IPC,KR,GR) for z.")
 
     # Determine z scaling for nicer scientific-label axis
     max_mean = np.nanmax(mean_mean_lookup.values) if len(mean_mean_lookup) else np.nan
@@ -558,21 +740,30 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
         print("[warn] plot_weight_gauss_mean_perf: no finite data to plot.")
         return
 
-    ax.set_xlabel("log10(weight_test alpha)")
-    ax.set_ylabel("mean performance (y)")
-    ax.set_zlabel(f"mean (×1e{z_power})")
-    ax.set_title("weight_test mean column vs performance vs Gaussian magnitude")
-    xticks = [v for v in (1, 5, 10, 100, 1000) if np.isfinite(np.log10(v))]
+    ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=2.5)
+    ax.set_ylabel("Mean Metric Value", fontsize=18, labelpad=2.5)
+    ax.set_zlabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=2)
+    xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
     ax.set_xticks(np.log10(xticks))
     ax.set_xticklabels([str(v) for v in xticks])
-    fig.tight_layout()
+    _tight_layout_quiet(fig)
 
-    out_fig = _safe_path(os.path.join(out_dir, "weight_mean_perf_log3d.png"))
-    fig.savefig(out_fig, dpi=300)
+    out_fig = os.path.join(out_dir, "weight_mean_perf_log3d.png")
+    saved_paths = _save_3d_front_back(
+        fig,
+        ax,
+        out_fig,
+        front_view=(22, -35),
+        back_view=(22, 145),
+        dpi=600,
+        tick_labelsize=16,
+        tick_pad=1,
+    )
     if show:
         plt.show()
     plt.close(fig)
-    print(f"[saved] {out_fig}")
+    for out_path in saved_paths:
+        print(f"[saved] {out_path}")
 
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     os.makedirs(out_dir, exist_ok=True)
@@ -847,21 +1038,21 @@ def main():
     # Save a copy (non-destructive; versioned if exists)
     out_comb = _safe_path(os.path.join(args.out_dir, "combined.ALL.csv"))
     #combined.to_csv(out_comb, index=False)
-    print(f"[saved] {out_comb}  (rows={len(combined)})")
+    #print(f"[saved] {out_comb}  (rows={len(combined)})")
 
     # Compute and save dispersion table
     disp = _compute_dispersion_table(combined,mode="cv")
-    out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))
+    #out_disp = _safe_path(os.path.join(args.out_dir, "dispersion_by_group.ALL.csv"))
     #disp.to_csv(out_disp, index=False)
 
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_frac_cv_meanline(disp, combined, args.out_dir)
-    #plot_weight_gauss_mean_cv(disp, combined, args.out_dir)
-    #plot_weight_gauss_mean_perf(disp, combined, args.out_dir)
+    plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=False)
+    plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=False)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    print_kruskal_wallis_tables(disp)
+    #print_kruskal_wallis_tables(disp)
 
 
 if __name__ == "__main__":
