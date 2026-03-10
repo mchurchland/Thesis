@@ -17,6 +17,7 @@ Outputs (defaults)
 
 import os
 import argparse
+import csv
 import numpy as np
 import pandas as pd
 import itertools
@@ -65,6 +66,71 @@ def _safe_path(path: str) -> str:
         k += 1
 
 
+def _read_combined_csv(path: str) -> pd.DataFrame:
+    """Read combined CSV and trim malformed extra columns per row if needed."""
+    try:
+        return pd.read_csv(path)
+    except pd.errors.ParserError as exc:
+        print(f"[warn] {exc}")
+        print(f"[warn] Retrying by trimming malformed extra column(s) from {path}.")
+
+        with open(path, "r", newline="", encoding="utf-8-sig") as handle:
+            reader = csv.reader(handle)
+            header = next(reader, None)
+            if not header:
+                raise
+
+            expected_fields = len(header)
+            rows = []
+            trimmed_rows = 0
+            padded_rows = 0
+            first_trimmed_line = None
+            first_padded_line = None
+
+            for line_no, row in enumerate(reader, start=2):
+                n_fields = len(row)
+                if n_fields > expected_fields:
+                    if first_trimmed_line is None:
+                        first_trimmed_line = line_no
+                    rows.append(row[:expected_fields])
+                    trimmed_rows += 1
+                elif n_fields < expected_fields:
+                    if first_padded_line is None:
+                        first_padded_line = line_no
+                    rows.append(row + [""] * (expected_fields - n_fields))
+                    padded_rows += 1
+                else:
+                    rows.append(row)
+
+        if trimmed_rows == 0 and padded_rows == 0:
+            raise
+
+        print(
+            f"[warn] Trimmed extra trailing column(s) on {trimmed_rows} row(s). "
+            f"First trimmed line: {first_trimmed_line}."
+        )
+        if padded_rows:
+            print(
+                f"[warn] Padded missing trailing column(s) on {padded_rows} row(s). "
+                f"First padded line: {first_padded_line}."
+            )
+        df = pd.DataFrame(rows, columns=header)
+        numeric_cols = [
+            "shuffle_id",
+            "rho_target",
+            "leak",
+            "input_scale",
+            "MC",
+            "IPC",
+            "KR",
+            "GR",
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df
+
+
 def _save_publication_figure(fig, out_path: str, dpi: int = 600):
     """Save figure using paper-friendly defaults."""
     fig.savefig(
@@ -87,15 +153,43 @@ def _tight_layout_quiet(fig):
 def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
     """Apply a cleaner, publication-friendly 3D style."""
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
-    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=tick_pad)
-    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=tick_pad)
+    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=0)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=6)
     ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=2)
+    y_formatter = ax.yaxis.get_major_formatter()
+    if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
+        y_formatter.set_useOffset(False)
+        y_formatter.set_scientific(False)
+    ax.yaxis.get_offset_text().set_visible(False)
+
     try:
         for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
             axis.pane.set_facecolor((1.0, 1.0, 1.0, 1.0))
             axis.pane.set_edgecolor((0.85, 0.85, 0.85, 1.0))
     except Exception:
         pass
+
+
+def _format_wt_mean_axis_as_offset(ax, wt_vals_scaled):
+    """
+    Compact Wt-mean tick labels by subtracting a shared 2-decimal baseline.
+    Axis values are already scaled by 10**z_power.
+    """
+    if not wt_vals_scaled:
+        return None
+    vals = np.asarray(wt_vals_scaled, dtype=float)
+    vals = vals[np.isfinite(vals)]
+    if vals.size == 0:
+        return None
+
+    base = np.floor(np.nanmin(vals) * 100.0) / 100.0
+    # Show only the fine variation around the shared base; values are in micro-units.
+    ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=4))
+    ax.yaxis.set_major_formatter(
+        mpl.ticker.FuncFormatter(lambda v, _pos: f"{(v - base) * 1000.0:.1f}")
+    )
+    ax.yaxis.get_offset_text().set_visible(False)
+    return base
 
 
 def _capture_figure_rgba(fig):
@@ -560,25 +654,14 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     modes = [m for m, _ in mode_vals]
 
     mean_tbl = _compute_mean_table(combined)
+    print(combined.columns)
     if "mean" in combined.columns:
         mean_mean_lookup = (
             mean_tbl[mean_tbl["metric"] == "mean"]
             .groupby("mode")["mean"]
             .mean()
         )
-        z_label_base = "mean"
-        title_z_src = "mean column"
-    else:
-        # Fallback for legacy combined tables: use the per-mode average of
-        # MC/IPC/KR/GR means as the z dimension proxy.
-        mean_mean_lookup = (
-            mean_tbl[mean_tbl["metric"].isin(["MC", "IPC", "KR", "GR"])]
-            .groupby("mode")["mean"]
-            .mean()
-        )
-        z_label_base = "avg metric mean"
-        title_z_src = "avg metric mean"
-        print("[info] plot_weight_gauss_mean_cv: 'mean' missing; using avg(MC,IPC,KR,GR) for z.")
+        z_label_base = "Wt mean"
     cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
     # Metrics that have both mean and cv
@@ -600,6 +683,7 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     ax = fig.add_subplot(111, projection="3d")
     colors = mpl.colormaps["tab10"]
     plotted = False
+    wt_vals_scaled = []
 
     for idx, metric in enumerate(metrics):
         rows = []
@@ -608,12 +692,14 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
             z_mean = mean_mean_lookup.get(mode, np.nan)
             if not (np.isfinite(y_cv) and np.isfinite(z_mean) and x_raw > 0):
                 continue
-            rows.append((np.log10(x_raw), y_cv, z_mean / z_scale))
+            wt_scaled = z_mean / z_scale
+            rows.append((np.log10(x_raw), y_cv, wt_scaled))
+            wt_vals_scaled.append(wt_scaled)
         if not rows:
             continue
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
-        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        ax.plot(xs, zs, ys, marker="o", color=colors(idx % 10), label=metric)
         plotted = True
 
     if not plotted:
@@ -622,8 +708,17 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
         return
 
     ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=10)
-    ax.set_ylabel("mean CV ", fontsize=18, labelpad=10)
-    ax.set_zlabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=2)
+    ax.set_zlabel("mean CV ", fontsize=18, labelpad=12)
+    wt_base = _format_wt_mean_axis_as_offset(ax, wt_vals_scaled)
+    if wt_base is None:
+        ax.set_ylabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=10)
+    else:
+        wt_base_micro = wt_base * 1000.0
+        ax.set_ylabel(
+            f"ΔWt from {wt_base_micro:.0f} (×1e-6)",
+            fontsize=18,
+            labelpad=10,
+        )
     # helpful x ticks at common magnitudes if they are within range
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
     ax.set_xticks(np.log10(xticks))
@@ -640,7 +735,7 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
         back_view=(22, 145),
         dpi=600,
         tick_labelsize=16,
-        tick_pad=2,
+        tick_pad=-2,
     )
     if show:
         plt.show()
@@ -686,19 +781,7 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
             .groupby("mode")["mean"]
             .mean()
         )
-        z_label_base = "mean"
-        title_z_src = "mean column"
-    else:
-        # Fallback for legacy combined tables: use the per-mode average of
-        # MC/IPC/KR/GR means as the z dimension proxy.
-        mean_mean_lookup = (
-            mean_tbl[mean_tbl["metric"].isin(["MC", "IPC", "KR", "GR"])]
-            .groupby("mode")["mean"]
-            .mean()
-        )
-        z_label_base = "avg metric mean"
-        title_z_src = "avg metric mean"
-        print("[info] plot_weight_gauss_mean_perf: 'mean' missing; using avg(MC,IPC,KR,GR) for z.")
+        z_label_base = "Wt mean"
 
     # Determine z scaling for nicer scientific-label axis
     max_mean = np.nanmax(mean_mean_lookup.values) if len(mean_mean_lookup) else np.nan
@@ -719,6 +802,7 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
     ax = fig.add_subplot(111, projection="3d")
     colors = mpl.colormaps["tab10"]
     plotted = False
+    wt_vals_scaled = []
 
     for idx, metric in enumerate(metrics):
         rows = []
@@ -727,12 +811,14 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
             z_mean = mean_mean_lookup.get(mode, np.nan)
             if not (np.isfinite(y_mean) and np.isfinite(z_mean) and x_raw > 0):
                 continue
-            rows.append((np.log10(x_raw), y_mean, z_mean / z_scale))
+            wt_scaled = z_mean / z_scale
+            rows.append((np.log10(x_raw), y_mean, wt_scaled))
+            wt_vals_scaled.append(wt_scaled)
         if not rows:
             continue
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
-        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        ax.plot(xs, zs, ys, marker="o", color=colors(idx % 10), label=metric)
         plotted = True
 
     if not plotted:
@@ -740,9 +826,18 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
         print("[warn] plot_weight_gauss_mean_perf: no finite data to plot.")
         return
 
-    ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=2.5)
-    ax.set_ylabel("Mean Metric Value", fontsize=18, labelpad=2.5)
-    ax.set_zlabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=2)
+    ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=10)
+    ax.set_zlabel("Mean Metric Value", fontsize=18, labelpad=10)
+    wt_base = _format_wt_mean_axis_as_offset(ax, wt_vals_scaled)
+    if wt_base is None:
+        ax.set_ylabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=18)
+    else:
+        wt_base_micro = wt_base * 1000.0
+        ax.set_ylabel(
+            f"ΔWt from {wt_base_micro:.0f} (×1e-6)",
+            fontsize=18,
+            labelpad=18,
+        )
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
     ax.set_xticks(np.log10(xticks))
     ax.set_xticklabels([str(v) for v in xticks])
@@ -757,7 +852,7 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
         back_view=(22, 145),
         dpi=600,
         tick_labelsize=16,
-        tick_pad=1,
+        tick_pad=-2,
     )
     if show:
         plt.show()
@@ -805,10 +900,10 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     if not metrics:
         return
     plt.rcParams.update({
-        "axes.titlesize": 18,
-        "axes.labelsize": 18,
-        "xtick.labelsize": 16,
-        "ytick.labelsize": 16,
+        "axes.titlesize": 25,
+        "axes.labelsize": 25,
+        "xtick.labelsize": 20,
+        "ytick.labelsize": 20,
         "legend.fontsize": 20,
     })
 
@@ -889,7 +984,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 
             if legend_handles is None:
                 legend_handles, legend_labels = ax.get_legend_handles_labels()
-            ax.set_title(f"Invariance dispersion by architecture — {m}")
+            ax.set_title(f"Invariance of {m}")
             if idx == 2 or idx ==3:
                 ax.set_xlabel("coefficient of variation")
             if idx == 0 or idx ==2:
@@ -921,7 +1016,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     if data_mask[idx]:
                         ax.set_ylim(0, y_max)
 
-        if legend_handles:
+        if False:
             fig.legend(
                 legend_handles,
                 legend_labels,
@@ -935,7 +1030,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 borderaxespad=0.8,
             )
 
-        fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
+        #fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
+        fig.tight_layout(rect=(0.01, 0.00, 1.0, 1.0))
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
         out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid{suffix}.png"))
@@ -1001,7 +1097,6 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
             continue
         H, p = kruskal(*groups)
         df = pd.DataFrame(rows)
-        print(df['mode'].unique())
         for a, b in itertools.combinations(df["mode"].unique(), 2):
                     row_a = df[df["mode"] == a].iloc[0]
                     row_b = df[df["mode"] == b].iloc[0]
@@ -1010,11 +1105,12 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
                     vals_a = disp[(disp["metric"] == m) & (disp["mode"] == a)]["dispersion"].dropna().to_numpy()
                     vals_b = disp[(disp["metric"] == m) & (disp["mode"] == b)]["dispersion"].dropna().to_numpy()
                     vals_all = disp[(disp["metric"] == m)]["dispersion"].dropna().to_numpy()
-                    if a == "real" or b =="real":
-                        # pg.tost can emit overflow RuntimeWarnings for extreme t values; suppress locally
-                        with warnings.catch_warnings():
-                            warnings.filterwarnings("ignore", category=RuntimeWarning, module="pingouin")
-                            tost = (pg.tost(vals_a, vals_b, np.abs(np.median(vals_all)) * 0.05, paired=False))
+    
+                    # pg.tost can emit overflow RuntimeWarnings for extreme t values; suppress locally
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", category=RuntimeWarning, module="pingouin")
+                        tost = (pg.tost(vals_a, vals_b, np.abs(np.median(vals_all)) * 0.05, paired=False))
+                    if tost['pval'].iloc[0]<0.05:
                         print(rf"{m} & {a} vs {b} & {tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\")
 
         #print(f"\n{m}")
@@ -1032,7 +1128,7 @@ def main():
     if not os.path.isfile(args.combined):
         raise FileNotFoundError(f"Combined CSV not found: {args.combined}")
 
-    combined = pd.read_csv(args.combined)
+    combined = _read_combined_csv(args.combined)
     combined = _ensure_columns(combined)
 
     # Save a copy (non-destructive; versioned if exists)

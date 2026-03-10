@@ -9,7 +9,7 @@ import torch
 
 from network_stats.run_one import run_one
 from util.util import build_reservoir, degree_matched_shuffle_directed
-
+from sklearn.metrics.pairwise import cosine_similarity
 
 @dataclass(frozen=True)
 class SimulationParams:
@@ -148,7 +148,7 @@ def _run_variant_row(
         raise ValueError("Non-CEL variants need ce_W_bio to set N/nnz.")
 
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
-
+    from util.util import scale_to_sr
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
         assert ctx.ce_ei==None
         Wt, Win = build_reservoir(
@@ -168,6 +168,8 @@ def _run_variant_row(
             alpha = ctx.alpha
         )
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
+        sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
         rows_local.append(
             (
                 mode_label,
@@ -180,6 +182,8 @@ def _run_variant_row(
                 float(scores["KR"]),
                 float(scores["GR"]),
                 float(Wt.mean().item()),
+                float(cosine_similarity(sigma_ce.reshape(1, -1),
+                  Wt.reshape(1, -1))[0, 0]),
                 ctx.src_tag,
             )
         )
@@ -193,7 +197,7 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","mean", "src"])
+            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","mean","cosine_similarity" "src"])
         w.writerows(rows)
 
 
