@@ -182,8 +182,12 @@ def _run_variant_row(
                 float(scores["KR"]),
                 float(scores["GR"]),
                 float(Wt.mean().item()),
-                float(cosine_similarity(sigma_ce.reshape(1, -1),
-                  Wt.reshape(1, -1))[0, 0]),
+                float(
+                    cosine_similarity(
+                        sigma_ce.reshape(1, -1).detach().cpu().numpy(),
+                        Wt.reshape(1, -1).detach().cpu().numpy(),
+                    )[0, 0]
+                ),
                 ctx.src_tag,
             )
         )
