@@ -295,12 +295,9 @@ def run_scores_for_fraction(
             #W_mat = degree_matched_shuffle_directed(ce_W_bio,frac_replace,rng_local)
             Wt, Win = build_reservoir(
                 feature_conn="local_sign",
-                    feature_weights="local_sign",
                     target_sr=target_sr,
                     N=None,
                     ce_W_bio=ce_W_bio,
-                    ce_ei=None,
-                    ws_k=ws_k,
                     input_scale=in_scale,
                     seed=cur_seed,
                     drive_idx=None,

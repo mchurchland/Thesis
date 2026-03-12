@@ -169,7 +169,6 @@ def build_reservoir(
     seed: int,
     feature_conn: str ,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
     N: int| None = None,
-    ws_k: int | None = None,
     ce_W_bio: np.ndarray | None = None,
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
@@ -307,9 +306,9 @@ def build_reservoir(
 
     elif feature_conn.startswith("ws_p="): ## needs to be fixed I need 3108 edges, not 2990
         assert N != None
-        assert ws_k != None
+        assert nnz_target != None
         p = float(feature_conn.split("=")[1])
-        A = ws_adjacency(N, ws_k, p, rng).astype(np.float32)
+        A = ws_directed_adjacency_exact(N, nnz_target, p, rng).astype(np.float32)
         mask = (A != 0).astype(np.float32)
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
         
@@ -406,15 +405,76 @@ def er_adjacency(n: int, p: float, rng: np.random.Generator) -> np.ndarray:
     G.remove_edges_from(nx.selfloop_edges(G))
     return nx.to_numpy_array(G, dtype=np.float32) # pyright: ignore[reportArgumentType]
 
-def ws_adjacency(n: int, k: int, p: float, rng: np.random.Generator) -> np.ndarray:
+
+def ws_directed_adjacency_exact(
+    N: int,
+    nnz_target: int,
+    p: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
     """
-    Undirected Watts-Strogatz small-world adjacency (Watts & Strogatz, 1998, Nature 393:440-442).
-    Uses NetworkX watts_strogatz_graph; see https://github.com/networkx/networkx/blob/main/networkx/generators/smallworld.py#L14
+    Directed Watts-Strogatz-like adjacency with exactly nnz_target edges.
+
+    Construction:
+    1. Start from a directed ring lattice.
+       - Every node gets k_base local outgoing edges.
+       - r nodes get one extra local outgoing edge.
+    2. Rewire each outgoing edge with probability p, preserving each row's out-degree.
+    3. No self-loops, no duplicate edges.
+
+    Returns:
+        A: [N, N] float32 adjacency mask with exactly nnz_target ones.
     """
-    assert k % 2 == 0 and k < n and 0.0 <= p <= 1.0
-    G = nx.watts_strogatz_graph(n, k, p, seed=rng)
-    A = nx.to_numpy_array(G, dtype=np.float32) # pyright: ignore[reportArgumentType]
+    if nnz_target < 0 or nnz_target > N * (N - 1):
+        raise ValueError("nnz_target must be in [0, N*(N-1)]")
+
+    k_base = nnz_target // N # 3018 // 299 = 10
+    r = nnz_target % N ## 3108 % 299 = 118
+
+    if k_base >= N:
+        raise ValueError("nnz_target too large: would require self-loops or duplicate edges")
+
+    # Decide which rows get one extra outgoing edge
+    row_degrees = np.full(N, k_base, dtype=np.int32) ##array of size n filled with k_base = 10, then we select r many to add 1 to!
+    if r > 0:
+        extra_rows = rng.choice(N, size=r, replace=False)
+        row_degrees[extra_rows] += 1
+
+    A = np.zeros((N, N), dtype=np.float32)
+
+    # Step 1: directed ring lattice N-r nodes with out deg 10, r nodes with out deg 11
+    for i in range(N):
+        kout = row_degrees[i]
+        for d in range(1, kout + 1):
+            j = (i + d) % N
+            A[i, j] = 1.0
+
+    # Step 2: rewire while preserving row out-degree
+    for i in range(N):
+        current_targets = np.where(A[i] > 0)[0].tolist()
+
+        for j in current_targets:
+            if rng.random() < p:
+                # remove old edge
+                A[i, j] = 0.0
+
+                # choose a new target not already connected and not self
+                forbidden = set(np.where(A[i] > 0)[0])
+                forbidden.add(i)
+
+                candidates = [v for v in range(N) if v not in forbidden]
+                if not candidates:
+                    # restore original edge if no valid rewiring target exists
+                    A[i, j] = 1.0
+                    continue
+
+                new_j = rng.choice(candidates)
+                A[i, new_j] = 1.0
+
+    # Safety checks
     np.fill_diagonal(A, 0.0)
+    assert int(A.sum()) == nnz_target, (A.sum(), nnz_target)
+
     return A
 
 

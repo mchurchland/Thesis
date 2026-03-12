@@ -92,12 +92,11 @@ def _run_variant_row(
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
         assert ctx.ce_ei==None
-        Wt, Win = build_reservoir( ###this is bad this is so bad nightmare type shit
+        Wt, Win = build_reservoir( 
             feature_conn=feature_conn,
             target_sr=target_sr,
             N=Nloc,
             ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
-            ws_k=ctx.ws_k,
             input_scale=in_scale,
             seed=seed_base,
             drive_idx=None,

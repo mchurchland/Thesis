@@ -1315,10 +1315,10 @@ def main():
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_frac_cv_meanline(disp, combined, args.out_dir)
-    plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
-    plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
+    #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
+    #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
     #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)
-    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)
 
