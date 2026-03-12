@@ -33,7 +33,12 @@ if not os.environ.get("MPLBACKEND"):
 
 import matplotlib.pyplot as plt
 
-from util.graph_utils import _compute_dispersion_table, _compute_mean_table
+from util.graph_utils import (
+    _compute_dispersion_table,
+    _compute_mean_table,
+    _assign_group_ids,
+    _aggregate_over_hparams,
+)
 
 # ---------------------------- CLI ----------------------------
 
@@ -49,6 +54,11 @@ def parse_args():
                     help="Histogram bins for dispersion plots.")
     ap.add_argument("--scatter-alpha", type=float, default=0.55,
                     help="Alpha for MC-vs-GR scatter.")
+    ap.add_argument(
+        "--model",
+        default="",
+        help="Optional exact mode/model name filter (e.g., 'weight_test10.0') for rho/CV/performance plot.",
+    )
     return ap.parse_args()
 
 
@@ -627,8 +637,8 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     3D line plot for weight_test (and other numeric modes):
       x = Gaussian magnitude (alpha) on log scale (log10 transform)
       y = mean CV (dispersion) per metric (MC/IPC/KR/GR)
-      z = mean of the invariance `mean` column (per mode)
-    CV is not computed for `mean`; we reuse the dispersion table for MC/IPC/KR/GR only.
+      z = mean of an invariance column (prefers `cosine_similarity`)
+    CV is not computed for the invariance column; we reuse the dispersion table for MC/IPC/KR/GR only.
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -654,14 +664,23 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     modes = [m for m, _ in mode_vals]
 
     mean_tbl = _compute_mean_table(combined)
-    print(combined.columns)
-    if "mean" in combined.columns:
-        mean_mean_lookup = (
-            mean_tbl[mean_tbl["metric"] == "mean"]
-            .groupby("mode")["mean"]
-            .mean()
-        )
-        z_label_base = "Wt mean"
+    inv_metric = next(
+        (m for m in ("cosine_similarity", "wt_mean", "mean") if m in combined.columns),
+        None,
+    )
+    if inv_metric is None:
+        print("[warn] plot_weight_gauss_mean_cv: no invariance column found (need cosine_similarity/wt_mean/mean).")
+        return
+    inv_tbl = _compute_mean_table(combined, metrics=[inv_metric])
+    mean_mean_lookup = (
+        inv_tbl[inv_tbl["metric"] == inv_metric]
+        .groupby("mode")["mean"]
+        .mean()
+    )
+    if mean_mean_lookup.empty:
+        print(f"[warn] plot_weight_gauss_mean_cv: no values for invariance metric '{inv_metric}'.")
+        return
+    z_label_base = "Cosine similarity" if inv_metric == "cosine_similarity" else "Wt mean"
     cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
     # Metrics that have both mean and cv
@@ -683,7 +702,7 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     ax = fig.add_subplot(111, projection="3d")
     colors = mpl.colormaps["tab10"]
     plotted = False
-    wt_vals_scaled = []
+    inv_vals_scaled = []
 
     for idx, metric in enumerate(metrics):
         rows = []
@@ -692,9 +711,9 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
             z_mean = mean_mean_lookup.get(mode, np.nan)
             if not (np.isfinite(y_cv) and np.isfinite(z_mean) and x_raw > 0):
                 continue
-            wt_scaled = z_mean / z_scale
-            rows.append((np.log10(x_raw), y_cv, wt_scaled))
-            wt_vals_scaled.append(wt_scaled)
+            inv_scaled = z_mean / z_scale
+            rows.append((np.log10(x_raw), y_cv, inv_scaled))
+            inv_vals_scaled.append(inv_scaled)
         if not rows:
             continue
         rows = sorted(rows, key=lambda t: t[0])
@@ -709,16 +728,19 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
 
     ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=10)
     ax.set_zlabel("mean CV ", fontsize=18, labelpad=12)
-    wt_base = _format_wt_mean_axis_as_offset(ax, wt_vals_scaled)
-    if wt_base is None:
-        ax.set_ylabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=10)
+    if inv_metric == "cosine_similarity":
+        ax.set_ylabel(z_label_base, fontsize=18, labelpad=10)
     else:
-        wt_base_micro = wt_base * 1000.0
-        ax.set_ylabel(
-            f"ΔWt from {wt_base_micro:.0f} (×1e-6)",
-            fontsize=18,
-            labelpad=10,
-        )
+        wt_base = _format_wt_mean_axis_as_offset(ax, inv_vals_scaled)
+        if wt_base is None:
+            ax.set_ylabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=10)
+        else:
+            wt_base_micro = wt_base * 1000.0
+            ax.set_ylabel(
+                f"ΔWt from {wt_base_micro:.0f} (×1e-6)",
+                fontsize=18,
+                labelpad=10,
+            )
     # helpful x ticks at common magnitudes if they are within range
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
     ax.set_xticks(np.log10(xticks))
@@ -749,7 +771,7 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
     3D line plot like plot_weight_gauss_mean_cv but using mean performance instead of mean CV:
       x = Gaussian magnitude (alpha) on log scale
       y = mean performance (per metric MC/IPC/KR/GR)
-      z = invariance `mean` column (scaled with scientific factor in label)
+      z = invariance column (prefers `cosine_similarity`)
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -775,13 +797,23 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
 
     mean_tbl = _compute_mean_table(combined)
     mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
-    if "mean" in combined.columns:
-        mean_mean_lookup = (
-            mean_tbl[mean_tbl["metric"] == "mean"]
-            .groupby("mode")["mean"]
-            .mean()
-        )
-        z_label_base = "Wt mean"
+    inv_metric = next(
+        (m for m in ("cosine_similarity", "wt_mean", "mean") if m in combined.columns),
+        None,
+    )
+    if inv_metric is None:
+        print("[warn] plot_weight_gauss_mean_perf: no invariance column found (need cosine_similarity/wt_mean/mean).")
+        return
+    inv_tbl = _compute_mean_table(combined, metrics=[inv_metric])
+    mean_mean_lookup = (
+        inv_tbl[inv_tbl["metric"] == inv_metric]
+        .groupby("mode")["mean"]
+        .mean()
+    )
+    if mean_mean_lookup.empty:
+        print(f"[warn] plot_weight_gauss_mean_perf: no values for invariance metric '{inv_metric}'.")
+        return
+    z_label_base = "Cosine similarity" if inv_metric == "cosine_similarity" else "Wt mean"
 
     # Determine z scaling for nicer scientific-label axis
     max_mean = np.nanmax(mean_mean_lookup.values) if len(mean_mean_lookup) else np.nan
@@ -802,7 +834,7 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
     ax = fig.add_subplot(111, projection="3d")
     colors = mpl.colormaps["tab10"]
     plotted = False
-    wt_vals_scaled = []
+    inv_vals_scaled = []
 
     for idx, metric in enumerate(metrics):
         rows = []
@@ -811,9 +843,9 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
             z_mean = mean_mean_lookup.get(mode, np.nan)
             if not (np.isfinite(y_mean) and np.isfinite(z_mean) and x_raw > 0):
                 continue
-            wt_scaled = z_mean / z_scale
-            rows.append((np.log10(x_raw), y_mean, wt_scaled))
-            wt_vals_scaled.append(wt_scaled)
+            inv_scaled = z_mean / z_scale
+            rows.append((np.log10(x_raw), y_mean, inv_scaled))
+            inv_vals_scaled.append(inv_scaled)
         if not rows:
             continue
         rows = sorted(rows, key=lambda t: t[0])
@@ -828,22 +860,161 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
 
     ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=10)
     ax.set_zlabel("Mean Metric Value", fontsize=18, labelpad=10)
-    wt_base = _format_wt_mean_axis_as_offset(ax, wt_vals_scaled)
-    if wt_base is None:
-        ax.set_ylabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=18)
+    if inv_metric == "cosine_similarity":
+        ax.set_ylabel(z_label_base, fontsize=18, labelpad=18)
     else:
-        wt_base_micro = wt_base * 1000.0
-        ax.set_ylabel(
-            f"ΔWt from {wt_base_micro:.0f} (×1e-6)",
-            fontsize=18,
-            labelpad=18,
-        )
+        wt_base = _format_wt_mean_axis_as_offset(ax, inv_vals_scaled)
+        if wt_base is None:
+            ax.set_ylabel(f"{z_label_base} (×1e{z_power})", fontsize=18, labelpad=18)
+        else:
+            wt_base_micro = wt_base * 1000.0
+            ax.set_ylabel(
+                f"ΔWt from {wt_base_micro:.0f} (×1e-6)",
+                fontsize=18,
+                labelpad=18,
+            )
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
     ax.set_xticks(np.log10(xticks))
     ax.set_xticklabels([str(v) for v in xticks])
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "weight_mean_perf_log3d.png")
+    saved_paths = _save_3d_front_back(
+        fig,
+        ax,
+        out_fig,
+        front_view=(22, -35),
+        back_view=(22, 145),
+        dpi=600,
+        tick_labelsize=16,
+        tick_pad=-2,
+    )
+    if show:
+        plt.show()
+    plt.close(fig)
+    for out_path in saved_paths:
+        print(f"[saved] {out_path}")
+
+
+def plot_rho_cv_other_perf(
+    combined: pd.DataFrame,
+    out_dir: str,
+    show: bool = True,
+    model: str = "",
+):
+    """
+    3D line plot at fixed spectral radius:
+      x = spectral radius (rho_target)
+      y = CV across non-rho hyperparameters (leak, input_scale) within each fixed rho
+      z = mean performance at that fixed rho
+
+    CV is computed per (mode, src, group_id, rho_target, metric) across leak/input_scale,
+    then averaged across groups for each (rho_target, metric).
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    metric_cols = [m for m in ("MC", "IPC", "KR", "GR") if m in combined.columns]
+    required_cols = ["mode", "src", "shuffle_id", "rho_target", "leak", "input_scale"] + metric_cols
+    if not metric_cols:
+        print("[warn] plot_rho_cv_other_perf: no MC/IPC/KR/GR columns found.")
+        return
+    if any(c not in combined.columns for c in required_cols):
+        print("[warn] plot_rho_cv_other_perf: missing required columns; skipping.")
+        return
+
+    df = combined.copy()
+    model = str(model or "").strip()
+    if model:
+        df = df[df["mode"].astype(str) == model].copy()
+        if df.empty:
+            print()
+            modes = sorted(combined["mode"].astype(str).dropna().unique().tolist())
+            print(modes)
+            preview = ", ".join(modes[:12]) + (" ..." if len(modes) > 12 else "")
+            print(f"[warn] plot_rho_cv_other_perf: no rows for model='{model}'.")
+            print(f"[info] available models: {preview}")
+            return
+
+    for c in ("rho_target", "leak", "input_scale", *metric_cols):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df[np.isfinite(df["rho_target"])].copy()
+    if df.empty:
+        print("[warn] plot_rho_cv_other_perf: no finite rho_target values.")
+        return
+
+    df = _assign_group_ids(df)
+    df_agg = _aggregate_over_hparams(df, metric_cols)
+    if df_agg.empty:
+        print("[warn] plot_rho_cv_other_perf: no aggregated rows after deduplication.")
+        return
+
+    keys = ["mode", "src", "group_id", "rho_target", "leak", "input_scale"]
+    df_long = df_agg.melt(id_vars=keys, value_vars=metric_cols, var_name="metric", value_name="value")
+
+    per_group_rho = (
+        df_long.groupby(["mode", "src", "group_id", "rho_target", "metric"], as_index=False)
+        .agg(
+            cv_other=("value", lambda x: _dispersion(x.to_numpy())),
+            perf_mean=("value", "mean"),
+            n_other_hparams=("value", "size"),
+        )
+    )
+
+    summary = (
+        per_group_rho.groupby(["rho_target", "metric"], as_index=False)
+        .agg(
+            cv_other=("cv_other", "mean"),
+            perf_mean=("perf_mean", "mean"),
+            n_groups=("group_id", "size"),
+        )
+    )
+    if summary.empty:
+        print("[warn] plot_rho_cv_other_perf: no data to plot.")
+        return
+
+    fig = plt.figure(figsize=(8, 6), dpi=140)
+    ax = fig.add_subplot(111, projection="3d")
+    colors = mpl.colormaps["tab10"]
+    plotted = False
+
+    for idx, metric in enumerate(metric_cols):
+        sub = summary[summary["metric"] == metric].copy()
+        if sub.empty:
+            continue
+        sub = sub[np.isfinite(sub["rho_target"]) & np.isfinite(sub["cv_other"]) & np.isfinite(sub["perf_mean"])]
+        if sub.empty:
+            continue
+        sub = sub.sort_values("rho_target")
+        xs = sub["rho_target"].to_numpy(float)
+        ys = sub["cv_other"].to_numpy(float)
+        zs = sub["perf_mean"].to_numpy(float)
+        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        print("[warn] plot_rho_cv_other_perf: no finite data to plot.")
+        return
+
+    rho_vals = sorted(summary["rho_target"].dropna().unique())
+    if rho_vals:
+        ax.set_xticks(rho_vals)
+    ax.set_xlabel("spectral radius (rho_target)", fontsize=18, labelpad=8)
+    ax.set_ylabel("CV of non-rho hyperparameters", fontsize=14, labelpad=8)
+    ax.set_zlabel("mean performance", fontsize=18, labelpad=8)
+    if model:
+        ax.set_title(f"Performance vs non-rho CV at fixed spectral radius ({model})", fontsize=14)
+    else:
+        ax.set_title("Performance vs non-rho CV at fixed spectral radius", fontsize=16)
+    ax.legend()
+    _tight_layout_quiet(fig)
+
+    if model:
+        safe_model = re.sub(r"[^A-Za-z0-9._-]+", "_", model)
+        out_name = f"rho_cv_other_perf_3d.{safe_model}.png"
+    else:
+        out_name = "rho_cv_other_perf_3d.png"
+    out_fig = os.path.join(out_dir, out_name)
     saved_paths = _save_3d_front_back(
         fig,
         ax,
@@ -1144,8 +1315,9 @@ def main():
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_frac_cv_meanline(disp, combined, args.out_dir)
-    plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=False)
-    plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=False)
+    plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
+    plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
+    #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)

@@ -5,21 +5,62 @@ import torch
 import os
 import networkx as nx
 
-def imsave_heatmap(data: np.ndarray, row_labels, col_labels, title: str, fname: str):
-    """Save a labeled heatmap using Matplotlib (Hunter, 2007, Comput. Sci. Eng. 9:90-95). See: https://github.com/matplotlib/matplotlib/blob/main/examples/images_contours_and_fields/image_annotated_heatmap.py"""
-    plt.figure(figsize=(1.6 + 1.1*len(col_labels), 1.6 + 0.9*len(row_labels)))
-    vmin = np.nanmin(data)
-    vmax = np.nanmax(data)
-    im = plt.imshow(data, origin="lower", aspect="auto", vmin=vmin, vmax=vmax, cmap="viridis")
-    plt.colorbar(im)
-    plt.xticks(range(len(col_labels)), col_labels, rotation=45, ha="right")
-    plt.yticks(range(len(row_labels)), row_labels)
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig("Results/"+fname, dpi=140)
-    plt.close()
-    print(f"Saved {fname}")
+def _count_edges(A: np.ndarray) -> int:
+    M = np.abs(A) > 0
+    #np.fill_diagonal(M, False) I want to include self edges
+    return int(M.sum())
 
+
+def _shuffle_ce_weights(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    W = Wbio.copy().astype(np.float32)
+    nz = np.nonzero(W)
+    vals = W[nz].copy()
+    rng.shuffle(vals)
+    W[nz] = vals
+    return W
+
+def _shuffle_ce_weights_except_1(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    W = Wbio.copy().astype(np.float32)
+    nz = np.where(np.abs(W)>1)[0]
+    vals = W[nz].copy()
+    rng.shuffle(vals)
+    W[nz] = vals
+    return W
+
+
+def _conn_and_w_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Degree-matched shuffle of CE adjacency with CE weight multiset."""
+    W_s = degree_matched_shuffle_directed(Wbio.astype(np.float32), tries=20_000, rng=rng).astype(np.float32)
+    W =_shuffle_ce_weights(W_s,rng)
+    return W
+
+def _conn_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Degree-matched shuffle of CE adjacency with CE weight multiset."""
+    W_s = degree_matched_shuffle_directed(Wbio.astype(np.float32), tries=20_000, rng=rng).astype(np.float32)
+    np.fill_diagonal(W_s, 0.0)
+    return W_s
+
+def _sample_from_cel(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    W = np.zeros_like(Wbio, dtype=np.float32)
+    nz = np.nonzero(Wbio)
+    sample_weights  = Wbio[nz].astype(np.float32)
+    W[nz] = rng.choice(sample_weights,sample_weights.size,replace = True)
+    return W
+
+def _sample_from_cel_sign(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    W = np.zeros_like(Wbio, dtype=np.float32)
+    pos_idx = Wbio>0
+    neg_idx = Wbio<0
+    pos_weights = Wbio[pos_idx].astype(np.float32)
+    neg_weights = Wbio[neg_idx].astype(np.float32)
+
+    W[pos_idx] = rng.choice(pos_weights,pos_weights.size,replace = True)
+    W[neg_idx] = rng.choice(neg_weights,neg_weights.size,replace = True)
+
+    return W
+
+def _cel_to_bin(Wbio: np.ndarray) -> np.ndarray:
+    return Wbio.astype(np.bool).astype(np.float32)
 
 def load_connectome(adj_path: str | None, ei_path: str | None):
     """
@@ -124,14 +165,12 @@ def run_reservoir(W: torch.Tensor,
 
 def build_reservoir(
     target_sr: float | None,   # <--- scale by spectral radius to this (None = unchanged)
-    ce_ei: np.ndarray | None,
     input_scale: float,
     seed: int,
+    feature_conn: str ,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
     N: int| None = None,
     ws_k: int | None = None,
     ce_W_bio: np.ndarray | None = None,
-    feature_conn: str | None = None,         # 'cel', 'deg_shuffle', 'ws_p=1.0', 'ws_p=0.1', 'ws_p=0.0', 'er_p=...'
-    feature_weights: str | None = None,      # 'bio', 'rand_disc', 'rand_gauss'
     drive_idx: np.ndarray | None = None,   # targeted drive for CEL rows if desired
     nnz_target: int | None = None,         # <--- desired number of edges (from CE)
     DEVICE: torch.device | None = None,
@@ -164,12 +203,11 @@ def build_reservoir(
             W = ce_W_bio.copy().astype(np.float32)
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
-    if feature_conn == "weight_test": 
+    elif feature_conn == "weight_test": 
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
 
         assert alpha != None
-        from reservoir_variants import _cel_to_bin
         W = ce_W_bio.copy().astype(np.float32)
         W = _cel_to_bin(W)
         W = scale_weights(W,alpha=alpha,rng=rng)
@@ -179,7 +217,6 @@ def build_reservoir(
             raise ValueError("Local sign match requires CE adjacency.")
         if per_neg == None:
             raise ValueError("Per neg required for sign_test")
-        from reservoir_variants import _cel_to_bin
         W = ce_W_bio.copy().astype(np.float32)
         W = _cel_to_bin(W)
         W = flip_percent(ce_W_bio,per=per_neg,rng=rng)
@@ -220,7 +257,6 @@ def build_reservoir(
         
     
     elif feature_conn == "local_sign+sample":
-        from reservoir_variants import _sample_from_cel_sign
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
@@ -230,7 +266,6 @@ def build_reservoir(
         
 
     elif feature_conn == "local_sign+binary":
-        from reservoir_variants import _cel_to_bin
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
@@ -242,9 +277,23 @@ def build_reservoir(
         W = _cel_to_bin(Wbio = W)
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
+
+    elif feature_conn == "binary+shuffle": ## need data on this one
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+
+        sel_p = W > 0 ## get the positive weights of the selection
+        sel_n = W < 0 ## get the negative weights of the selection
+        
+
+        W = _cel_to_bin(Wbio = W)
+        W[sel_p] = np.abs(W[sel_p])
+        W[sel_n] = -np.abs(W[sel_n])
+        W = _shuffle_ce_weights(Wbio=W,rng=rng)
+
         
     elif feature_conn == "global_sign_pres":
-        from reservoir_variants import _cel_to_bin
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
@@ -255,24 +304,10 @@ def build_reservoir(
         W = _cel_to_bin(Wbio = W)
         W[nz[0][sel_n],nz[1][sel_n]] = -W[nz[0][sel_n],nz[1][sel_n]]
 
-    
-    elif feature_conn == "deg_shuffle":
-        if ce_W_bio is None:
-            raise ValueError("Degree-matched shuffle requires CE adjacency.")
-        A = (ce_W_bio != 0).astype(np.float32)
-        As = degree_matched_shuffle_directed(A, tries=20_000, rng=rng)
-        mask = (As != 0).astype(np.float32)
-        if nnz_target is not None:
-            mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
-        if feature_weights == "bio":
-            vals = ce_W_bio[ce_W_bio != 0].astype(np.float32)
-            rng.shuffle(vals)
-            W = np.zeros_like(mask, dtype=np.float32)
-            W[mask != 0] = vals[: int(mask.sum())]
-        else:
-            W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
 
     elif feature_conn.startswith("ws_p="):
+        assert N != None
+        assert ws_k != None
         p = float(feature_conn.split("=")[1])
         A = ws_adjacency(N, ws_k, p, rng).astype(np.float32)
         mask = (A != 0).astype(np.float32)
@@ -280,45 +315,33 @@ def build_reservoir(
         
 
     elif feature_conn.startswith("er_p="):
+        assert N!= None
         p = float(feature_conn.split("=")[1])
         A = er_adjacency(N, p, rng).astype(np.float32)
         mask = (A != 0).astype(np.float32)
         if nnz_target is not None:
             mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
-        if per_neg:
-            nz = np.nonzero(W)
-            n_neg = int(per_neg * len(nz[0]))
-            idx = np.arange(len(nz[0]))
-            rng.shuffle(idx)
-            sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
-            W = np.abs(W)
-            W[sel] = -1*W[sel]
 
-    
+        if per_neg is not None:
+            apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
+    elif feature_conn == "cel_randN":
+        W = ce_W_bio.copy().astype(np.float32)
+        mask = (W != 0).astype(np.float32)
+        W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
+    else:
+        raise RuntimeError("u gotta pass in feature_conn that actually exists")
 
-    # Weight scheme overrides
-    if feature_weights == "rand_disc":
-        signs = rng.choice([-1.0, 1.0], size=W.shape).astype(np.float32)
-        W = (np.abs(W) > 0).astype(np.float32) * signs
-    elif feature_weights == "rand_gauss":
-        mags = rng.normal(0.0, 1.0, size=W.shape).astype(np.float32)
-        W = (np.abs(W) > 0).astype(np.float32) * mags
+
         
-        # else: 'cel' with CE weights already prepared
 
-    # Torchify
 
-    # Apply Dale's Law from ce_ei 
-    if ce_ei is not None:
-        diag = np.diag(ce_ei).astype(np.float32)
-        W  = np.matmul(diag,np.abs(W)).astype(np.float32)
     Wt = torch.from_numpy(W).to(DEVICE)
     # --- scale by spectral radius (this is the requested change) ---
     Wt = scale_to_sr(Wt, target_sr)
     #rho_post = spectral_radius_power(Wt)
 
-    # --- Input weights Win ---
+
     if drive_idx is not None and len(drive_idx) > 0:
         Win = torch.zeros(Wt.shape[0], 1, device=DEVICE)
         # Index tensors must be integer type.
@@ -372,7 +395,7 @@ def _match_edge_count(mask: np.ndarray, target_m: int, rng: np.random.Generator)
             G.add_edges_from([candidates[i] for i in add_idx])
 
     G.remove_edges_from(nx.selfloop_edges(G))
-    return nx.to_numpy_array(G, dtype=np.float32)
+    return nx.to_numpy_array(G, dtype=np.float32)# pyright: ignore[reportArgumentType]
 
 def er_adjacency(n: int, p: float, rng: np.random.Generator) -> np.ndarray:
     """
@@ -381,7 +404,7 @@ def er_adjacency(n: int, p: float, rng: np.random.Generator) -> np.ndarray:
     """
     G = nx.gnp_random_graph(n, p, seed=rng, directed=True)
     G.remove_edges_from(nx.selfloop_edges(G))
-    return nx.to_numpy_array(G, dtype=np.float32)
+    return nx.to_numpy_array(G, dtype=np.float32) # pyright: ignore[reportArgumentType]
 
 def ws_adjacency(n: int, k: int, p: float, rng: np.random.Generator) -> np.ndarray:
     """
@@ -390,9 +413,10 @@ def ws_adjacency(n: int, k: int, p: float, rng: np.random.Generator) -> np.ndarr
     """
     assert k % 2 == 0 and k < n and 0.0 <= p <= 1.0
     G = nx.watts_strogatz_graph(n, k, p, seed=rng)
-    A = nx.to_numpy_array(G, dtype=np.float32)
+    A = nx.to_numpy_array(G, dtype=np.float32) # pyright: ignore[reportArgumentType]
     np.fill_diagonal(A, 0.0)
     return A
+
 
 
 def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
@@ -444,6 +468,14 @@ def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
             idx[i:] = rem ## replace the indices with the shuffled one
     return A.astype(np.float32)
 
+def apply_percent_negative(W:np.ndarray,per_neg:float,rng:np.random.Generator): ##these should probably be unified
+    nz = np.nonzero(W)
+    n_neg = int(per_neg * len(nz[0]))
+    idx = np.arange(len(nz[0]))
+    rng.shuffle(idx)
+    sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
+    W = np.abs(W)
+    W[sel] = -1*W[sel]
 def flip_percent(Wbio:np.ndarray,per:float,rng:np.random.Generator):
     assert per >=0 and per <= 1
     if per ==0:

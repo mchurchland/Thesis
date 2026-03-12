@@ -8,7 +8,8 @@ import numpy as np
 import torch
 
 from network_stats.run_one import run_one
-from util.util import build_reservoir, degree_matched_shuffle_directed
+from util.util import build_reservoir, degree_matched_shuffle_directed, _cel_to_bin, \
+    _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel
 from sklearn.metrics.pairwise import cosine_similarity
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ DEFAULT_SIM_PARAMS = SimulationParams()
 class VariantContext:
     """Inputs that stay constant while sweeping (rho, leak, input_scale)."""
 
-    ce_W_bio: np.ndarray | None
+    ce_W_bio: np.ndarray
     ce_ei: np.ndarray | None
     ws_k: int
     col_params: Sequence[tuple[float, float, float]]
@@ -45,64 +46,6 @@ class VariantContext:
     alpha: float | None = None
     src_tag: str = "chunk_0"
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
-
-
-def _count_edges(A: np.ndarray) -> int:
-    M = np.abs(A) > 0
-    np.fill_diagonal(M, False)
-    return int(M.sum())
-
-
-def _shuffle_ce_weights(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    W = Wbio.copy().astype(np.float32)
-    nz = np.nonzero(W)
-    vals = W[nz].copy()
-    rng.shuffle(vals)
-    W[nz] = vals
-    return W
-
-def _shuffle_ce_weights_except_1(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    W = Wbio.copy().astype(np.float32)
-    nz = np.where(np.abs(W)>1)[0]
-    vals = W[nz].copy()
-    rng.shuffle(vals)
-    W[nz] = vals
-    return W
-
-
-def _conn_and_w_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """Degree-matched shuffle of CE adjacency with CE weight multiset."""
-    W_s = degree_matched_shuffle_directed(Wbio.astype(np.float32), tries=20_000, rng=rng).astype(np.float32)
-    W =_shuffle_ce_weights(W_s,rng)
-    return W
-
-def _conn_shuffle_ce(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """Degree-matched shuffle of CE adjacency with CE weight multiset."""
-    W_s = degree_matched_shuffle_directed(Wbio.astype(np.float32), tries=20_000, rng=rng).astype(np.float32)
-    np.fill_diagonal(W_s, 0.0)
-    return W_s
-
-def _sample_from_cel(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    W = np.zeros_like(Wbio, dtype=np.float32)
-    nz = np.nonzero(Wbio)
-    sample_weights  = Wbio[nz].astype(np.float32)
-    W[nz] = rng.choice(sample_weights,sample_weights.size,replace = True)
-    return W
-
-def _sample_from_cel_sign(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    W = np.zeros_like(Wbio, dtype=np.float32)
-    pos_idx = Wbio>0
-    neg_idx = Wbio<0
-    pos_weights = Wbio[pos_idx].astype(np.float32)
-    neg_weights = Wbio[neg_idx].astype(np.float32)
-
-    W[pos_idx] = rng.choice(pos_weights,pos_weights.size,replace = True)
-    W[neg_idx] = rng.choice(neg_weights,neg_weights.size,replace = True)
-
-    return W
-
-def _cel_to_bin(Wbio: np.ndarray) -> np.ndarray:
-    return Wbio.astype(np.bool).astype(np.float32)
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -132,7 +75,6 @@ def _run_variant_row(
     ctx: VariantContext,
     *,
     feature_conn: str,
-    feature_weights: str| None = None,
     mode_label: str,
     ce_override: np.ndarray | None,
     nnz_target: int | None,
@@ -153,11 +95,9 @@ def _run_variant_row(
         assert ctx.ce_ei==None
         Wt, Win = build_reservoir(
             feature_conn=feature_conn,
-            feature_weights=feature_weights,
             target_sr=target_sr,
             N=Nloc,
             ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
-            ce_ei=ctx.ce_ei,
             ws_k=ctx.ws_k,
             input_scale=in_scale,
             seed=seed_base + ci * 101,
@@ -287,7 +227,6 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="cel",
-            feature_weights=None,
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,
@@ -311,8 +250,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         seed_base = _seed(ctx, offset=10_000)
         return _run_variant_row(
             ctx,
-            feature_conn="cel",
-            feature_weights="rand_gauss",
+            feature_conn="cel_randN",
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,
@@ -324,7 +262,6 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn=f"er_p={ctx.er_p}",
-            feature_weights="rand_gauss",
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=_nnz_match_ce(ctx),
@@ -336,7 +273,6 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn=f"ws_p={ctx.ws_p}",
-            feature_weights="rand_gauss",
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=_nnz_match_ce(ctx),
