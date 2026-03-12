@@ -305,7 +305,7 @@ def build_reservoir(
         W[nz[0][sel_n],nz[1][sel_n]] = -W[nz[0][sel_n],nz[1][sel_n]]
 
 
-    elif feature_conn.startswith("ws_p="):
+    elif feature_conn.startswith("ws_p="): ## needs to be fixed I need 3108 edges, not 2990
         assert N != None
         assert ws_k != None
         p = float(feature_conn.split("=")[1])
@@ -317,10 +317,10 @@ def build_reservoir(
     elif feature_conn.startswith("er_p="):
         assert N!= None
         p = float(feature_conn.split("=")[1])
-        A = er_adjacency(N, p, rng).astype(np.float32)
+        A = er_adjacency(N, p, rng).astype(np.float32) 
         mask = (A != 0).astype(np.float32)
         if nnz_target is not None:
-            mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)
+            mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)  ##might be able to do this withour removing edges look into this
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
 
         if per_neg is not None:

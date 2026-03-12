@@ -9,7 +9,7 @@ import torch
 
 from network_stats.run_one import run_one
 from util.util import build_reservoir, degree_matched_shuffle_directed, _cel_to_bin, \
-    _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel
+    _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel,scale_to_sr
 from sklearn.metrics.pairwise import cosine_similarity
 
 @dataclass(frozen=True)
@@ -90,17 +90,16 @@ def _run_variant_row(
         raise ValueError("Non-CEL variants need ce_W_bio to set N/nnz.")
 
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
-    from util.util import scale_to_sr
     for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
         assert ctx.ce_ei==None
-        Wt, Win = build_reservoir(
+        Wt, Win = build_reservoir( ###this is bad this is so bad nightmare type shit
             feature_conn=feature_conn,
             target_sr=target_sr,
             N=Nloc,
             ce_W_bio=ce_for_conn if feature_conn == "cel" else ctx.ce_W_bio,
             ws_k=ctx.ws_k,
             input_scale=in_scale,
-            seed=seed_base + ci * 101,
+            seed=seed_base,
             drive_idx=None,
             nnz_target=nnz_target,
             DEVICE=ctx.device,
@@ -164,7 +163,6 @@ VARIANT_LABELS = {
     "global_sign_pres" : "global_sign_pres",
     "sign_test" : "sign_test",
     "weight_test" : "weight_test",
-
 }
 
 # Short descriptions (used by list_variants/help text)

@@ -37,18 +37,21 @@ from util.util import load_connectome
 WS_K = 10  # signature compatibility with util.build_reservoir
 
 ALL_JOB_KEYS = (
+    "real",
     "shuffle_weights",
     "cel_randN",
     "er_randN",
     "ws_p01_randN",
     "conn_shuf",
     "local_sign",
-    "real",
     "conn_shuf_only",
     "cel_sample",
-    "local_sign+flat",
-    "local_sign+sample",
+    "local_sign+flat", 
+    "local_sign+sample", 
+    "local_sign+binary",
+    "global_sign_pres",
     "sign_test",
+    "weight_test",
 )
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
