@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 488, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 479, in main
+    _run_job(job_key, append_start=(append_across or idx > 0))
+  File "/home/milesc/Thesis/inv_arc_test.py", line 473, in _run_job
+    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+  File "/home/milesc/Thesis/inv_arc_test.py", line 160, in _run_and_save
+    rows = run_variant(job_key, ctx)
+  File "/home/milesc/Thesis/reservoir_variants.py", line 372, in run_variant
+    return _run_variant_row(
+  File "/home/milesc/Thesis/reservoir_variants.py", line 95, in _run_variant_row
+    Wt, Win = build_reservoir( ###this is bad this is so bad nightmare type shit
+  File "/home/milesc/Thesis/util/util.py", line 219, in build_reservoir
+    raise ValueError("Per neg required for sign_test")
+ValueError: Per neg required for sign_test
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job all --out-dir experiment_full_chunks/chunk_16 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_16 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 50 --repeat-split 20 --repeat-rank 16 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)
