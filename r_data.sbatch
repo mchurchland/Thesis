@@ -27,7 +27,7 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=50
+TOTAL_REPEATS=500
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000

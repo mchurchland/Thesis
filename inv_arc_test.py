@@ -49,9 +49,7 @@ ALL_JOB_KEYS = (
     "local_sign+flat", 
     "local_sign+sample", 
     "local_sign+binary",
-    "global_sign_pres",
-    "sign_test",
-    "weight_test",
+    "global_sign_pres"
 )
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
