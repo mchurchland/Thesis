@@ -126,6 +126,7 @@ def _run_variant_row(
                         Wt.reshape(1, -1).detach().cpu().numpy(),
                     )[0, 0]
                 ),
+                seed_base,
                 ctx.src_tag,
             )
         )
@@ -139,7 +140,7 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "src"])
+            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "seed", "src"])
         w.writerows(rows)
 
 
