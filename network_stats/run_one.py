@@ -25,7 +25,7 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
 
 def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: int,
             PERTURB_STD: float, T_TRAIN: int, T_TEST: int,
-            MC_MAX_DELAY: int, IPC_MAX_DELAY: int, IPC_MAX_ORDER: int,
+            MC_MAX_DELAY: int, IPC_MAX_DELAY: int, IPC_ORDERS: list[int],
             RIDGE_ALPHA: float) -> dict:
     """
     End-to-end reservoir evaluation computing MC/IPC/KR/GR and controllability metrics.
@@ -44,7 +44,7 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
     ute = u[WASHOUT+T_TRAIN:] ## u_test
 
     MC_total, _ = compute_MC(Xtr, Xte, utr, ute, MC_MAX_DELAY, RIDGE_ALPHA,device)
-    IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, IPC_MAX_ORDER, RIDGE_ALPHA,device)
+    IPC_total   = compute_IPC(Xtr, Xte, utr, ute, IPC_MAX_DELAY, RIDGE_ALPHA,device, IPC_ORDERS)
     KR_val      = compute_KR(Xtr)
     GR_val      = compute_GR(Xtr, Xn[WASHOUT:WASHOUT+T_TRAIN])
     return dict(

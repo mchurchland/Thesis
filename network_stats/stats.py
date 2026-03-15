@@ -8,13 +8,13 @@ def compute_IPC(
     utr: Tensor,
     ute: Tensor,
     max_delay: int,
-    max_order: int,
     alpha: float,
     device: torch.device,
+    orders: list[int] = [1, 3, 5],
 ) -> float:
     """
     Information Processing Capacity (approx.): sum of R^2 for Legendre targets
-    P_k(u_{t - d}) for k=1..max_order, d=1..max_delay.
+    P_k(u_{t - d}) for k in orders, d=1..max_delay.
 
     This version batches all Legendre orders for a fixed delay d, so that
     we do ONE Cholesky factorization per delay and solve for all targets
@@ -23,7 +23,6 @@ def compute_IPC(
     See: Dambre et al., 2012, Sci. Rep. 2:514; batching pattern similar to scikit-learn Ridge
     multi-target solves (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_ridge.py).
     """
-
     def to_m11(u: Tensor) -> Tensor:
         umax = u.max()
         umin = u.min()
@@ -44,7 +43,7 @@ def compute_IPC(
         # build all Legendre targets for orders k=1..max_order
         ytr_cols = []
         yte_cols = []
-        for k in range(1, max_order + 1):
+        for k in orders:
             ytr_k = legendre_P(base_tr, k)
             yte_k = legendre_P(base_te, k)
 

@@ -3,10 +3,10 @@ import torch
 
 def legendre_P(x: Tensor, order: int) -> Tensor:
     """
-    Low-order Legendre polynomials P_n on [-1, 1] (n=1..3) via torch.special.legendre_polynomial_p.
+    Legendre polynomials P_n on [-1, 1] via torch.special.legendre_polynomial_p.
     """
-    if order > 3 or order < 0:
-        raise ValueError("Supported orders: 1..3")
+    if order < 0:
+        raise ValueError("Supported orders: n >= 0")
     return torch.special.legendre_polynomial_p(x, order)
 
 

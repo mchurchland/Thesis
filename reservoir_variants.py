@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass,field
 from pathlib import Path
 from typing import Sequence
 
@@ -22,7 +22,7 @@ class SimulationParams:
     t_test: int = 500
     mc_max_delay: int = 300
     ipc_max_delay: int = 50
-    ipc_max_order: int = 3
+    ipc_orders: list[int] = field(default_factory=lambda: [1, 3, 5])
     ridge_alpha: float = 1e-4
 
 
@@ -66,7 +66,7 @@ def evaluate_reservoir(
         sim_params.t_test,
         sim_params.mc_max_delay,
         sim_params.ipc_max_delay,
-        sim_params.ipc_max_order,
+        sim_params.ipc_orders,
         sim_params.ridge_alpha,
     )
 
@@ -163,6 +163,7 @@ VARIANT_LABELS = {
     "global_sign_pres" : "global_sign_pres",
     "sign_test" : "sign_test",
     "weight_test" : "weight_test",
+    "binary+shuffle" : "binary+shuffle",
 }
 
 # Short descriptions (used by list_variants/help text)
@@ -182,6 +183,7 @@ VARIANT_DESCRIPTIONS = {
     "sign_test" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions",
     "weight_test" : "celegan connectome, can pass in an alpha to add a guasian dist times that alpha to the weights",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
+    "binary+shuffle" : "convert the weights to binary (sign) and then do a degree-matched shuffle of the connections (and thus signs), so global sign balance is preserved but signs can be on different edges",
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
@@ -367,6 +369,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
 
+
     if key.startswith("sign_test"):
         seed_base = _seed(ctx, offset=36_000)
         return _run_variant_row(
@@ -378,11 +381,21 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key.startswith("weight_test"):
-        seed_base = _seed(ctx, offset=36_000)
+        seed_base = _seed(ctx, offset=37_000)
         return _run_variant_row(
             ctx,
             feature_conn="weight_test",
             mode_label=key,
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key == "binary+shuffle":
+        seed_base = _seed(ctx, offset=38_000)
+        return _run_variant_row(
+            ctx,
+            feature_conn="binary+shuffle",
+            mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,
             seed_base=seed_base,

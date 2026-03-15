@@ -164,7 +164,7 @@ def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
     """Apply a cleaner, publication-friendly 3D style."""
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
     ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=0)
-    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=6)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=-2)
     ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=2)
     y_formatter = ax.yaxis.get_major_formatter()
     if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
@@ -350,14 +350,14 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     if not metrics:
         return
 
-    #mode_order = [
-    #    "sign_test0.0","sign_test0.1","sign_test0.2","sign_test0.3","sign_test0.4",
-    #    "sign_test0.5","sign_test0.6","sign_test0.7","sign_test0.8","sign_test0.9","sign_test1.0",
-    #]
     mode_order = [
-        "weight_test0.0","weight_test1.0","weight_test5.0","weight_test10.0","weight_test100.0",
-        "weight_test1000.0", "weight_test10000.0",
+        "sign_test0.0","sign_test0.1","sign_test0.2","sign_test0.3","sign_test0.4",
+        "sign_test0.5","sign_test0.6","sign_test0.7","sign_test0.8","sign_test0.9","sign_test1.0",
     ]
+    #mode_order = [
+    #    "weight_test0.0","weight_test1.0","weight_test5.0","weight_test10.0","weight_test100.0",
+    #    "weight_test1000.0", "weight_test10000.0",
+    #]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     if not modes:
         return
@@ -446,7 +446,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                 c = color_for_mode[mode]
 
                 # 3D polyline at constant x
-                ax.plot([x] * len, y, zs=z, zdir="z", linewidth=2.5, alpha=0.9, color=c)
+                ax.plot([x] * len(y), y, zs=z, zdir="z", linewidth=2.5, alpha=0.9, color=c)
 
                 # Median CV marker line at constant x, spanning z
                 #med = float(np.median(s))
@@ -609,9 +609,7 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     ax.set_xlabel(x_label, fontsize=18, labelpad=2)
     ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
     ax.set_zlabel("mean performance", fontsize=18, labelpad=2)
-    ax.set_title("Mean performance vs CV vs mode value",fontsize=18)
     ax.set_xlim(x_min - pad, x_max + pad)
-    ax.legend()
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
@@ -1314,11 +1312,11 @@ def main():
 
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    #plot_frac_cv_meanline(disp, combined, args.out_dir)
+    plot_frac_cv_meanline(disp, combined, args.out_dir)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
     #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
     #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)
-    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)
 

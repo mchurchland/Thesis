@@ -1,0 +1,106 @@
+IPC order-degradation report (model comparison)
+
+[C. elegans]
+IPC share in first 3 orders: 91.32%
+Odd contributions: o1=2.635686, o3=1.231142, o5=0.345960
+Odd contribution stds: o1=0.740992, o3=0.395600, o5=0.312875
+Odd (1+3+5) contribution: 4.212788 ± 0.776120 (std)
+IPC share in odd orders 1+3+5: 99.48% ± 0.98% (std)
+
+[shuffle]
+IPC share in first 3 orders: 94.44%
+Odd contributions: o1=2.669949, o3=1.279463, o5=0.214796
+Odd contribution stds: o1=0.539444, o3=0.561562, o5=0.225939
+Odd (1+3+5) contribution: 4.164208 ± 0.823602 (std)
+IPC share in odd orders 1+3+5: 99.49% ± 0.64% (std)
+
+[cel+randN]
+IPC share in first 3 orders: 90.94%
+Odd contributions: o1=6.614356, o3=3.203820, o5=0.944903
+Odd contribution stds: o1=0.898741, o3=0.326393, o5=0.375152
+Odd (1+3+5) contribution: 10.763080 ± 1.282191 (std)
+IPC share in odd orders 1+3+5: 99.68% ± 0.40% (std)
+
+[ER (p=0.1)]
+IPC share in first 3 orders: 93.71%
+Odd contributions: o1=8.436311, o3=3.818574, o5=0.822035
+Odd contribution stds: o1=0.222753, o3=0.280233, o5=0.147853
+Odd (1+3+5) contribution: 13.076921 ± 0.496408 (std)
+IPC share in odd orders 1+3+5: 100.00% ± 0.00% (std)
+
+[ws_p0.1+randN]
+IPC share in first 3 orders: 94.75%
+Odd contributions: o1=8.582890, o3=3.870002, o5=0.684311
+Odd contribution stds: o1=0.296463, o3=0.287180, o5=0.168156
+Odd (1+3+5) contribution: 13.137203 ± 0.545069 (std)
+IPC share in odd orders 1+3+5: 99.95% ± 0.11% (std)
+
+[celW+connShuf]
+IPC share in first 3 orders: 97.34%
+Odd contributions: o1=2.982302, o3=1.286101, o5=0.105759
+Odd contribution stds: o1=0.555566, o3=0.310110, o5=0.193903
+Odd (1+3+5) contribution: 4.374163 ± 0.775080 (std)
+IPC share in odd orders 1+3+5: 99.73% ± 0.43% (std)
+
+[local_sign]
+IPC share in first 3 orders: 90.90%
+Odd contributions: o1=2.514751, o3=1.023134, o5=0.303268
+Odd contribution stds: o1=0.661210, o3=0.554632, o5=0.286644
+Odd (1+3+5) contribution: 3.841154 ± 0.969359 (std)
+IPC share in odd orders 1+3+5: 98.37% ± 1.98% (std)
+
+[conn_shuf_only]
+IPC share in first 3 orders: 92.53%
+Odd contributions: o1=3.068641, o3=1.229793, o5=0.330038
+Odd contribution stds: o1=0.583482, o3=0.627610, o5=0.301313
+Odd (1+3+5) contribution: 4.628472 ± 1.050756 (std)
+IPC share in odd orders 1+3+5: 99.55% ± 0.52% (std)
+
+[cel_sample]
+IPC share in first 3 orders: 95.95%
+Odd contributions: o1=3.056114, o3=1.515690, o5=0.184446
+Odd contribution stds: o1=0.742188, o3=0.443279, o5=0.316149
+Odd (1+3+5) contribution: 4.756251 ± 1.217645 (std)
+IPC share in odd orders 1+3+5: 99.71% ± 0.46% (std)
+
+[local_sign+flat]
+IPC share in first 3 orders: 95.46%
+Odd contributions: o1=2.634947, o3=0.964305, o5=0.130951
+Odd contribution stds: o1=0.671169, o3=0.261622, o5=0.218421
+Odd (1+3+5) contribution: 3.730203 ± 0.837226 (std)
+IPC share in odd orders 1+3+5: 98.91% ± 1.66% (std)
+
+[local_sign+sample]
+IPC share in first 3 orders: 91.89%
+Odd contributions: o1=2.748048, o3=1.432763, o5=0.267503
+Odd contribution stds: o1=0.490374, o3=0.446158, o5=0.296406
+Odd (1+3+5) contribution: 4.448314 ± 0.805194 (std)
+IPC share in odd orders 1+3+5: 97.46% ± 3.53% (std)
+
+[local_sign+binary]
+IPC share in first 3 orders: 93.58%
+Odd contributions: o1=2.361384, o3=0.737511, o5=0.105825
+Odd contribution stds: o1=0.457985, o3=0.556283, o5=0.130362
+Odd (1+3+5) contribution: 3.204721 ± 0.770566 (std)
+IPC share in odd orders 1+3+5: 96.28% ± 4.76% (std)
+
+[global_sign_pres]
+IPC share in first 3 orders: 91.57%
+Odd contributions: o1=2.647841, o3=0.688696, o5=0.267878
+Odd contribution stds: o1=0.403619, o3=0.466371, o5=0.359927
+Odd (1+3+5) contribution: 3.604416 ± 0.765257 (std)
+IPC share in odd orders 1+3+5: 98.61% ± 1.77% (std)
+
+[binary+shuffle]
+IPC share in first 3 orders: 89.84%
+Odd contributions: o1=2.523939, o3=1.219930, o5=0.391328
+Odd contribution stds: o1=0.562607, o3=0.382212, o5=0.365262
+Odd (1+3+5) contribution: 4.135197 ± 0.740041 (std)
+IPC share in odd orders 1+3+5: 99.25% ± 1.34% (std)
+
+[CE vs ER at order 3]
+ER / CE order-3 mean ratio: 3.101652
+
+[1,3,5 validation]
+capture% mean=99.03, std=2.13, min=86.05, p05=95.26
+agreement IPC(1..10) vs IPC(1,3,5): pearson=0.9998, spearman=0.9981
