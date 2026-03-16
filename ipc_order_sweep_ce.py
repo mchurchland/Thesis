@@ -186,9 +186,9 @@ def ipc_contrib_by_order(
             utr=utr,
             ute=ute,
             max_delay=max_delay,
-            max_order=k,
             alpha=alpha,
             device=device,
+            orders=list(range(1, k + 1)),
         )
 
     contrib = np.zeros_like(cumulative)

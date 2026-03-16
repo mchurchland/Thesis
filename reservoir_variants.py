@@ -20,8 +20,8 @@ class SimulationParams:
     perturb_std: float = 0.01
     t_train: int = 1500
     t_test: int = 500
-    mc_max_delay: int = 300
-    ipc_max_delay: int = 50
+    mc_max_delay: int = 30
+    ipc_max_delay: int = 30
     ipc_orders: list[int] = field(default_factory=lambda: [1, 3, 5])
     ridge_alpha: float = 1e-4
 

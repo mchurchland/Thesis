@@ -34,6 +34,7 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
     T_total = WASHOUT + T_TRAIN + T_TEST
     u = (torch.rand(T_total, 1, device=device) * 2.0 - 1.0) ## rescale to [-1, 1]
     u = u - u.mean()
+    print(MC_MAX_DELAY,IPC_MAX_DELAY)
 
     X, _ = run_reservoir_with_pre(W, Win, u, leak)
     Xn, _  = run_reservoir_with_pre(W, Win, u + PERTURB_STD * torch.randn_like(u), leak)
