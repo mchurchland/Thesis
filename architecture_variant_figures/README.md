@@ -12,7 +12,7 @@ python architecture_variant_figures/make_weighted_graph_examples.py
 
 Outputs to `architecture_variant_figures/graph_examples`:
 
-- `01_...png` through `12_...png`: one figure per architecture variant
+- `01_...png` through `14_...png`: one figure per architecture variant
   - left panel: biological C. elegans reference graph
   - right panel: architecture variant graph
   - both panels use the same Kamada-Kawai node layout for direct comparison
@@ -43,6 +43,10 @@ Notes:
 - If `--max-edges` is positive, the script keeps the strongest edges and (by default) keeps all negative edges too.
 - Use `--truncate-drops-negatives` if you want strict truncation.
 - Use `--show-direction` to draw arrowheads (denser but explicit direction).
+- Paper-size fonts are the default now; you can tune with:
+  `--panel-title-fontsize`, `--suptitle-fontsize`, `--legend-fontsize`,
+  `--cbar-title-fontsize`, `--cbar-label-fontsize`, `--cbar-tick-fontsize`,
+  and `--index-fontsize`.
 
 Show neuron-name node labels:
 

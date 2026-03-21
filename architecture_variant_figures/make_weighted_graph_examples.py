@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import sys
 
 import matplotlib.pyplot as plt
@@ -28,6 +29,7 @@ from util.util import (  # noqa: E402
     _conn_and_w_shuffle_ce,
     _conn_shuffle_ce,
     _count_edges,
+    _sample_from_cel,
     _shuffle_ce_weights,
     build_reservoir,
     load_connectome,
@@ -41,20 +43,71 @@ class Variant:
     title: str
 
 
-VARIANTS: list[Variant] = [
-    Variant("ce_connectome", "01_celegans_connectome", "C. elegans connectome"),
-    Variant("connection_shuffle", "02_connection_shuffle", "Connection-shuffle"),
-    Variant("weight_shuffle", "03_weight_shuffle", "Weight-shuffle"),
-    Variant("conn_weight_shuffle", "04_connection_then_weight_shuffle", "Connection-shuffle + weight-shuffle"),
-    Variant("ce_gaussian", "05_ce_topology_gaussian_weights", "CE topology with Gaussian weights"),
-    Variant("er_gaussian", "06_er_matched_gaussian", "CE-matched Erdos-Renyi with Gaussian weights"),
-    Variant("ws_gaussian", "07_ws_matched_gaussian", "CE-matched Watts-Strogatz with Gaussian weights"),
-    Variant("sign_gaussian_abs", "08_ce_gaussian_abs_with_original_signs", "CE + |Gaussian| with original signs"),
-    Variant("sign_uniform", "09_ce_uniform_with_original_signs", "CE + Uniform with original signs"),
-    Variant("sign_sampled", "10_ce_sampled_with_original_signs", "CE + sampled weights with original signs"),
-    Variant("binary_local_sign", "11_ce_binary_with_original_signs", "CE + binary +/-1 with original signs"),
-    Variant("binary_global_sign_shuffle", "12_ce_binary_sign_balance_shuffled", "CE + binary with shuffled signs (balance kept)"),
-]
+ALL_JOB_KEYS: tuple[str, ...] = (
+    "real",
+    "shuffle_weights",
+    "cel_randN",
+    "er_randN",
+    "ws_p01_randN",
+    "conn_shuf",
+    "local_sign",
+    "conn_shuf_only",
+    "cel_sample",
+    "local_sign+flat",
+    "local_sign+sample",
+    "local_sign+binary",
+    "global_sign_pres",
+    "binary+shuffle",
+)
+
+JOB_TITLES: dict[str, str] = {
+    "real": "C. elegans connectome (real)",
+    "shuffle_weights": "Weight-shuffle",
+    "cel_randN": "CE topology + Gaussian weights",
+    "er_randN": "ER (p=0.1) + Gaussian weights",
+    "ws_p01_randN": "WS (p=0.1) + Gaussian weights",
+    "conn_shuf": "Connection-shuffle + weight-shuffle",
+    "local_sign": "Local sign-preserved Gaussian magnitudes",
+    "conn_shuf_only": "Connection-shuffle only",
+    "cel_sample": "CE topology + sampled CE weights",
+    "local_sign+flat": "Local sign-preserved Uniform magnitudes",
+    "local_sign+sample": "Local sign-preserved sampled magnitudes",
+    "local_sign+binary": "Local sign-preserved binary magnitudes",
+    "global_sign_pres": "Binary weights + global sign-balance shuffle",
+    "binary+shuffle": "Binary + connection shuffle",
+}
+
+JOB_SLUG_OVERRIDES: dict[str, str] = {
+    "real": "celegans_connectome",
+    "shuffle_weights": "weight_shuffle",
+    "cel_randN": "ce_gaussian_weights",
+    "er_randN": "er_p01_gaussian_weights",
+    "ws_p01_randN": "ws_p01_gaussian_weights",
+    "conn_shuf": "connection_and_weight_shuffle",
+    "local_sign": "local_sign_gaussian_abs",
+    "conn_shuf_only": "connection_shuffle_only",
+    "cel_sample": "ce_sampled_weights",
+    "local_sign+flat": "local_sign_uniform",
+    "local_sign+sample": "local_sign_sampled",
+    "local_sign+binary": "local_sign_binary",
+    "global_sign_pres": "global_sign_preserved_binary",
+    "binary+shuffle": "binary_plus_shuffle",
+}
+
+
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _build_variants() -> list[Variant]:
+    variants: list[Variant] = []
+    for idx, key in enumerate(ALL_JOB_KEYS, start=1):
+        base_slug = JOB_SLUG_OVERRIDES.get(key,_slugify(key))
+        variants.append(Variant(key=key, slug=f"{base_slug}", title=JOB_TITLES.get(key, key)))
+    return variants
+
+
+VARIANTS: list[Variant] = _build_variants()
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,6 +116,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--ce-adj", default="Connectome/ce_adj.npy", help="Path to CE adjacency/weight matrix (.npy).")
     p.add_argument("--ce-ei", default="Connectome/ce_ei.npy", help="Path to CE E/I labels (.npy).")
     p.add_argument("--seed", type=int, default=7, help="Base random seed.")
+    p.add_argument("--er-p", type=float, default=0.1, help="ER probability for er_randN.")
+    p.add_argument("--ws-p", type=float, default=0.1, help="WS rewiring probability for ws_p01_randN.")
     p.add_argument(
         "--max-edges",
         type=int,
@@ -77,7 +132,15 @@ def parse_args() -> argparse.Namespace:
         help="Multiply node coordinates by this factor to spread nodes out.",
     )
     p.add_argument("--show-node-labels", action="store_true", help="Draw neuron-name labels on nodes.")
-    p.add_argument("--label-fontsize", type=int, default=5, help="Font size for node labels when enabled.")
+    p.add_argument("--label-fontsize", type=int, default=10, help="Font size for node labels when enabled.")
+    p.add_argument("--panel-title-fontsize", type=int, default=28, help="Panel title font size.")
+    p.add_argument("--suptitle-fontsize", type=int, default=36, help="Figure super-title font size.")
+    p.add_argument("--legend-fontsize", type=int, default=24, help="Legend font size.")
+    p.add_argument("--cbar-title-fontsize", type=int, default=28, help="Colorbar title font size.")
+    p.add_argument("--cbar-label-fontsize", type=int, default=24, help="Colorbar label font size.")
+    p.add_argument("--cbar-tick-fontsize", type=int, default=24, help="Colorbar tick font size.")
+    p.add_argument("--index-fontsize", type=int, default=24, help="Index page font size.")
+    p.add_argument("--figure-dpi", type=int, default=320, help="Output DPI.")
     p.add_argument(
         "--show-direction",
         action="store_true",
@@ -124,44 +187,56 @@ def _build_from_feature_conn(feature_conn: str, ce_W_bio: np.ndarray, seed: int)
     return Wt.detach().cpu().numpy().astype(np.float32)
 
 
-def construct_w_with_project_code(key: str, ce_W_bio: np.ndarray, seed: int) -> np.ndarray:
+def construct_w_with_project_code(
+    key: str,
+    ce_W_bio: np.ndarray,
+    seed: int,
+    er_p: float,
+    ws_p: float,
+) -> np.ndarray:
     rng = np.random.default_rng(seed)
 
-    if key == "ce_connectome":
+    if key == "real":
         return ce_W_bio.copy().astype(np.float32)
 
-    if key == "connection_shuffle":
-        return _conn_shuffle_ce(ce_W_bio, rng).astype(np.float32)
-
-    if key == "weight_shuffle":
+    if key == "shuffle_weights":
         return _shuffle_ce_weights(ce_W_bio, rng).astype(np.float32)
 
-    if key == "conn_weight_shuffle":
-        return _conn_and_w_shuffle_ce(ce_W_bio, rng).astype(np.float32)
-
-    if key == "ce_gaussian":
+    if key == "cel_randN":
         return _build_from_feature_conn("cel_randN", ce_W_bio, seed)
 
-    if key == "er_gaussian":
-        return _build_from_feature_conn("er_p=0.1", ce_W_bio, seed)
+    if key == "er_randN":
+        return _build_from_feature_conn(f"er_p={er_p}", ce_W_bio, seed)
 
-    if key == "ws_gaussian":
-        return _build_from_feature_conn("ws_p=0.1", ce_W_bio, seed)
+    if key == "ws_p01_randN":
+        return _build_from_feature_conn(f"ws_p={ws_p}", ce_W_bio, seed)
 
-    if key == "sign_gaussian_abs":
+    if key == "conn_shuf":
+        return _conn_and_w_shuffle_ce(ce_W_bio, rng).astype(np.float32)
+
+    if key == "local_sign":
         return _build_from_feature_conn("local_sign", ce_W_bio, seed)
 
-    if key == "sign_uniform":
+    if key == "conn_shuf_only":
+        return _conn_shuffle_ce(ce_W_bio, rng).astype(np.float32)
+
+    if key == "cel_sample":
+        return _sample_from_cel(ce_W_bio, rng).astype(np.float32)
+
+    if key == "local_sign+flat":
         return _build_from_feature_conn("local_sign+flat", ce_W_bio, seed)
 
-    if key == "sign_sampled":
+    if key == "local_sign+sample":
         return _build_from_feature_conn("local_sign+sample", ce_W_bio, seed)
 
-    if key == "binary_local_sign":
+    if key == "local_sign+binary":
         return _build_from_feature_conn("local_sign+binary", ce_W_bio, seed)
 
-    if key == "binary_global_sign_shuffle":
+    if key == "global_sign_pres":
         return _build_from_feature_conn("global_sign_pres", ce_W_bio, seed)
+
+    if key == "binary+shuffle":
+        return _build_from_feature_conn("binary+shuffle", ce_W_bio, seed)
 
     raise ValueError(f"Unknown variant key: {key}")
 
@@ -243,6 +318,7 @@ def draw_weighted_panel(
     W: np.ndarray,
     pos: dict[int, np.ndarray],
     title: str,
+    panel_title_fontsize: int,
     node_colors: list[str],
     node_labels: list[str] | None,
     label_fontsize: int,
@@ -263,7 +339,7 @@ def draw_weighted_panel(
     for (i, j), wij in zip(edge_idx, w):
         G.add_edge(int(i), int(j), weight=float(wij))
 
-    ax.set_title(title, fontsize=11)
+    ax.set_title(title, fontsize=panel_title_fontsize)
     ax.axis("off")
 
     nx.draw_networkx_nodes(
@@ -288,6 +364,19 @@ def draw_weighted_panel(
                 ax=ax,
             )
 
+    coords = np.array([pos[i] for i in range(n) if i in pos], dtype=np.float32)
+    if coords.size:
+        xmin, ymin = coords.min(axis=0)
+        xmax, ymax = coords.max(axis=0)
+        span = float(max(xmax - xmin, ymax - ymin, 1e-6))
+        xmid = float((xmin + xmax) * 0.5)
+        ymid = float((ymin + ymax) * 0.5)
+        pad = 0.07 * span
+        half = 0.5 * span + pad
+        ax.set_xlim(xmid - half, xmid + half)
+        ax.set_ylim(ymid - half, ymid + half)
+        ax.set_aspect("equal", adjustable="box")
+
     if w.size == 0:
         return
 
@@ -296,7 +385,6 @@ def draw_weighted_panel(
     neg_edges = [(int(i), int(j)) for (i, j), wij in zip(edge_idx, w) if wij < 0]
     neg_vals = [float(wij) for wij in w if wij < 0]
 
-    abs_max = max(float(np.max(np.abs(w))), 1e-9)
     edge_kwargs = {}
     if show_direction:
         edge_kwargs = {
@@ -358,7 +446,7 @@ def stats_line(W: np.ndarray) -> str:
     nnz = int((W != 0).sum())
     pos = int((W > 0).sum())
     neg = int((W < 0).sum())
-    return f"N={W.shape[0]}, edges={nnz}, +={pos}, -={neg}"
+    return f"+={pos}, -={neg}"
 
 
 def compute_ce_kamada_layout(
@@ -389,55 +477,47 @@ def make_variant_figure(
     variant: Variant,
     ce_base: np.ndarray,
     ce_pos: dict[int, np.ndarray],
-    ce_ei: np.ndarray | None,
     ce_labels: list[str] | None,
     outdir: Path,
     seed: int,
+    er_p: float,
+    ws_p: float,
     max_edges: int,
     keep_all_negatives: bool,
     show_node_labels: bool,
     label_fontsize: int,
+    panel_title_fontsize: int,
+    suptitle_fontsize: int,
+    legend_fontsize: int,
+    cbar_title_fontsize: int,
+    cbar_label_fontsize: int,
+    cbar_tick_fontsize: int,
     show_direction: bool,
+    figure_dpi: int,
 ) -> None:
     W_ref = ce_base
-    W_var = construct_w_with_project_code(variant.key, ce_base, seed + 20_000)
+    W_var = construct_w_with_project_code(variant.key, ce_base, seed + 20_000, er_p=er_p, ws_p=ws_p)
 
     _, ref_w, _ = _edge_subset(W_ref, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
     _var_edges, _var_w, _ = _edge_subset(W_var, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
     scale_values = ref_w
     pos_map, neg_map = build_dual_colormap_norms(scale_values)
 
-    fig = plt.figure(figsize=(17.4, 7.2))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 0.09], wspace=0.04)
-    ax_left = fig.add_subplot(gs[0, 0])
-    ax_right = fig.add_subplot(gs[0, 1])
-    cbar_gs = gs[0, 2].subgridspec(2, 1, hspace=0.35)
+    fig = plt.figure(figsize=(11.5, 9.0))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.0, 0.06], wspace=0.03)
+    ax_right =  fig.add_subplot(gs[0, 0])
+    cbar_gs = gs[0, 1].subgridspec(2, 1, hspace=0.35)
     cax_pos = fig.add_subplot(cbar_gs[0, 0])
     cax_neg = fig.add_subplot(cbar_gs[1, 0])
 
-    draw_weighted_panel(
-        ax_left,
-        W_ref,
-        ce_pos,
-        title=f"Reference: Biological C. elegans ({stats_line(W_ref)})",
-        node_colors=["#666666"] * W_ref.shape[0],
-        node_labels=ce_labels if show_node_labels else None,
-        label_fontsize=label_fontsize,
-        node_size=22,
-        max_edges=max_edges,
-        keep_all_negatives=keep_all_negatives,
-        show_direction=show_direction,
-        pos_norm=None if pos_map is None else pos_map["norm"],
-        pos_cmap=None if pos_map is None else pos_map["cmap"],
-        neg_norm=None if neg_map is None else neg_map["norm"],
-        neg_cmap=None if neg_map is None else neg_map["cmap"],
-    )
+
 
     draw_weighted_panel(
         ax_right,
         W_var,
         ce_pos,
-        title=f"Variant under test ({stats_line(W_var)})",
+        title=f"{variant.slug} ({stats_line(W_var)})",
+        panel_title_fontsize=panel_title_fontsize,
         node_colors=["#666666"] * W_var.shape[0],
         node_labels=ce_labels if show_node_labels else None,
         label_fontsize=label_fontsize,
@@ -456,9 +536,9 @@ def make_variant_figure(
         sm_pos.set_array([])
         cb_pos = fig.colorbar(sm_pos, cax=cax_pos)
         cb_pos.set_ticks(pos_map["ticks"])
-        cb_pos.ax.set_title("Positive", fontsize=9, pad=6)
-        cb_pos.set_label("w (+)", fontsize=9)
-        cb_pos.ax.tick_params(labelsize=8)
+        cb_pos.ax.set_title("Positive", fontsize=cbar_title_fontsize, pad=20)
+        cb_pos.set_label("w (+)", fontsize=cbar_label_fontsize,labelpad =-2)
+        cb_pos.ax.tick_params(labelsize=cbar_tick_fontsize)
     else:
         cax_pos.axis("off")
 
@@ -467,9 +547,9 @@ def make_variant_figure(
         sm_neg.set_array([])
         cb_neg = fig.colorbar(sm_neg, cax=cax_neg)
         cb_neg.set_ticks(neg_map["ticks"])
-        cb_neg.ax.set_title("Negative", fontsize=9, pad=6)
-        cb_neg.set_label("w (-)", fontsize=9)
-        cb_neg.ax.tick_params(labelsize=8)
+        cb_neg.ax.set_title("Negative", fontsize=cbar_title_fontsize, pad=20)
+        cb_neg.set_label("w (-)", fontsize=cbar_label_fontsize,labelpad = -2)
+        cb_neg.ax.tick_params(labelsize=cbar_tick_fontsize)
     else:
         cax_neg.axis("off")
 
@@ -477,27 +557,36 @@ def make_variant_figure(
         Line2D([0], [0], color="#c73e1d", lw=2.0, ls="-", label="positive edge"),
         Line2D([0], [0], color="#006daa", lw=2.0, ls="-", label="negative edge"),
     ]
-    fig.legend(handles=style_handles, loc="lower center", ncol=2, frameon=False, bbox_to_anchor=(0.5, -0.01), fontsize=10)
+    fig.legend(
+        handles=style_handles,
+        loc="lower center",
+        ncol=2,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.01),
+        fontsize=legend_fontsize,
+    )
 
-    fig.suptitle(f"{variant.slug}: {variant.title}", fontsize=15, y=1.02)
-    fig.subplots_adjust(left=0.02, right=0.96, top=0.90, bottom=0.04, wspace=0.05)
-    fig.savefig(outdir / f"{variant.slug}.png", dpi=260, bbox_inches="tight")
+    #fig.suptitle(f"{variant.slug}: {variant.title}", fontsize=suptitle_fontsize, y=1.02)
+    fig.subplots_adjust(left=0.00, right=0.95, top=0.92, bottom=0.13, wspace=0.03)
+    fig.savefig(outdir / f"{variant.slug}.png", dpi=figure_dpi)
     plt.close(fig)
 
 
-def make_index_figure(outdir: Path) -> None:
-    fig = plt.figure(figsize=(14, 3.1))
-    ax = fig.add_subplot(111)
-    ax.axis("off")
+def make_index_figure(outdir: Path, index_fontsize: int, figure_dpi: int) -> None:
     lines = [
-        "Architecture variant comparison files (left = CE reference, right = variant):",
+        "Architecture variant graph files (single-panel per model):",
         "Data loading + W construction use project-native util code.",
     ]
     for v in VARIANTS:
         lines.append(f"{v.slug}.png  -  {v.title}")
-    ax.text(0.01, 0.98, "\n".join(lines), va="top", family="monospace", fontsize=10)
-    fig.tight_layout()
-    fig.savefig(outdir / "00_file_index.png", dpi=220)
+
+    fig_h = max(4.0, 0.62 * len(lines))
+    fig = plt.figure(figsize=(14, fig_h))
+    ax = fig.add_subplot(111)
+    ax.axis("off")
+    ax.text(0.01, 0.98, "\n".join(lines), va="top", family="monospace", fontsize=index_fontsize)
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
+    fig.savefig(outdir / "00_file_index.png", dpi=figure_dpi)
     plt.close(fig)
 
 
@@ -506,7 +595,7 @@ def main() -> None:
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    ce_base, ce_ei, ce_labels = load_ce_with_project_code(args.ce_adj, args.ce_ei)
+    ce_base, _ce_ei, ce_labels = load_ce_with_project_code(args.ce_adj, args.ce_ei)
     ce_pos = compute_ce_kamada_layout(
         ce_base,
         seed=args.seed,
@@ -515,21 +604,29 @@ def main() -> None:
     )
     keep_all_negatives = not args.truncate_drops_negatives
 
-    make_index_figure(outdir)
+    make_index_figure(outdir, index_fontsize=args.index_fontsize, figure_dpi=args.figure_dpi)
     for i, variant in enumerate(VARIANTS):
         make_variant_figure(
             variant=variant,
             ce_base=ce_base,
             ce_pos=ce_pos,
-            ce_ei=ce_ei,
             ce_labels=ce_labels,
             outdir=outdir,
             seed=args.seed + i * 97,
+            er_p=args.er_p,
+            ws_p=args.ws_p,
             max_edges=args.max_edges,
             keep_all_negatives=keep_all_negatives,
             show_node_labels=args.show_node_labels,
             label_fontsize=args.label_fontsize,
+            panel_title_fontsize=args.panel_title_fontsize,
+            suptitle_fontsize=args.suptitle_fontsize,
+            legend_fontsize=args.legend_fontsize,
+            cbar_title_fontsize=args.cbar_title_fontsize,
+            cbar_label_fontsize=args.cbar_label_fontsize,
+            cbar_tick_fontsize=args.cbar_tick_fontsize,
             show_direction=args.show_direction,
+            figure_dpi=args.figure_dpi,
         )
 
     print(f"Wrote {1 + len(VARIANTS)} files to: {outdir.resolve()}")
