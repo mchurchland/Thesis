@@ -1,0 +1,46 @@
+Time-window sensitivity report
+metric=mc, max_delay=30
+parallel_backend=none, device=cpu, n_runs=6720
+rho_grid=[0.6, 0.8, 0.95, 1.05]
+leak_grid=[0.6, 0.8, 1.0]
+input_scale_grid=[0.1, 0.5, 1.0, 1.5]
+
+[Global capture vs baseline]
+baseline: mean=100.00%, std=0.00%, min=100.00%, p05=100.00%
+washout_x0.25: mean=106.15%, std=62.80%, min=6.00%, p05=62.00%
+t_train_x0.25: mean=98.93%, std=40.54%, min=4.47%, p05=48.84%
+t_test_x0.25: mean=106.21%, std=64.02%, min=36.14%, p05=63.08%
+washout_x0.75: mean=105.50%, std=52.03%, min=8.13%, p05=65.74%
+t_train_x0.75: mean=106.41%, std=67.70%, min=19.11%, p05=64.45%
+t_test_x0.75: mean=107.54%, std=71.23%, min=10.40%, p05=64.50%
+washout_x1.25: mean=106.60%, std=58.36%, min=17.67%, p05=63.95%
+t_train_x1.25: mean=107.34%, std=47.83%, min=3.53%, p05=67.88%
+t_test_x1.25: mean=105.29%, std=63.67%, min=0.00%, p05=58.49%
+
+[TOST stability vs baseline (model-pair significance)]
+baseline: bound=0.211984 (baseline=0.211984, delta=0), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+washout_x0.25: bound=0.206903 (baseline=0.211984, delta=-0.00508094), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+t_train_x0.25: bound=0.2082 (baseline=0.211984, delta=-0.00378405), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+t_test_x0.25: bound=0.207791 (baseline=0.211984, delta=-0.0041926), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+washout_x0.75: bound=0.202889 (baseline=0.211984, delta=-0.0090951), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+t_train_x0.75: bound=0.204636 (baseline=0.211984, delta=-0.00734771), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+t_test_x0.75: bound=0.204269 (baseline=0.211984, delta=-0.00771486), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+washout_x1.25: bound=0.204201 (baseline=0.211984, delta=-0.0077828), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+t_train_x1.25: bound=0.207524 (baseline=0.211984, delta=-0.0044596), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+t_test_x1.25: bound=0.210381 (baseline=0.211984, delta=-0.00160247), same_sig=91/91 (100.00%), baseline_sig_preserved=0/0, baseline_sig_lost=0, new_sig=0, all_baseline_sig_preserved=YES
+
+[Per-model capture by config]
+C. elegans: baseline: 100.00%±0.00%, washout_x0.25: 99.12%±32.33%, t_train_x0.25: 98.19%±26.87%, t_test_x0.25: 101.09%±21.63%, washout_x0.75: 104.32%±33.90%, t_train_x0.75: 97.85%±23.66%, t_test_x0.75: 103.30%±36.55%, washout_x1.25: 99.33%±34.80%, t_train_x1.25: 100.13%±29.76%, t_test_x1.25: 93.95%±29.64%
+shuffle: baseline: 100.00%±0.00%, washout_x0.25: 121.48%±158.78%, t_train_x0.25: 106.66%±67.59%, t_test_x0.25: 124.18%±171.35%, washout_x0.75: 115.92%±113.86%, t_train_x0.75: 122.97%±179.46%, t_test_x0.75: 125.87%±208.36%, washout_x1.25: 119.56%±157.03%, t_train_x1.25: 112.88%±95.32%, t_test_x1.25: 116.79%±141.52%
+cel+randN: baseline: 100.00%±0.00%, washout_x0.25: 94.35%±17.85%, t_train_x0.25: 82.25%±22.17%, t_test_x0.25: 96.99%±20.50%, washout_x0.75: 98.22%±22.46%, t_train_x0.75: 98.69%±22.37%, t_test_x0.75: 101.54%±20.64%, washout_x1.25: 100.04%±20.77%, t_train_x1.25: 102.50%±18.34%, t_test_x1.25: 101.23%±21.33%
+ER (p=0.1): baseline: 100.00%±0.00%, washout_x0.25: 97.82%±13.65%, t_train_x0.25: 68.88%±25.20%, t_test_x0.25: 99.69%±6.93%, washout_x0.75: 98.15%±8.54%, t_train_x0.75: 93.14%±15.35%, t_test_x0.75: 101.24%±8.78%, washout_x1.25: 99.79%±9.68%, t_train_x1.25: 98.63%±15.93%, t_test_x1.25: 97.93%±16.92%
+ws_p0.1+randN: baseline: 100.00%±0.00%, washout_x0.25: 98.43%±14.43%, t_train_x0.25: 70.76%±27.46%, t_test_x0.25: 97.64%±12.46%, washout_x0.75: 98.49%±9.09%, t_train_x0.75: 95.53%±14.35%, t_test_x0.75: 99.81%±5.31%, washout_x1.25: 101.05%±11.35%, t_train_x1.25: 102.67%±7.75%, t_test_x1.25: 100.02%±9.06%
+celW+connShuf: baseline: 100.00%±0.00%, washout_x0.25: 113.46%±57.77%, t_train_x0.25: 114.15%±54.45%, t_test_x0.25: 113.12%±70.62%, washout_x0.75: 108.78%±35.99%, t_train_x0.75: 107.41%±36.10%, t_test_x0.75: 117.49%±61.57%, washout_x1.25: 111.25%±79.97%, t_train_x1.25: 114.69%±53.39%, t_test_x1.25: 108.20%±60.91%
+local_sign: baseline: 100.00%±0.00%, washout_x0.25: 106.97%±27.81%, t_train_x0.25: 103.24%±30.21%, t_test_x0.25: 111.14%±35.48%, washout_x0.75: 104.29%±21.25%, t_train_x0.75: 106.40%±29.90%, t_test_x0.75: 108.22%±27.22%, washout_x1.25: 106.25%±29.85%, t_train_x1.25: 104.82%±33.37%, t_test_x1.25: 97.13%±27.29%
+conn_shuf_only: baseline: 100.00%±0.00%, washout_x0.25: 110.88%±35.58%, t_train_x0.25: 111.22%±33.01%, t_test_x0.25: 109.88%±33.38%, washout_x0.75: 108.24%±35.24%, t_train_x0.75: 110.07%±42.92%, t_test_x0.75: 104.53%±36.81%, washout_x1.25: 105.13%±40.54%, t_train_x1.25: 115.30%±36.64%, t_test_x1.25: 109.95%±29.64%
+cel_sample: baseline: nan%±nan%, washout_x0.25: nan%±nan%, t_train_x0.25: nan%±nan%, t_test_x0.25: nan%±nan%, washout_x0.75: nan%±nan%, t_train_x0.75: nan%±nan%, t_test_x0.75: nan%±nan%, washout_x1.25: nan%±nan%, t_train_x1.25: nan%±nan%, t_test_x1.25: nan%±nan%
+local_sign+flat: baseline: 100.00%±0.00%, washout_x0.25: 104.51%±37.12%, t_train_x0.25: 104.51%±37.79%, t_test_x0.25: 103.12%±30.28%, washout_x0.75: 104.11%±43.32%, t_train_x0.75: 104.73%±42.43%, t_test_x0.75: 104.79%±33.99%, washout_x1.25: 111.00%±43.37%, t_train_x1.25: 108.85%±35.25%, t_test_x1.25: 107.86%±52.86%
+local_sign+sample: baseline: 100.00%±0.00%, washout_x0.25: 115.63%±117.05%, t_train_x0.25: 110.46%±57.42%, t_test_x0.25: 111.48%±54.44%, washout_x0.75: 113.93%±101.36%, t_train_x0.75: 122.48%±110.05%, t_test_x0.75: 109.55%±48.23%, washout_x1.25: 113.52%±58.33%, t_train_x1.25: 109.38%±52.75%, t_test_x1.25: 106.39%±86.49%
+local_sign+binary: baseline: 100.00%±0.00%, washout_x0.25: 121.29%±66.46%, t_train_x0.25: 109.74%±32.46%, t_test_x0.25: 125.63%±110.84%, washout_x0.75: 120.52%±70.02%, t_train_x0.75: 120.58%±89.74%, t_test_x0.75: 120.34%±111.26%, washout_x1.25: 112.47%±62.07%, t_train_x1.25: 124.93%±95.37%, t_test_x1.25: 123.46%±124.66%
+global_sign_pres: baseline: 100.00%±0.00%, washout_x0.25: 98.98%±24.79%, t_train_x0.25: 97.19%±19.91%, t_test_x0.25: 98.77%±24.03%, washout_x0.75: 97.43%±23.18%, t_train_x0.75: 100.62%±24.69%, t_test_x0.75: 100.25%±25.88%, washout_x1.25: 106.05%±27.60%, t_train_x1.25: 96.49%±21.17%, t_test_x1.25: 103.03%±27.96%
+binary+shuffle: baseline: 100.00%±0.00%, washout_x0.25: 102.13%±26.23%, t_train_x0.25: 105.34%±28.10%, t_test_x0.25: 94.45%±26.89%, washout_x0.75: 103.11%±33.79%, t_train_x0.75: 109.23%±40.44%, t_test_x0.75: 107.09%±33.61%, washout_x1.25: 102.13%±23.70%, t_train_x1.25: 107.78%±29.78%, t_test_x1.25: 105.09%±32.67%

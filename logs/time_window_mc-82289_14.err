@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/time_window_sensitivity.py", line 19, in <module>
+    import pingouin as pg
+ModuleNotFoundError: No module named 'pingouin'
+
+ERROR conda.cli.main_run:execute(49): `conda run python time_window_sensitivity.py --out-dir time_window_sensitivity_chunks/chunk_14 --models all --seed-start 14 --n-seeds 1 --metric mc --max-delay 30 --washout 500 --t-train 1500 --t-test 500 --ridge-alpha 1e-4 --scale-factors 0.25 0.75 1.0 1.25 --rho 0.6 0.8 0.95 1.05 --leak 0.6 0.8 1.0 --input-scale 0.1 0.5 1.0 1.5 --parallel-backend none` failed. (See above for error)
