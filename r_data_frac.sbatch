@@ -34,11 +34,30 @@ REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
 # choose which variant this script runs
-JOB_KIND="sign_test"   # or all / local_sign+sample/ local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
 
 conda run -n cel python inv_arc_test.py \
-  --job "${JOB_KIND}" \
-  --out-dir "${OUTDIR}" \
+  --job "sign_test_cel" \
+  --out-dir "cel_${OUTDIR}" \
+  --ce-adj Connectome/ce_adj.npy \
+  --ce-ei  Connectome/ce_ei.npy \
+  --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
+  --seed "${START_SEED}" \
+  --sid "${SID_BASE}" \
+  --split "${SPLIT}" \
+  --rank "${RANK}" \
+  --n-repeats "${TOTAL_REPEATS}" \
+  --repeat-split "${REPEAT_SPLIT}" \
+  --repeat-rank "${REPEAT_RANK}" \
+  --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
+  --ws-p 0.1 \
+  --er-p 0.1 \
+  --cuda ${SLURM_LOCALID}\
+  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+
+  conda run -n cel python inv_arc_test.py \
+  --job "sign_test_er" \
+  --out-dir "er_${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \

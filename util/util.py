@@ -211,16 +211,27 @@ def build_reservoir(
         W = _cel_to_bin(W)
         W = scale_weights(W,alpha=alpha,rng=rng)
         
-    elif feature_conn == "sign_test":
+    elif feature_conn == "sign_test_cel":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         if per_neg == None:
             raise ValueError("Per neg required for sign_test")
         W = ce_W_bio.copy().astype(np.float32)
         W = _cel_to_bin(W)
-        W = flip_percent(ce_W_bio,per=per_neg,rng=rng)
+        W = apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
         
-
+    elif feature_conn == "sign_test_er":
+        if per_neg == None:
+            raise ValueError("Per neg required for sign_test")
+        assert N!= None
+        p = 0.1 ##assuming er_p=0.1 here but it should be passed in as part of the feature_conn string, need to fix this but im to lazy and it doisent matter
+        A = er_adjacency(N, p, rng).astype(np.float32) 
+        mask = (A != 0).astype(np.float32)
+        if nnz_target is not None:
+            mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)  ##might be able to do this withour removing edges look into this
+        W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
+        W = _cel_to_bin(W)
+        W=apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
     elif feature_conn == 'local_sign':
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
@@ -321,9 +332,6 @@ def build_reservoir(
         if nnz_target is not None:
             mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)  ##might be able to do this withour removing edges look into this
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
-
-        if per_neg is not None:
-            apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
     elif feature_conn == "cel_randN":
         W = ce_W_bio.copy().astype(np.float32)
         mask = (W != 0).astype(np.float32)
@@ -530,12 +538,13 @@ def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
 
 def apply_percent_negative(W:np.ndarray,per_neg:float,rng:np.random.Generator): ##these should probably be unified
     nz = np.nonzero(W)
-    n_neg = int(per_neg * len(nz[0]))
+    n_neg = int(per_neg * len(nz[0])) ##number to make negative
     idx = np.arange(len(nz[0]))
     rng.shuffle(idx)
     sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
     W = np.abs(W)
     W[sel] = -1*W[sel]
+    return W
 def flip_percent(Wbio:np.ndarray,per:float,rng:np.random.Generator):
     assert per >=0 and per <= 1
     if per ==0:

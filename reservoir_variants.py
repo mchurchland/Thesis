@@ -160,7 +160,9 @@ VARIANT_LABELS = {
     "local_sign+sample" : "local_sign+sample",
     "local_sign+binary" : "local_sign+binary",
     "global_sign_pres" : "global_sign_pres",
+    "sign_test_cel" : "sign_test_cel",
     "sign_test" : "sign_test",
+    "sign_test_er" : "sign_test_er",
     "weight_test" : "weight_test",
     "binary+shuffle" : "binary+shuffle",
 }
@@ -179,10 +181,12 @@ VARIANT_DESCRIPTIONS = {
     "local_sign+flat" : "local_sign preserved with a weights from flat dist",
     "local_sign+sample" : "local_sign preserved with a celegan weight sample",
     "local_sign+binary" : "local_sign preserved with a binary weight sample, +1 or -1",
-    "sign_test" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions",
+    "sign_test_cel" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions",
+    "sign_test_er" : "ER connectome, can pass in a percent to flip and it will flip the sign of that many connections",
     "weight_test" : "celegan connectome, can pass in an alpha to add a guasian dist times that alpha to the weights",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
     "binary+shuffle" : "convert the weights to binary (sign) and then do a degree-matched shuffle of the connections (and thus signs), so global sign balance is preserved but signs can be on different edges",
+    "sign_test" : "both cel and er"
 }
 
 # Backwards-compatible keys allowed for callers; resolve to canonical names above.
@@ -216,7 +220,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
     """Instantiate a reservoir variant (direct dispatch, no VariantSpec indirection)."""
     key = _resolve_key(key)
     if key not in VARIANT_KEYS:
-        if (not key.startswith("sign_test") and (not key.startswith("weight_test"))):
+        if ((not key.startswith("sign_test_cel")) and (not key.startswith("weight_test")) and (not key.startswith("sign_test_er"))):
             raise ValueError(f"Unknown variant key: {key}")
 
     _require_ce(ctx)
@@ -367,16 +371,24 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             nnz_target=None,
             seed_base=seed_base,
         )
-
-
-    if key.startswith("sign_test"):
+    if key.startswith("sign_test_cel"):
         seed_base = _seed(ctx, offset=36_000)
         return _run_variant_row(
             ctx,
-            feature_conn="sign_test",
+            feature_conn="sign_test_cel",
             mode_label=key,
             ce_override=None,
             nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key.startswith("sign_test_er"):
+        seed_base = _seed(ctx, offset=36_500)
+        return _run_variant_row(
+            ctx,
+            feature_conn="sign_test_er",
+            mode_label=key,
+            ce_override=None,
+            nnz_target=_nnz_match_ce(ctx),
             seed_base=seed_base,
         )
     if key.startswith("weight_test"):

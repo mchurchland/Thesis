@@ -431,7 +431,31 @@ def main():
                         append=(append_base or frac_idx > 0),
                     )
                 continue
-            if args.job == "sign_test":
+            if args.job == "sign_test_cel":
+                for frac_idx, frac in enumerate(sign_flip_fracs):
+                    ctx = _build_ctx(
+                        job_key + str(frac),
+                        WS_K,
+                        ce_W_bio,
+                        None,
+                        col_params,
+                        device,
+                        seed=seed_base,
+                        sid=sid_base,
+                        er_p=args.er_p,
+                        ws_p=args.ws_p,
+                        src_tag=args.src_tag,
+                        per_neg=frac
+                    )
+                    _run_and_save(
+                        job_key + str(frac),
+                        ctx,
+                        out_dir,
+                        csv_name,
+                        append=(append_base or frac_idx > 0),
+                    )
+                continue
+            if args.job == "sign_test_er":
                 for frac_idx, frac in enumerate(sign_flip_fracs):
                     ctx = _build_ctx(
                         job_key + str(frac),
