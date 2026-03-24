@@ -235,6 +235,23 @@ def main() -> None:
             f"min={float(np.min(caps_all)):.2f}, p05={float(np.percentile(caps_all, 5)):.2f}"
         )
     lines.append("")
+    lines.append("[Across-model capture by D_max]")
+    for d in d_values:
+        per_model_caps = np.array(
+            [
+                r[4]
+                for r in summary_rows
+                if int(r[1]) == int(d) and np.isfinite(float(r[4]))
+            ],
+            dtype=np.float64,
+        )
+        if per_model_caps.size:
+            lines.append(
+                f"D_max={d}: mean_capture_across_models={float(np.mean(per_model_caps)):.2f}%"
+            )
+        else:
+            lines.append(f"D_max={d}: mean_capture_across_models=nan%")
+    lines.append("")
     lines.append("[Ranking stability vs D_ref]")
     for d, pearson, spearman, n_models in rank_rows:
         lines.append(
