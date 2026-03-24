@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--ws-p", type=float, default=0.1)
 
     p.add_argument("--seeds", type=int, nargs="+", default=None)
-    p.add_argument("--n-seeds", type=int, default=None)
+    p.add_argument("--n-seeds", type=int, default=20)
     p.add_argument("--seed-start", type=int, default=0)
 
     p.add_argument("--rho", type=float, nargs="+", default=[0.95])

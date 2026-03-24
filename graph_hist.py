@@ -834,9 +834,9 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     color_for_mode = {m: cmap(norm(mode_values[m])) for m in modes}
 
     if all(str(m).startswith("sign_test") for m in modes):
-        x_label = "sign_test frac (x)"
+        x_label = "negative sign frac"
     elif all(str(m).startswith("weight_test") for m in modes):
-        x_label = "weight_test value (x)"
+        x_label = "weight_test value"
     else:
         x_label = "mode value (x)"
 
@@ -1033,7 +1033,7 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
         return
 
     if all(str(m).startswith("sign_test") for m in modes):
-        x_label = "sign_test frac"
+        x_label = "Negative Sign %"
     elif all(str(m).startswith("weight_test") for m in modes):
         x_label = "weight_test value"
     else:
@@ -1045,9 +1045,9 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     span = x_max - x_min
     pad = 0.05 * span if span > 0 else 1.0
 
-    ax.set_xlabel(x_label, fontsize=18, labelpad=2)
+    ax.set_xlabel(x_label, fontsize=18, labelpad=4)
     ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
-    ax.set_zlabel("mean performance", fontsize=18, labelpad=2)
+    ax.set_zlabel("mean Performance", fontsize=18, labelpad=2)
     ax.set_xlim(x_min - pad, x_max + pad)
     _tight_layout_quiet(fig)
 
@@ -1816,8 +1816,8 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    plot_frac_cv_meanline(disp, combined, args.out_dir)
+    #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
+    plot_frac_cv_meanline(disp, combined, args.out_dir,show=False)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
     #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
     #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)

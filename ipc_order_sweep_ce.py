@@ -44,14 +44,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--models",
         nargs="+",
-        default=["cel", "er"],
+        default=["all"],
         help="Reservoir models to compare. Use 'all' for inv_arc_test.ALL_JOB_KEYS.",
     )
     p.add_argument("--er-p", type=float, default=0.1, help="ER edge probability.")
     p.add_argument("--ws-p", type=float, default=0.1, help="WS rewiring probability.")
 
     p.add_argument("--seeds", type=int, nargs="+", default=None, help="Explicit seed list.")
-    p.add_argument("--n-seeds", type=int, default=None, help="Number of seeds (uses --seed-start).")
+    p.add_argument("--n-seeds", type=int, default=20, help="Number of seeds (uses --seed-start).")
     p.add_argument("--seed-start", type=int, default=0, help="Starting seed for --n-seeds.")
     p.add_argument("--rho", type=float, nargs="+", default=[0.95], help="Spectral radius target(s).")
     p.add_argument("--leak", type=float, nargs="+", default=[0.8], help="Leak rate(s).")
