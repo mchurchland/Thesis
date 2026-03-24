@@ -1485,7 +1485,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "local_sign+flat",
         "local_sign+sample",
         "local_sign+binary",
-        "global_sign_pres"
+        "global_sign_pres",
+        "binary+shuffle",
 
     ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
@@ -1503,6 +1504,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "local_sign+sample": "#AF7DF5",
         "local_sign+binary": "#8ADEF3",
         "global_sign_pres" : "#1C373D",
+        "binary+shuffle": "#FF00FF",
 
     }
     if not metrics:
@@ -1566,6 +1568,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     "local_sign+sample": "Local Sign + Sampled",
                     "local_sign+binary": "Local Sign + wt +1,-1",
                     "global_sign_pres" : "Global sign",
+                    "binary+shuffle": "Binary sign + shuffle",
 
 
 

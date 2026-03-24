@@ -109,6 +109,20 @@ def _build_variants() -> list[Variant]:
 
 VARIANTS: list[Variant] = _build_variants()
 
+# Variants that alter the graph's connectivity (edge locations), not just edge weights.
+CONNECTIVITY_ALTERING_KEYS: frozenset[str] = frozenset(
+    {
+        "er_randN",
+        "ws_p01_randN",
+        "conn_shuf",
+        "conn_shuf_only",
+    }
+)
+
+
+def variant_alters_connectivity(key: str) -> bool:
+    return key in CONNECTIVITY_ALTERING_KEYS
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate CE-reference vs variant weighted graph figures.")
@@ -128,7 +142,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--layout-scale",
         type=float,
-        default=1.35,
+        default=1.5,
         help="Multiply node coordinates by this factor to spread nodes out.",
     )
     p.add_argument("--show-node-labels", action="store_true", help="Draw neuron-name labels on nodes.")
@@ -339,7 +353,6 @@ def draw_weighted_panel(
     for (i, j), wij in zip(edge_idx, w):
         G.add_edge(int(i), int(j), weight=float(wij))
 
-    ax.set_title(title, fontsize=panel_title_fontsize)
     ax.axis("off")
 
     nx.draw_networkx_nodes(
@@ -368,14 +381,13 @@ def draw_weighted_panel(
     if coords.size:
         xmin, ymin = coords.min(axis=0)
         xmax, ymax = coords.max(axis=0)
-        span = float(max(xmax - xmin, ymax - ymin, 1e-6))
-        xmid = float((xmin + xmax) * 0.5)
-        ymid = float((ymin + ymax) * 0.5)
-        pad = 0.07 * span
-        half = 0.5 * span + pad
-        ax.set_xlim(xmid - half, xmid + half)
-        ax.set_ylim(ymid - half, ymid + half)
-        ax.set_aspect("equal", adjustable="box")
+        xspan = float(max(xmax - xmin, 1e-6))
+        yspan = float(max(ymax - ymin, 1e-6))
+        pad_frac = 0.01
+        ax.set_xlim(float(xmin - pad_frac * xspan), float(xmax + pad_frac * xspan))
+        ax.set_ylim(float(ymin - pad_frac * yspan), float(ymax + pad_frac * yspan))
+        # Fill the panel area instead of forcing a square plotting box.
+        ax.set_aspect("auto")
 
     if w.size == 0:
         return
@@ -483,6 +495,8 @@ def make_variant_figure(
     er_p: float,
     ws_p: float,
     max_edges: int,
+    layout_iters: int,
+    layout_scale: float,
     keep_all_negatives: bool,
     show_node_labels: bool,
     label_fontsize: int,
@@ -497,6 +511,14 @@ def make_variant_figure(
 ) -> None:
     W_ref = ce_base
     W_var = construct_w_with_project_code(variant.key, ce_base, seed + 20_000, er_p=er_p, ws_p=ws_p)
+    panel_pos = ce_pos
+    if variant_alters_connectivity(variant.key):
+        panel_pos = compute_ce_kamada_layout(
+            W_var,
+            seed=seed + 40_000,
+            fallback_iters=layout_iters,
+            layout_scale=layout_scale,
+        )
 
     _, ref_w, _ = _edge_subset(W_ref, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
     _var_edges, _var_w, _ = _edge_subset(W_var, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
@@ -515,7 +537,7 @@ def make_variant_figure(
     draw_weighted_panel(
         ax_right,
         W_var,
-        ce_pos,
+        panel_pos,
         title=f"{variant.slug} ({stats_line(W_var)})",
         panel_title_fontsize=panel_title_fontsize,
         node_colors=["#666666"] * W_var.shape[0],
@@ -531,43 +553,15 @@ def make_variant_figure(
         neg_cmap=None if neg_map is None else neg_map["cmap"],
     )
 
-    if pos_map is not None:
-        sm_pos = plt.cm.ScalarMappable(norm=pos_map["norm"], cmap=pos_map["cmap"])
-        sm_pos.set_array([])
-        cb_pos = fig.colorbar(sm_pos, cax=cax_pos)
-        cb_pos.set_ticks(pos_map["ticks"])
-        cb_pos.ax.set_title("Positive", fontsize=cbar_title_fontsize, pad=20)
-        cb_pos.set_label("w (+)", fontsize=cbar_label_fontsize,labelpad =-2)
-        cb_pos.ax.tick_params(labelsize=cbar_tick_fontsize)
-    else:
-        cax_pos.axis("off")
 
-    if neg_map is not None:
-        sm_neg = plt.cm.ScalarMappable(norm=neg_map["norm"], cmap=neg_map["cmap"])
-        sm_neg.set_array([])
-        cb_neg = fig.colorbar(sm_neg, cax=cax_neg)
-        cb_neg.set_ticks(neg_map["ticks"])
-        cb_neg.ax.set_title("Negative", fontsize=cbar_title_fontsize, pad=20)
-        cb_neg.set_label("w (-)", fontsize=cbar_label_fontsize,labelpad = -2)
-        cb_neg.ax.tick_params(labelsize=cbar_tick_fontsize)
-    else:
-        cax_neg.axis("off")
+    cax_pos.axis("off")
 
-    style_handles = [
-        Line2D([0], [0], color="#c73e1d", lw=2.0, ls="-", label="positive edge"),
-        Line2D([0], [0], color="#006daa", lw=2.0, ls="-", label="negative edge"),
-    ]
-    fig.legend(
-        handles=style_handles,
-        loc="lower center",
-        ncol=2,
-        frameon=False,
-        bbox_to_anchor=(0.5, 0.01),
-        fontsize=legend_fontsize,
-    )
+    cax_neg.axis("off")
+
+
 
     #fig.suptitle(f"{variant.slug}: {variant.title}", fontsize=suptitle_fontsize, y=1.02)
-    fig.subplots_adjust(left=0.00, right=0.95, top=0.92, bottom=0.13, wspace=0.03)
+    fig.subplots_adjust(left=0.00, right=1.0, top=1.0, bottom=0.00, wspace=0.00)
     fig.savefig(outdir / f"{variant.slug}.png", dpi=figure_dpi)
     plt.close(fig)
 
@@ -616,6 +610,8 @@ def main() -> None:
             er_p=args.er_p,
             ws_p=args.ws_p,
             max_edges=args.max_edges,
+            layout_iters=args.layout_iters,
+            layout_scale=args.layout_scale,
             keep_all_negatives=keep_all_negatives,
             show_node_labels=args.show_node_labels,
             label_fontsize=args.label_fontsize,
