@@ -27,18 +27,18 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=250
+TOTAL_REPEATS=500
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
 # choose which variant this script runs
-JOB_KIND="all"   # or all /local_sign+binary/ local_sign+sample/ local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
+JOB_KIND="binary+shuffle"   # or all /local_sign+binary/ local_sign+sample/ local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "${OUTDIR}" \
+  --out-dir "bin+shuf_${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \

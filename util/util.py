@@ -308,7 +308,7 @@ def build_reservoir(
         W = _cel_to_bin(Wbio = W)
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
-        W = _shuffle_ce_weights(Wbio=W,rng=rng)
+        W = degree_matched_shuffle_directed(W,tries=20_000,rng=rng).astype(np.float32)
 
         
     elif feature_conn == "global_sign_pres":
@@ -552,16 +552,6 @@ def apply_percent_negative(W:np.ndarray,per_neg:float,rng:np.random.Generator): 
     sel = (nz[0][idx[:n_neg]], nz[1][idx[:n_neg]])
     W = np.abs(W)
     W[sel] = -1*W[sel]
-    return W
-def flip_percent(Wbio:np.ndarray,per:float,rng:np.random.Generator):
-    assert per >=0 and per <= 1
-    if per ==0:
-        return Wbio
-    W = Wbio.copy().astype(np.float32)
-    nz = np.nonzero(W)
-    num_to_flip = int(len(nz[0])*per)
-    ind_to_flip_row  = rng.choice(len(nz[0]),num_to_flip,replace=False)
-    W[nz[0][ind_to_flip_row],nz[1][ind_to_flip_row]] = -W[nz[0][ind_to_flip_row],nz[1][ind_to_flip_row]]
     return W
 
 

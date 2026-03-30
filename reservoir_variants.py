@@ -16,10 +16,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 class SimulationParams:
     """Container for the time-series/metric settings used by run_one."""
 
-    washout: int = int(500 * 0.25)
+    washout: int = int(500)
     perturb_std: float = 0.01
-    t_train: int = int(1500 * 0.25)
-    t_test: int = int(500 * 0.25)
+    t_train: int = int(1500)
+    t_test: int = int(500)
     mc_max_delay: int = 30
     ipc_max_delay: int = 30
     ipc_orders: list[int] = field(default_factory=lambda: [1, 3, 5])
