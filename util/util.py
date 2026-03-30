@@ -219,6 +219,14 @@ def build_reservoir(
         W = ce_W_bio.copy().astype(np.float32)
         W = _cel_to_bin(W)
         W = apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
+    elif feature_conn == "sign_test_og_cel":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        if per_neg == None:
+            raise ValueError("Per neg required for sign_test")
+        W = ce_W_bio.copy().astype(np.float32)
+        W = np.abs(W)
+        W = apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
         
     elif feature_conn == "sign_test_er":
         if per_neg == None:
