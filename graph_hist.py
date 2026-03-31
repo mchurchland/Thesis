@@ -562,20 +562,45 @@ def print_tost_preservation_summary(
     # Show baseline-significant comparisons that are not preserved in new run.
     not_preserved = merged[(merged[sig_ref_col]) & (~merged[sig_new_col])].copy()
     if not not_preserved.empty:
+        ref_mean_lookup = (
+            ref.groupby(["metric", "mode"], dropna=False)[value_col]
+            .mean()
+            .to_dict()
+        )
+        new_mean_lookup = (
+            new.groupby(["metric", "mode"], dropna=False)[value_col]
+            .mean()
+            .to_dict()
+        )
+
+        def _fmt_mean(v):
+            return f"{v:.6g}" if np.isfinite(v) else "NA"
+
         not_preserved = not_preserved.sort_values(["metric", "mode_a", "mode_b"], kind="stable")
         print("[tost] not preserved comparisons (baseline significant, new not significant):")
         for _, row in not_preserved.iterrows():
             p_ref = row.get(p_ref_col, np.nan)
             p_new = row.get(p_new_col, np.nan)
+            mode_a = row["mode_a"]
+            mode_b = row["mode_b"]
+            metric = row["metric"]
+            ref_mean_a = ref_mean_lookup.get((metric, mode_a), np.nan)
+            ref_mean_b = ref_mean_lookup.get((metric, mode_b), np.nan)
+            new_mean_a = new_mean_lookup.get((metric, mode_a), np.nan)
+            new_mean_b = new_mean_lookup.get((metric, mode_b), np.nan)
             if np.isfinite(p_new):
                 print(
-                    f"[tost] {row['metric']}: {row['mode_a']} vs {row['mode_b']} "
-                    f"(p_{label_ref}={p_ref:.4g}, p_{label_new}={p_new:.4g}, bound={row['bound_ref']:.4g})"
+                    f"[tost] {metric}: {mode_a} vs {mode_b} "
+                    f"(p_{label_ref}={p_ref:.4g}, p_{label_new}={p_new:.4g}, bound={row['bound_ref']:.4g}, "
+                    f"means_{label_ref}=[{mode_a}:{_fmt_mean(ref_mean_a)}, {mode_b}:{_fmt_mean(ref_mean_b)}], "
+                    f"means_{label_new}=[{mode_a}:{_fmt_mean(new_mean_a)}, {mode_b}:{_fmt_mean(new_mean_b)}])"
                 )
             else:
                 print(
-                    f"[tost] {row['metric']}: {row['mode_a']} vs {row['mode_b']} "
-                    f"(p_{label_ref}={p_ref:.4g}, p_{label_new}=NA, bound={row['bound_ref']:.4g})"
+                    f"[tost] {metric}: {mode_a} vs {mode_b} "
+                    f"(p_{label_ref}={p_ref:.4g}, p_{label_new}=NA, bound={row['bound_ref']:.4g}, "
+                    f"means_{label_ref}=[{mode_a}:{_fmt_mean(ref_mean_a)}, {mode_b}:{_fmt_mean(ref_mean_b)}], "
+                    f"means_{label_new}=[{mode_a}:{_fmt_mean(new_mean_a)}, {mode_b}:{_fmt_mean(new_mean_b)}])"
                 )
         print()
 
@@ -1010,6 +1035,8 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     ax = fig.add_subplot(111, projection="3d")
 
     colors = mpl.colormaps["tab10"]
+    highlight_frac = 0.06113256113256113
+    highlight_atol = 1e-12
     plotted_any = False
     for idx, metric in enumerate(metrics):
         rows = []
@@ -1017,7 +1044,7 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
             frac = mode_values.get(mode, np.nan)
             y = mean_cv.get((mode, metric), np.nan)
             z = mean_perf.get((mode, metric), np.nan)
-            if not (np.isfinite(frac) and np.isfinite and np.isfinite):
+            if not (np.isfinite(frac) and np.isfinite(y) and np.isfinite(z)):
                 continue
             rows.append((frac, y, z))
         if not rows:
@@ -1025,6 +1052,17 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
         ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        highlight_mask = np.isclose(xs, highlight_frac, rtol=0.0, atol=highlight_atol)
+        if np.any(highlight_mask):
+            ax.scatter(
+                xs[highlight_mask],
+                ys[highlight_mask],
+                zs[highlight_mask],
+                color="black",
+                s=36,
+                depthshade=False,
+                zorder=6,
+            )
         plotted_any = True
 
     if not plotted_any:
@@ -1817,7 +1855,7 @@ def main():
 
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    plot_frac_cv_meanline(disp, combined, args.out_dir,show=False)
+    plot_frac_cv_meanline(disp, combined, args.out_dir,show=True)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
     #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
     #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)

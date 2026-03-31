@@ -163,6 +163,12 @@ def run_reservoir(W: torch.Tensor,
 
     return X
 
+#binary base
+#binary + sign shuffle (fixed topology)
+#binary + topology shuffle (signs transported)
+#binary + topology shuffle + post-shuffle sign randomization
+#This separates topology effect from sign-placement effect.
+
 def build_reservoir(
     target_sr: float | None,   # <--- scale by spectral radius to this (None = unchanged)
     input_scale: float,
@@ -226,8 +232,7 @@ def build_reservoir(
             raise ValueError("Per neg required for sign_test")
         W = ce_W_bio.copy().astype(np.float32)
         W = np.abs(W)
-        W = apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
-        
+        W = apply_percent_negative(W = W,per_neg = per_neg,rng = rng) 
     elif feature_conn == "sign_test_er":
         if per_neg == None:
             raise ValueError("Per neg required for sign_test")
@@ -240,6 +245,7 @@ def build_reservoir(
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
         W = _cel_to_bin(W)
         W=apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
+    
     elif feature_conn == 'local_sign':
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
@@ -281,8 +287,6 @@ def build_reservoir(
 
         W = _sample_from_cel_sign(Wbio = W,rng=rng)
 
-        
-
     elif feature_conn == "local_sign+binary":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
@@ -309,8 +313,34 @@ def build_reservoir(
         W[sel_p] = np.abs(W[sel_p])
         W[sel_n] = -np.abs(W[sel_n])
         W = degree_matched_shuffle_directed(W,tries=20_000,rng=rng).astype(np.float32)
+    
+    elif feature_conn == "binary+conshuffle+wshuffle": ## need data on this one
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+
+        sel_p = W > 0 ## get the positive weights of the selection
+        sel_n = W < 0 ## get the negative weights of the selection
+        
+
+        W = _cel_to_bin(Wbio = W)
+        W[sel_p] = np.abs(W[sel_p])
+        W[sel_n] = -np.abs(W[sel_n])
+        W = _conn_and_w_shuffle_ce(Wbio = W,rng=rng)
 
         
+    elif feature_conn == "binary_base":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+        W = _cel_to_bin(Wbio = W)
+    elif feature_conn == "binary_base_topology_shuffle":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+        W = _cel_to_bin(Wbio = W)
+        W = degree_matched_shuffle_directed(W,tries=20_000,rng=rng).astype(np.float32)
+    
     elif feature_conn == "global_sign_pres":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")

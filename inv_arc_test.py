@@ -50,8 +50,23 @@ ALL_JOB_KEYS = (
     "local_sign+sample", 
     "local_sign+binary",
     "global_sign_pres",
+    "binary_base",
+    "binary_base_topology_shuffle",
     "binary+shuffle",
+    "binary+conshuffle+wshuffle",
     "sign_test_og_cel",
+)
+
+TOPOLOGY_SHUFFLE_JOB_KEYS = (
+    #"real",
+    #"shuffle_weights",
+    #"conn_shuf_only",
+    #"conn_shuf",
+    #"local_sign+binary", ##this is localsign+signed binary weights
+    "binary_base", ## unsigned binary
+    "binary_base_topology_shuffle", ##unsigned binary w shuffle
+    #"binary+shuffle",
+    "binary+conshuffle+wshuffle",
 )
 
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
@@ -168,9 +183,9 @@ def parse_args():
     # What to run
     p.add_argument(
         "--job",
-        choices=sorted(VARIANT_KEYS) + ["all"],
+        choices=sorted(VARIANT_KEYS) + ["all", "all_topology_shuffle"],
         required=True,
-        help="Select a single variant or 'all' to run every variant.",
+        help="Select a single variant, 'all', or 'all_topology_shuffle' for the topology-shuffle section suite.",
     )
     p.add_argument("--out-dir", required=True, help="Output directory for CSVs.")
 
@@ -197,12 +212,6 @@ def parse_args():
         type=int,
         default=1,
         help="Shuffle/run id for variants that need it.",
-    )
-    p.add_argument(
-        "--n-shuffles",
-        type=int,
-        default=1,
-        help="Repeat count for shuffle-style jobs.",
     )
 
     # Graph model params
@@ -341,9 +350,8 @@ def main():
     # ---------------- job dispatch ----------------
     def _run_job(job_key: str, *, append_start: bool):
         def _sid_base(rep_idx: int) -> int:
-            if job_key in ("shuffle_weights", "conn_shuf", "local_sign"):
-                return args.sid + rep_idx * max(1, args.n_shuffles)
             return args.sid + rep_idx
+
 
         for rep_pos, rep_idx in enumerate(repeat_ids):
             append_base = append_start or rep_pos > 0
@@ -352,8 +360,6 @@ def main():
             sid_base = _sid_base(rep_idx)
 
             if job_key == "shuffle_weights":
-                for j in range(args.n_shuffles):
-                    sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
                     ctx = _build_ctx(
                         job_key,
                         WS_K,
@@ -361,18 +367,16 @@ def main():
                         None,
                         col_params,
                         device,
-                        seed=seed_base + 7_000 * j,
-                        sid=sid,
+                        seed=seed_base,
+                        sid=sid_base,
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
                     )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
-                continue
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                    continue
 
             if job_key == "conn_shuf":
-                for j in range(args.n_shuffles):
-                    sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
                     ctx = _build_ctx(
                         job_key,
                         WS_K,
@@ -380,18 +384,16 @@ def main():
                         None,
                         col_params,
                         device,
-                        seed=seed_base + 9_000 * j,
-                        sid=sid,
+                        seed=seed_base,
+                        sid=sid_base,
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
                     )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
-                continue
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                    continue
 
             if job_key == "local_sign":
-                for j in range(args.n_shuffles):
-                    sid = sid_base if args.n_shuffles == 1 else (sid_base + j)
                     ctx = _build_ctx(
                         job_key=job_key,
                         WS_K=WS_K,
@@ -399,16 +401,16 @@ def main():
                         ce_ei=None,
                         col_params=col_params,
                         device=device,
-                        seed=seed_base + 9_000 * j,
-                        sid=sid,
+                        seed=seed_base,
+                        sid=sid_base,
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
                         per_neg=None,
                     )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=(append_base or j > 0))
-                continue
-            if args.job == "weight_test":
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                    continue
+            if job_key == "weight_test":
                 for frac_idx, alpha in enumerate(alphas):
                     ctx = _build_ctx(
                         job_key + str(alpha),
@@ -432,7 +434,7 @@ def main():
                         append=(append_base or frac_idx > 0),
                     )
                 continue
-            if args.job == "sign_test_cel":
+            if job_key == "sign_test_cel":
                 for frac_idx, frac in enumerate(sign_flip_fracs):
                     ctx = _build_ctx(
                         job_key + str(frac),
@@ -456,10 +458,14 @@ def main():
                         append=(append_base or frac_idx > 0),
                     )
                 continue
-            if args.job == "sign_test_og_cel":
+            if job_key == "sign_test_og_cel":
                 frac = (len(np.where(ce_W_bio<0)[0])/ (len(np.where(ce_W_bio> 0)[0]) + len(np.where(ce_W_bio<0)[0])) ) 
-                sign_flip_fracs.insert(0, frac)
-                for frac_idx, frac in enumerate(sign_flip_fracs):
+                # Build a local list for this run; do not mutate sign_flip_fracs in-place.
+                fracs_local = [frac]
+                for base_frac in sign_flip_fracs:
+                    if not np.isclose(base_frac, frac):
+                        fracs_local.append(base_frac)
+                for frac_idx, frac in enumerate(fracs_local):
                     ctx = _build_ctx(
                         job_key + str(frac),
                         WS_K,
@@ -482,7 +488,7 @@ def main():
                         append=(append_base or frac_idx > 0),
                     )
                 continue
-            if args.job == "sign_test_er":
+            if job_key == "sign_test_er":
                 for frac_idx, frac in enumerate(sign_flip_fracs):
                     ctx = _build_ctx(
                         job_key + str(frac),
@@ -526,6 +532,12 @@ def main():
         out_csv = os.path.join(out_dir, csv_name)
         append_across = os.path.exists(out_csv)
         for idx, job_key in enumerate(ALL_JOB_KEYS):
+            _run_job(job_key, append_start=(append_across or idx > 0))
+            append_across = True
+    elif args.job == "all_topology_shuffle":
+        out_csv = os.path.join(out_dir, csv_name)
+        append_across = os.path.exists(out_csv)
+        for idx, job_key in enumerate(TOPOLOGY_SHUFFLE_JOB_KEYS):
             _run_job(job_key, append_start=(append_across or idx > 0))
             append_across = True
     else:

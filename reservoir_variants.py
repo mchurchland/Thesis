@@ -160,6 +160,9 @@ VARIANT_LABELS = {
     "local_sign+sample" : "local_sign+sample",
     "local_sign+binary" : "local_sign+binary",
     "global_sign_pres" : "global_sign_pres",
+    "binary_base": "binary_base",
+    "binary_base_topology_shuffle": "binary_base_topology_shuffle",
+    "binary+conshuffle+wshuffle": "binary+conshuffle+wshuffle",
     "sign_test_cel" : "sign_test_cel",
     "sign_test" : "sign_test",
     "sign_test_er" : "sign_test_er",
@@ -187,6 +190,9 @@ VARIANT_DESCRIPTIONS = {
     "sign_test_er" : "ER connectome, can pass in a percent to flip and it will flip the sign of that many connections",
     "weight_test" : "celegan connectome, can pass in an alpha to add a guasian dist times that alpha to the weights",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
+    "binary_base": "Unsigned CE binary base (0/1): topology and magnitudes fixed except binarization.",
+    "binary_base_topology_shuffle": "Unsigned CE binary base with degree-preserving topology shuffle.",
+    "binary+conshuffle+wshuffle": "Signed binary CE with degree-preserving topology shuffle plus weight/sign shuffle on nonzero edges.",
     "binary+shuffle" : "convert the weights to binary (sign) and then do a degree-matched shuffle of the connections (and thus signs), so global sign balance is preserved but signs can be on different edges",
     "sign_test" : "both cel and er"
 }
@@ -228,7 +234,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
     _require_ce(ctx)
 
     if key == "real":
-        seed_base = _seed(ctx, offset=123)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
@@ -241,7 +247,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
     if key == "shuffle_weights": ## investigate
         # Shuffle CE weight magnitudes across the existing edge set.
         ce_override = _shuffle_ce_weights(ctx.ce_W_bio, np.random.default_rng(ctx.seed))
-        seed_base = _seed(ctx, offset=9_999, sid_stride=1)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
@@ -252,7 +258,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
 
     if key == "cel_randN":
-        seed_base = _seed(ctx, offset=10_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel_randN",
@@ -263,7 +269,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
 
     if key == "er_randN":
-        seed_base = _seed(ctx, offset=21_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn=f"er_p={ctx.er_p}",
@@ -274,7 +280,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
 
     if key == "ws_p01_randN":
-        seed_base = _seed(ctx, offset=20_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn=f"ws_p={ctx.ws_p}",
@@ -286,9 +292,9 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
 
     if key == "conn_shuf": ## investigate
         ce_override = _conn_and_w_shuffle_ce(
-            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 40_000 + ctx.sid)
+            ctx.ce_W_bio, np.random.default_rng(ctx.seed)
         )
-        seed_base = _seed(ctx, offset=50_000, sid_stride=911)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
@@ -298,7 +304,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key == "local_sign":
-        seed_base = _seed(ctx, offset=30_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="local_sign",
@@ -309,9 +315,9 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
     if key == "conn_shuf_only":
         ce_override = _conn_shuffle_ce(
-            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 31_000 + ctx.sid)
+            ctx.ce_W_bio, np.random.default_rng(ctx.seed)
         )
-        seed_base = _seed(ctx, offset=31_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
@@ -322,9 +328,9 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
     if key == "cel_sample":
         ce_override = _sample_from_cel(
-            ctx.ce_W_bio, np.random.default_rng(ctx.seed + 32_000 + ctx.sid)
+            ctx.ce_W_bio, np.random.default_rng(ctx.seed)
         )
-        seed_base = _seed(ctx, offset=32_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="cel",
@@ -334,7 +340,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key == "local_sign+flat":
-        seed_base = _seed(ctx, offset=33_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="local_sign+flat",
@@ -344,7 +350,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key == "local_sign+sample":
-        seed_base = _seed(ctx, offset=34_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="local_sign+sample",
@@ -354,7 +360,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key == "local_sign+binary":
-        seed_base = _seed(ctx, offset=35_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="local_sign+binary",
@@ -364,7 +370,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key == "global_sign_pres":
-        seed_base = _seed(ctx, offset=35_500)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="global_sign_pres",
@@ -373,8 +379,38 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             nnz_target=None,
             seed_base=seed_base,
         )
+    if key == "binary_base":
+        seed_base = _seed(ctx, offset=1)
+        return _run_variant_row(
+            ctx,
+            feature_conn="binary_base",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key == "binary_base_topology_shuffle":
+        seed_base = _seed(ctx, offset=1)
+        return _run_variant_row(
+            ctx,
+            feature_conn="binary_base_topology_shuffle",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key == "binary+conshuffle+wshuffle":
+        seed_base = _seed(ctx, offset=1)
+        return _run_variant_row(
+            ctx,
+            feature_conn="binary+conshuffle+wshuffle",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
     if key.startswith("sign_test_cel"):
-        seed_base = _seed(ctx, offset=36_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="sign_test_cel",
@@ -384,7 +420,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key.startswith("sign_test_er"):
-        seed_base = _seed(ctx, offset=36_500)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="sign_test_er",
@@ -395,7 +431,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
     
     if key.startswith("sign_test_og_cel"):
-        seed_base = _seed(ctx, offset=39_500)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="sign_test_og_cel",
@@ -405,7 +441,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key.startswith("weight_test"):
-        seed_base = _seed(ctx, offset=37_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="weight_test",
@@ -415,7 +451,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
             seed_base=seed_base,
         )
     if key == "binary+shuffle":
-        seed_base = _seed(ctx, offset=38_000)
+        seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
             feature_conn="binary+shuffle",
