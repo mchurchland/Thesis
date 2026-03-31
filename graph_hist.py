@@ -1506,27 +1506,41 @@ def plot_rho_cv_other_perf(
     for out_path in saved_paths:
         print(f"[saved] {out_path}")
 
-def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
+def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, mode_preset: str = "all"):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
     # Consistent ordering/colors to make panels easier to compare.
-    mode_order = [
-        "real",
-        "cel+randN",
-        "er+randN",
-        "ws_p0.1+randN",
-        "celW+connShuf",
-        "local_sign",
-        "shuffle",
-        #"cel_sample", temporaroly removed
-        "conn_shuf_only",
-        "local_sign+flat",
-        "local_sign+sample",
-        "local_sign+binary",
-        "global_sign_pres",
-        "binary+shuffle",
-
-    ]
+    mode_preset = str(mode_preset or "all").strip().lower()
+    if mode_preset == "all_shuf":
+        mode_order = [
+            "shuffle",
+            "binary_base",
+            "conn_shuf_only",
+            "celW+connShuf",
+            "binary_base_topology_shuffle",
+            "binary+shuffle",
+            "binary+conshuffle+wshuffle",
+        ]
+    else:
+        mode_order = [
+            "real",
+            "cel+randN",
+            "er+randN",
+            "ws_p0.1+randN",
+            "celW+connShuf",
+            "local_sign",
+            "shuffle",
+            #"cel_sample", temporaroly removed
+            "conn_shuf_only",
+            "local_sign+flat",
+            "local_sign+sample",
+            "local_sign+binary",
+            "global_sign_pres",
+            "binary_base",
+            "binary_base_topology_shuffle",
+            "binary+shuffle",
+            "binary+conshuffle+wshuffle",
+        ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     color_map = {
         "real": "#32a2f2",
@@ -1542,7 +1556,10 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         "local_sign+sample": "#AF7DF5",
         "local_sign+binary": "#8ADEF3",
         "global_sign_pres" : "#1C373D",
+        "binary_base": "#5f6c7b",
+        "binary_base_topology_shuffle": "#303b44",
         "binary+shuffle": "#FF00FF",
+        "binary+conshuffle+wshuffle": "#b400ff",
 
     }
     if not metrics:
@@ -1606,8 +1623,10 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     "local_sign+sample": "Local Sign + Sampled",
                     "local_sign+binary": "Local Sign + wt +1,-1",
                     "global_sign_pres" : "Global sign",
+                    "binary_base": "Binary base (unsigned)",
+                    "binary_base_topology_shuffle": "Binary base + topology shuffle",
                     "binary+shuffle": "Binary sign + shuffle",
-
+                    "binary+conshuffle+wshuffle": "Binary + conn+weight shuffle",
 
 
                 }
@@ -1665,13 +1684,13 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
                     if data_mask[idx]:
                         ax.set_ylim(0, y_max)
 
-        if False:
+        if mode_preset == "all_shuf" and legend_handles:
             fig.legend(
                 legend_handles,
                 legend_labels,
                 frameon=False,
                 loc="upper center",
-                ncol=3,
+                ncol=2,
                 bbox_to_anchor=(0.5, 1.02),
                 columnspacing=1.2,
                 handlelength=2.0,
@@ -1680,10 +1699,14 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
             )
 
         #fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
-        fig.tight_layout(rect=(0.01, 0.00, 1.0, 1.0))
+        if mode_preset == "all_shuf" and legend_handles:
+            fig.tight_layout(rect=(0.01, 0.00, 1.0, 0.94))
+        else:
+            fig.tight_layout(rect=(0.01, 0.00, 1.0, 1.0))
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
-        out_fig = _safe_path(os.path.join(out_dir, f"all_arch_hist_grid{suffix}.png"))
+        name_root = "all_arch_hist_grid_all_shuf" if mode_preset == "all_shuf" else "all_arch_hist_grid"
+        out_fig = _safe_path(os.path.join(out_dir, f"{name_root}{suffix}.png"))
         fig.savefig(out_fig, dpi=300)
         plt.close(fig)
         print(f"[saved] {out_fig}")
@@ -1855,11 +1878,11 @@ def main():
 
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    plot_frac_cv_meanline(disp, combined, args.out_dir,show=True)
+    #plot_frac_cv_meanline(disp, combined, args.out_dir,show=True)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
     #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
     #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)
-    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins, mode_preset="all_shuf")
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)
 
