@@ -58,14 +58,14 @@ ALL_JOB_KEYS = (
 )
 
 TOPOLOGY_SHUFFLE_JOB_KEYS = (
-    #"real",
-    #"shuffle_weights",
-    #"conn_shuf_only",
-    #"conn_shuf",
-    #"local_sign+binary", ##this is localsign+signed binary weights
+    "real",
+    "shuffle_weights",
+    "conn_shuf_only",
+    "conn_shuf",
+    "local_sign+binary", ##this is localsign+signed binary weights
     "binary_base", ## unsigned binary
     "binary_base_topology_shuffle", ##unsigned binary w shuffle
-    #"binary+shuffle",
+    "binary+shuffle",
     "binary+conshuffle+wshuffle",
 )
 
