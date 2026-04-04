@@ -40,6 +40,23 @@ from util.graph_utils import (
     _aggregate_over_hparams,
 )
 
+# Optional hard filter for analysis modes.
+# Leave empty to analyze all modes, or populate with exact mode names.
+ANALYSIS_MODE_FILTER = [
+    #"binary_base_topology_shuffle",
+    #"binary_base"
+    #------------------------------
+    "binary+shuffle",
+    "local_sign+binary",
+    "global_sign_pres",
+    "binary+conshuffle+wshuffle"
+    #------------------------------
+    #"real",
+    #"shuffle",
+    #"celW+connShuf",
+    #"conn_shuf_only",
+]
+
 # ---------------------------- CLI ----------------------------
 
 def parse_args():
@@ -788,6 +805,19 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     extras = [c for c in df.columns if c not in needed]
     return df[needed + extras].copy()
 
+
+def _filter_to_modes(df: pd.DataFrame, modes=None, label: str = "data") -> pd.DataFrame:
+    """Restrict dataframe to an explicit mode allowlist."""
+    if modes is None:
+        modes = ANALYSIS_MODE_FILTER
+    allow = [str(m).strip() for m in (modes or []) if str(m).strip()]
+    if not allow:
+        return df
+    out = df[df["mode"].astype(str).isin(allow)].copy()
+    print(f"[info] {label}: mode filter active ({len(allow)} mode(s)); kept {len(out)}/{len(df)} rows")
+    return out
+
+
 def _dispersion(a: np.ndarray) -> float:
     a = np.asarray(a, float).ravel()
     m = float(np.mean(a))
@@ -1512,15 +1542,20 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
     # Consistent ordering/colors to make panels easier to compare.
     mode_preset = str(mode_preset or "all").strip().lower()
     if mode_preset == "all_shuf":
-        mode_order = [
-            "shuffle",
-            "binary_base",
-            "conn_shuf_only",
-            "celW+connShuf",
-            "binary_base_topology_shuffle",
-            "binary+shuffle",
-            "binary+conshuffle+wshuffle",
-        ]
+        mode_order = (
+                "global_sign_pres",
+                "real",
+                "shuffle",
+                "conn_shuf_only",
+                "celW+connShuf",
+                "local_sign+binary", ##this is localsign+signed binary weights
+                "binary_base", ## unsigned binary
+                "binary_base_topology_shuffle", ##unsigned binary w shuffle
+                "binary+shuffle",
+                "binary+conshuffle+wshuffle",
+            )
+
+        
     else:
         mode_order = [
             "real",
@@ -1551,13 +1586,13 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
         "local_sign": "#027979",
         "shuffle": "#FF5100",
         #"cel_sample": "#ff6565",
-        "conn_shuf_only": "#ff9752",
+        "conn_shuf_only": "#ffab72",
         "local_sign+flat":  "#002CF1",
         "local_sign+sample": "#AF7DF5",
-        "local_sign+binary": "#8ADEF3",
+        "local_sign+binary": "#7488FF",
         "global_sign_pres" : "#1C373D",
-        "binary_base": "#5f6c7b",
-        "binary_base_topology_shuffle": "#303b44",
+        "binary_base": "#78dee5",
+        "binary_base_topology_shuffle": "#478E61",
         "binary+shuffle": "#FF00FF",
         "binary+conshuffle+wshuffle": "#b400ff",
 
@@ -1684,7 +1719,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                     if data_mask[idx]:
                         ax.set_ylim(0, y_max)
 
-        if mode_preset == "all_shuf" and legend_handles:
+        if mode_preset == "all_shuf" and legend_handles and False:
             fig.legend(
                 legend_handles,
                 legend_labels,
@@ -1699,7 +1734,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
             )
 
         #fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
-        if mode_preset == "all_shuf" and legend_handles:
+        if mode_preset == "all_shuf" and legend_handles and False:
             fig.tight_layout(rect=(0.01, 0.00, 1.0, 0.94))
         else:
             fig.tight_layout(rect=(0.01, 0.00, 1.0, 1.0))
@@ -1809,9 +1844,31 @@ def main():
         out_cmp = args.compare_mean_out or _safe_path(
             os.path.join(args.out_dir, "mode_metric_mean_comparison.csv")
         )
+        a_raw, _ = _read_compare_table(args.compare_mean_a, value_col=args.compare_value_col)
+        b_raw, _ = _read_compare_table(args.compare_mean_b, value_col=args.compare_value_col)
+        if ANALYSIS_MODE_FILTER:
+            a_f = _filter_to_modes(a_raw, label="compare A")
+            b_f = _filter_to_modes(b_raw, label="compare B")
+            if a_f.empty:
+                raise ValueError(
+                    f"Mode filter removed all rows from compare A. Requested modes: {ANALYSIS_MODE_FILTER}"
+                )
+            if b_f.empty:
+                raise ValueError(
+                    f"Mode filter removed all rows from compare B. Requested modes: {ANALYSIS_MODE_FILTER}"
+                )
+            tmp_a = _safe_path(os.path.join(args.out_dir, "compare.filtered.A.csv"))
+            tmp_b = _safe_path(os.path.join(args.out_dir, "compare.filtered.B.csv"))
+            a_f.to_csv(tmp_a, index=False)
+            b_f.to_csv(tmp_b, index=False)
+            compare_a_path = tmp_a
+            compare_b_path = tmp_b
+        else:
+            compare_a_path = args.compare_mean_a
+            compare_b_path = args.compare_mean_b
         comp_tbl = compare_mode_metric_means(
-            args.compare_mean_a,
-            args.compare_mean_b,
+            compare_a_path,
+            compare_b_path,
             out_cmp,
             label_a=args.compare_label_a,
             label_b=args.compare_label_b,
@@ -1837,8 +1894,8 @@ def main():
             label_b=args.compare_label_b,
         )
         if args.compare_tost_preservation:
-            ref_tbl, ref_col = _read_compare_table(args.compare_mean_a, value_col=args.compare_value_col)
-            new_tbl, new_col = _read_compare_table(args.compare_mean_b, value_col=args.compare_value_col)
+            ref_tbl, ref_col = _read_compare_table(compare_a_path, value_col=args.compare_value_col)
+            new_tbl, new_col = _read_compare_table(compare_b_path, value_col=args.compare_value_col)
             if ref_col != new_col:
                 raise ValueError(
                     f"TOST preservation needs same value column on both inputs, got: {ref_col} vs {new_col}"
@@ -1865,6 +1922,11 @@ def main():
 
     combined = _read_combined_csv(args.combined)
     combined = _ensure_columns(combined)
+    combined = _filter_to_modes(combined, label="combined")
+    if combined.empty:
+        raise ValueError(
+            f"Mode filter removed all rows from combined input. Requested modes: {ANALYSIS_MODE_FILTER}"
+        )
 
     # Save a copy (non-destructive; versioned if exists)
     out_comb = _safe_path(os.path.join(args.out_dir, "combined.ALL.csv"))
@@ -1884,7 +1946,7 @@ def main():
     #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins, mode_preset="all_shuf")
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    #print_kruskal_wallis_tables(disp)
+    print_kruskal_wallis_tables(disp)
 
 
 if __name__ == "__main__":

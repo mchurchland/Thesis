@@ -213,6 +213,7 @@ def parse_args():
         default=1,
         help="Shuffle/run id for variants that need it.",
     )
+    p.add_argument("--rho-test", default=False,type=bool,help="do you want to run the rho test")
 
     # Graph model params
     p.add_argument(
@@ -305,9 +306,9 @@ def main():
         if not (0.0 <= frac <= 1.0):
             raise ValueError("--sign-flip-frac values must be between 0 and 1 inclusive for sign_test.")
     # Build parameter grid and optionally slice for array jobs
-    sr_grid   = SWEEP_SR
+    sr_grid   = SWEEP_SR if not args.rho_test else [0.5, 0.8, 0.95, 1.0, 1.05, 1.2, 1.5, 2.0, 4.0, 10.0]
     leak_grid = SWEEP_LEAK
-    u_grid    = SWEEP_U
+    u_grid    = SWEEP_U 
     col_params_full = _build_col_params(sr_grid, leak_grid, u_grid)
 
     # Partition the grid so each array task does a subset

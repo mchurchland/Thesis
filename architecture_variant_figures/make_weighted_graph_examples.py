@@ -57,7 +57,10 @@ ALL_JOB_KEYS: tuple[str, ...] = (
     "local_sign+sample",
     "local_sign+binary",
     "global_sign_pres",
+    "binary_base",
+    "binary_base_topology_shuffle",
     "binary+shuffle",
+    "binary+conshuffle+wshuffle",
 )
 
 JOB_TITLES: dict[str, str] = {
@@ -74,7 +77,10 @@ JOB_TITLES: dict[str, str] = {
     "local_sign+sample": "Local sign-preserved sampled magnitudes",
     "local_sign+binary": "Local sign-preserved binary magnitudes",
     "global_sign_pres": "Binary weights + global sign-balance shuffle",
+    "binary_base": "Unsigned binary base (CE topology)",
+    "binary_base_topology_shuffle": "Unsigned binary + topology shuffle",
     "binary+shuffle": "Binary + connection shuffle",
+    "binary+conshuffle+wshuffle": "Binary + connection shuffle + weight shuffle",
 }
 
 JOB_SLUG_OVERRIDES: dict[str, str] = {
@@ -91,7 +97,10 @@ JOB_SLUG_OVERRIDES: dict[str, str] = {
     "local_sign+sample": "local_sign_sampled",
     "local_sign+binary": "local_sign_binary",
     "global_sign_pres": "global_sign_preserved_binary",
+    "binary_base": "binary_base",
+    "binary_base_topology_shuffle": "binary_base_topology_shuffle",
     "binary+shuffle": "binary_plus_shuffle",
+    "binary+conshuffle+wshuffle": "binary_plus_connshuffle_plus_wshuffle",
 }
 
 
@@ -116,6 +125,9 @@ CONNECTIVITY_ALTERING_KEYS: frozenset[str] = frozenset(
         "ws_p01_randN",
         "conn_shuf",
         "conn_shuf_only",
+        "binary_base_topology_shuffle",
+        "binary+shuffle",
+        "binary+conshuffle+wshuffle",
     }
 )
 
@@ -182,7 +194,21 @@ def load_ce_with_project_code(ce_adj: str, ce_ei: str) -> tuple[np.ndarray, np.n
     return W_bio.astype(np.float32), None if ei_labels is None else ei_labels.astype(np.float32), labels
 
 
-def _build_from_feature_conn(feature_conn: str, ce_W_bio: np.ndarray, seed: int) -> np.ndarray:
+def _ce_negative_fraction(W: np.ndarray) -> float:
+    nz = int((W != 0).sum())
+    if nz == 0:
+        return 0.0
+    return float((W < 0).sum()) / float(nz)
+
+
+def _build_from_feature_conn(
+    feature_conn: str,
+    ce_W_bio: np.ndarray,
+    seed: int,
+    *,
+    per_neg: float | None = None,
+    alpha: float | None = None,
+) -> np.ndarray:
     nnz_target = None
     if feature_conn.startswith("er_p=") or feature_conn.startswith("ws_p="):
         nnz_target = _count_edges(ce_W_bio)
@@ -197,6 +223,8 @@ def _build_from_feature_conn(feature_conn: str, ce_W_bio: np.ndarray, seed: int)
         drive_idx=None,
         nnz_target=nnz_target,
         DEVICE=torch.device("cpu"),
+        per_neg=per_neg,
+        alpha=alpha,
     )
     return Wt.detach().cpu().numpy().astype(np.float32)
 
@@ -249,8 +277,25 @@ def construct_w_with_project_code(
     if key == "global_sign_pres":
         return _build_from_feature_conn("global_sign_pres", ce_W_bio, seed)
 
+    if key == "binary_base":
+        return _build_from_feature_conn("binary_base", ce_W_bio, seed)
+
+    if key == "binary_base_topology_shuffle":
+        return _build_from_feature_conn("binary_base_topology_shuffle", ce_W_bio, seed)
+
     if key == "binary+shuffle":
         return _build_from_feature_conn("binary+shuffle", ce_W_bio, seed)
+
+    if key == "binary+conshuffle+wshuffle":
+        return _build_from_feature_conn("binary+conshuffle+wshuffle", ce_W_bio, seed)
+
+    if key == "sign_test_og_cel":
+        return _build_from_feature_conn(
+            "sign_test_og_cel",
+            ce_W_bio,
+            seed,
+            per_neg=_ce_negative_fraction(ce_W_bio),
+        )
 
     raise ValueError(f"Unknown variant key: {key}")
 

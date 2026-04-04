@@ -12,7 +12,7 @@ python architecture_variant_figures/make_weighted_graph_examples.py
 
 Outputs to `architecture_variant_figures/graph_examples`:
 
-- `01_...png` through `14_...png`: one figure per architecture variant
+- `01_...png` through `18_...png`: one figure per architecture variant
   - left panel: biological C. elegans reference graph
   - right panel: architecture variant graph
   - both panels use the same Kamada-Kawai node layout for direct comparison
