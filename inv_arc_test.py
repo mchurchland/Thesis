@@ -57,6 +57,12 @@ ALL_JOB_KEYS = (
     "sign_test_og_cel",
 )
 
+ALL_JOB_KEYS = (
+    "real",
+    "er_randN",
+    "local_sign",
+)
+
 TOPOLOGY_SHUFFLE_JOB_KEYS = (
     "real",
     "shuffle_weights",
@@ -213,7 +219,11 @@ def parse_args():
         default=1,
         help="Shuffle/run id for variants that need it.",
     )
-    p.add_argument("--rho-test", default=False,type=bool,help="do you want to run the rho test")
+    p.add_argument(
+    "--rho-test",
+    action="store_true",
+    help="Run the extended rho sweep.",
+    )
 
     # Graph model params
     p.add_argument(
