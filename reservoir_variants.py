@@ -6,11 +6,44 @@ from typing import Sequence
 
 import numpy as np
 import torch
+from scipy.stats import entropy, norm
 
 from network_stats.run_one import run_one
 from util.util import build_reservoir, degree_matched_shuffle_directed, _cel_to_bin, \
     _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel,scale_to_sr
 from sklearn.metrics.pairwise import cosine_similarity
+
+def _kl_empirical_to_fitted_gaussian(
+    values: np.ndarray,
+    bins: int = 64,
+    eps: float = 1e-12,
+) -> float:
+    """
+    KL(empirical || Gaussian) for edge weights.
+    Uses nonzero weights only and compares histogram masses to fitted Gaussian
+    masses over the same bins.
+    """
+    x = values.reshape(-1)
+    x = x[np.isfinite(x)]
+    x = x[x != 0]
+    if x.size < 2:
+        return float("nan")
+
+    mu = float(np.mean(x))
+    sigma = float(np.std(x))
+    if sigma <= eps:
+        return 0.0
+
+    counts, edges = np.histogram(x, bins=bins)
+    p = counts.astype(np.float64)
+    p = np.clip(p, eps, None)
+    p = p / p.sum()
+
+    q = np.diff(norm.cdf(edges, loc=mu, scale=sigma))
+    q = np.clip(q, eps, None)
+    q = q / q.sum()
+    return float(entropy(p, q))
+
 
 @dataclass(frozen=True)
 class SimulationParams:
@@ -104,6 +137,8 @@ def _run_variant_row(
             per_neg=ctx.per_neg,
             alpha = ctx.alpha
         )
+        w_np = Wt.detach().cpu().numpy().reshape(-1)
+        kl_to_gaussian = _kl_empirical_to_fitted_gaussian(w_np)
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
@@ -125,6 +160,7 @@ def _run_variant_row(
                         Wt.reshape(1, -1).detach().cpu().numpy(),
                     )[0, 0]
                 ),
+                kl_to_gaussian,
                 seed_base,
                 ctx.src_tag,
             )
@@ -139,7 +175,7 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "seed", "src"])
+            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "kl_to_gaussian", "seed", "src"])
         w.writerows(rows)
 
 

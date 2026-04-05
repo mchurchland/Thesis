@@ -214,7 +214,7 @@ def build_reservoir(
 
         assert alpha != None
         W = ce_W_bio.copy().astype(np.float32)
-        W = _cel_to_bin(W)
+        #W = _cel_to_bin(W)
         W = scale_weights(W,alpha=alpha,rng=rng)
         
     elif feature_conn == "sign_test_cel":
@@ -592,10 +592,10 @@ def scale_weights(Wbio: np.ndarray, alpha: float, rng: np.random.Generator):
 
     W = Wbio.astype(np.float32, copy=True)
     mask = W != 0
-    s = np.sign(W[mask])                      # original sign
-    mag = np.abs(W[mask])
-    mag = mag + np.abs(rng.normal(0, 1, size=mask.sum())) * alpha
-    W[mask] = s * mag
+    # Add signed Gaussian noise to existing edges only.
+    # Keeps sparsity pattern fixed while allowing sign/magnitude to change.
+    noise = rng.normal(0.0, 1.0, size=mask.sum()).astype(np.float32)
+    W[mask] = W[mask] + alpha * noise
     return W
 
 def spectral_norm(W: Tensor) -> float:

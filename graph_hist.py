@@ -26,6 +26,7 @@ import warnings
 from scipy.stats import kruskal
 import matplotlib as mpl
 import re
+from matplotlib.ticker import FormatStrFormatter
 
 if not os.environ.get("MPLBACKEND"):
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
@@ -46,15 +47,24 @@ ANALYSIS_MODE_FILTER = [
     #"binary_base_topology_shuffle",
     #"binary_base"
     #------------------------------
-    "binary+shuffle",
-    "local_sign+binary",
-    "global_sign_pres",
-    "binary+conshuffle+wshuffle"
+    #"binary+shuffle",
+    #"local_sign+binary",
+    #"global_sign_pres",
+    #"binary+conshuffle+wshuffle"
     #------------------------------
     #"real",
     #"shuffle",
     #"celW+connShuf",
     #"conn_shuf_only",
+                "real",
+            "cel+randN",
+            "er+randN",
+            "ws_p0.1+randN",
+            "local_sign",
+            "local_sign+flat",
+            "local_sign+binary",
+            "global_sign_pres",
+            "binary_base",
 ]
 
 # ---------------------------- CLI ----------------------------
@@ -75,6 +85,11 @@ def parse_args():
         "--model",
         default="",
         help="Optional exact mode/model name filter (e.g., 'weight_test10.0') for rho/CV/performance plot.",
+    )
+    ap.add_argument(
+        "--rho-cv-drop-kr-gr",
+        action="store_true",
+        help="For rho/CV/performance plot, exclude KR and GR curves (plot MC/IPC only).",
     )
     ap.add_argument(
         "--compare-mean-a",
@@ -1404,24 +1419,27 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
 def plot_rho_cv_other_perf(
     combined: pd.DataFrame,
     out_dir: str,
-    show: bool = True,
+    show: bool = False,
     model: str = "",
+    drop_kr_gr: bool = False,
 ):
     """
-    3D line plot at fixed spectral radius:
+    3D line plot at fixed spectral radius, one figure per mode:
       x = spectral radius (rho_target)
       y = CV across non-rho hyperparameters (leak, input_scale) within each fixed rho
       z = mean performance at that fixed rho
 
     CV is computed per (mode, src, group_id, rho_target, metric) across leak/input_scale,
-    then averaged across groups for each (rho_target, metric).
+    then averaged across groups for each (mode, rho_target, metric).
     """
     os.makedirs(out_dir, exist_ok=True)
 
     metric_cols = [m for m in ("MC", "IPC", "KR", "GR") if m in combined.columns]
+    if drop_kr_gr:
+        metric_cols = [m for m in metric_cols if m not in ("KR", "GR")]
     required_cols = ["mode", "src", "shuffle_id", "rho_target", "leak", "input_scale"] + metric_cols
     if not metric_cols:
-        print("[warn] plot_rho_cv_other_perf: no MC/IPC/KR/GR columns found.")
+        print("[warn] plot_rho_cv_other_perf: no selected metric columns found.")
         return
     if any(c not in combined.columns for c in required_cols):
         print("[warn] plot_rho_cv_other_perf: missing required columns; skipping.")
@@ -1446,6 +1464,10 @@ def plot_rho_cv_other_perf(
     if df.empty:
         print("[warn] plot_rho_cv_other_perf: no finite rho_target values.")
         return
+    df = df[df["rho_target"] > 0].copy()
+    if df.empty:
+        print("[warn] plot_rho_cv_other_perf: no positive rho_target values for log-scale plot.")
+        return
 
     df = _assign_group_ids(df)
     df_agg = _aggregate_over_hparams(df, metric_cols)
@@ -1459,82 +1481,131 @@ def plot_rho_cv_other_perf(
     per_group_rho = (
         df_long.groupby(["mode", "src", "group_id", "rho_target", "metric"], as_index=False)
         .agg(
-            cv_other=("value", lambda x: _dispersion(x.to_numpy())),
+            cv_other=("value", lambda x: _dispersion(x.to_numpy(dtype=float))),
             perf_mean=("value", "mean"),
             n_other_hparams=("value", "size"),
         )
     )
 
-    summary = (
-        per_group_rho.groupby(["rho_target", "metric"], as_index=False)
-        .agg(
-            cv_other=("cv_other", "mean"),
-            perf_mean=("perf_mean", "mean"),
-            n_groups=("group_id", "size"),
-        )
-    )
-    if summary.empty:
+    if per_group_rho.empty:
         print("[warn] plot_rho_cv_other_perf: no data to plot.")
         return
 
-    fig = plt.figure(figsize=(8, 6), dpi=140)
-    ax = fig.add_subplot(111, projection="3d")
-    colors = mpl.colormaps["tab10"]
-    plotted = False
-
-    for idx, metric in enumerate(metric_cols):
-        sub = summary[summary["metric"] == metric].copy()
-        if sub.empty:
-            continue
-        sub = sub[np.isfinite(sub["rho_target"]) & np.isfinite(sub["cv_other"]) & np.isfinite(sub["perf_mean"])]
-        if sub.empty:
-            continue
-        sub = sub.sort_values("rho_target")
-        xs = sub["rho_target"].to_numpy(float)
-        ys = sub["cv_other"].to_numpy(float)
-        zs = sub["perf_mean"].to_numpy(float)
-        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
-        plotted = True
-
-    if not plotted:
-        plt.close(fig)
-        print("[warn] plot_rho_cv_other_perf: no finite data to plot.")
+    modes_to_plot = sorted(per_group_rho["mode"].astype(str).dropna().unique().tolist())
+    if model:
+        modes_to_plot = [model]
+    if not modes_to_plot:
+        print("[warn] plot_rho_cv_other_perf: no modes to plot.")
         return
 
-    rho_vals = sorted(summary["rho_target"].dropna().unique())
-    if rho_vals:
-        ax.set_xticks(rho_vals)
-    ax.set_xlabel("spectral radius (rho_target)", fontsize=18, labelpad=8)
-    ax.set_ylabel("CV of non-rho hyperparameters", fontsize=14, labelpad=8)
-    ax.set_zlabel("mean performance", fontsize=18, labelpad=8)
-    if model:
-        ax.set_title(f"Performance vs non-rho CV at fixed spectral radius ({model})", fontsize=14)
-    else:
-        ax.set_title("Performance vs non-rho CV at fixed spectral radius", fontsize=16)
-    ax.legend()
-    _tight_layout_quiet(fig)
+    saved_any = False
+    for mode_name in modes_to_plot:
+        mode_rows = per_group_rho[per_group_rho["mode"].astype(str) == mode_name].copy()
+        if mode_rows.empty:
+            continue
 
-    if model:
-        safe_model = re.sub(r"[^A-Za-z0-9._-]+", "_", model)
-        out_name = f"rho_cv_other_perf_3d.{safe_model}.png"
-    else:
-        out_name = "rho_cv_other_perf_3d.png"
-    out_fig = os.path.join(out_dir, out_name)
-    saved_paths = _save_3d_front_back(
-        fig,
-        ax,
-        out_fig,
-        front_view=(22, -35),
-        back_view=(22, 145),
-        dpi=600,
-        tick_labelsize=16,
-        tick_pad=-2,
-    )
-    if show:
-        plt.show()
-    plt.close(fig)
-    for out_path in saved_paths:
-        print(f"[saved] {out_path}")
+        summary = (
+            mode_rows.groupby(["rho_target", "metric"], as_index=False)
+            .agg(
+                cv_other=("cv_other", "mean"),
+                perf_mean=("perf_mean", "mean"),
+                n_groups=("group_id", "size"),
+            )
+        )
+        if summary.empty:
+            continue
+
+        left_metrics = [m for m in ("MC", "IPC") if m in metric_cols]
+        right_metrics = [m for m in ("GR", "KR") if m in metric_cols]
+        panel_specs: list[tuple[str, list[str]]] = []
+        if left_metrics:
+            panel_specs.append(("MC + IPC", left_metrics))
+        if right_metrics:
+            panel_specs.append(("GR + KR", right_metrics))
+        if not panel_specs:
+            continue
+
+        fig = plt.figure(figsize=(6.2 * len(panel_specs), 6), dpi=140)
+        colors = mpl.colormaps["tab10"]
+        metric_color = {
+            "MC": colors(0),
+            "IPC": colors(1),
+            "KR": colors(2),
+            "GR": colors(3),
+        }
+        rho_vals = sorted(v for v in summary["rho_target"].dropna().unique() if np.isfinite(v) and v > 0)
+        tick_vals = []
+        if rho_vals:
+            preferred_ticks = [0.5, 1.0, 2.0, 4.0, 10.0]
+            tick_vals = [v for v in preferred_ticks if any(np.isclose(v, rv) for rv in rho_vals)]
+            if len(tick_vals) < min(4, len(rho_vals)):
+                k = min(len(rho_vals), 6)
+                idx = np.unique(np.linspace(0, len(rho_vals) - 1, k, dtype=int))
+                tick_vals = [rho_vals[i] for i in idx]
+
+        plotted_any = False
+        for panel_idx, (_panel_title, panel_metrics) in enumerate(panel_specs, start=1):
+            ax = fig.add_subplot(1, len(panel_specs), panel_idx, projection="3d")
+            panel_plotted = False
+            for metric in panel_metrics:
+                sub = summary[summary["metric"] == metric].copy()
+                if sub.empty:
+                    continue
+                sub = sub[np.isfinite(sub["rho_target"]) & np.isfinite(sub["cv_other"]) & np.isfinite(sub["perf_mean"])]
+                if sub.empty:
+                    continue
+                sub = sub.sort_values("rho_target")
+                xs = np.log10(sub["rho_target"].to_numpy(float))
+                ys = sub["cv_other"].to_numpy(float)
+                zs = sub["perf_mean"].to_numpy(float)
+                ax.plot(xs, ys, zs, marker="o", color=metric_color.get(metric, colors(0)), label=metric)
+                panel_plotted = True
+                plotted_any = True
+
+            if not panel_plotted:
+                plt.delaxes(ax)
+                continue
+
+            if tick_vals:
+                ax.set_xticks(np.log10(tick_vals))
+                ax.set_xticklabels([f"{v}" for v in tick_vals])
+            ax.set_xlabel("rho (log10)", fontsize=13, labelpad=2)
+            ax.set_ylabel("CV(leak,input)", fontsize=11, labelpad=2)
+            ax.set_zlabel("mean metric", fontsize=13, labelpad=3)
+            # Match both panels to the left/front viewpoint.
+            ax.view_init(elev=22, azim=-35)
+            _style_3d_axis(ax, tick_labelsize=12, tick_pad=-1)
+            # Requested: integer std ticks for GR/KR panel only; keep MC/IPC as floats.
+            if "GR" in panel_metrics and "MC" not in panel_metrics and "IPC" not in panel_metrics:
+                ax.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%.2g"))
+            else:
+                ax.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%.2g"))
+
+        if not plotted_any:
+            plt.close(fig)
+            continue
+
+        fig.subplots_adjust(left=0.00, right=0.99, bottom=0.04, top=0.99, wspace=0.02)
+
+        safe_mode = re.sub(r"[^A-Za-z0-9._-]+", "_", mode_name)
+        out_name = f"rho_cv_other_perf_3d.{safe_mode}.png"
+        out_fig = os.path.join(out_dir, out_name)
+        fig.savefig(
+            out_fig,
+            dpi=600,
+            bbox_inches="tight",
+            pad_inches=0.005,
+            facecolor="white",
+            edgecolor="white",
+        )
+        if show:
+            plt.show()
+        plt.close(fig)
+        print(f"[saved] {out_fig}")
+        saved_any = True
+
+    if not saved_any:
+        print("[warn] plot_rho_cv_other_perf: no finite data to plot.")
 
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, mode_preset: str = "all"):
     os.makedirs(out_dir, exist_ok=True)
@@ -1557,51 +1628,49 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
 
         
     else:
+        
         mode_order = [
             "real",
             "cel+randN",
             "er+randN",
             "ws_p0.1+randN",
-            "celW+connShuf",
             "local_sign",
-            "shuffle",
-            #"cel_sample", temporaroly removed
-            "conn_shuf_only",
             "local_sign+flat",
-            "local_sign+sample",
             "local_sign+binary",
             "global_sign_pres",
             "binary_base",
-            "binary_base_topology_shuffle",
-            "binary+shuffle",
-            "binary+conshuffle+wshuffle",
         ]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
-    color_map = {
+    # Keep these exact colors per request.
+    preserved_colors = {
         "real": "#32a2f2",
-        "cel+randN": "#127212",
-        "er+randN": "#6eb775",
-        "ws_p0.1+randN": "#40FF00",
-        "celW+connShuf": "#ff0e0e",
-        "local_sign": "#027979",
-        "shuffle": "#FF5100",
-        #"cel_sample": "#ff6565",
-        "conn_shuf_only": "#ffab72",
-        "local_sign+flat":  "#002CF1",
-        "local_sign+sample": "#AF7DF5",
         "local_sign+binary": "#7488FF",
-        "global_sign_pres" : "#1C373D",
         "binary_base": "#78dee5",
-        "binary_base_topology_shuffle": "#478E61",
-        "binary+shuffle": "#FF00FF",
-        "binary+conshuffle+wshuffle": "#b400ff",
-
     }
+    # Colorblind-safe fallback palette for remaining modes.
+    cb_palette = [
+        "#E69F00",  # orange
+        "#009E73",  # bluish green
+        "#D55E00",  # vermillion
+        "#CC79A7",  # reddish purple
+        "#56B4E9",  # sky blue
+        "#F0E442",  # yellow
+        "#0072B2",  # blue
+        "#000000",  # black
+    ]
+    color_map = dict(preserved_colors)
+    palette_idx = 0
+    for mode_name in modes:
+        if mode_name in color_map:
+            continue
+        color_map[mode_name] = cb_palette[palette_idx % len(cb_palette)]
+        palette_idx += 1
+
     if not metrics:
         return
     plt.rcParams.update({
         "axes.titlesize": 25,
-        "axes.labelsize": 25,
+        "axes.labelsize": 22,
         "xtick.labelsize": 20,
         "ytick.labelsize": 20,
         "legend.fontsize": 20,
@@ -1651,7 +1720,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                     "celW+connShuf": "Conn+wt shuffle",
                     "shuffle": "Weight shuffle",
                     "conn_shuf_only": "Connection shuffle",
-                    "local_sign": "Local Sign Preserved + N(0,1)",
+                    "local_sign": "Local Sign + N(0,1)",
                     "ws_p0.1+randN": "WS p=0.1 + N(0,1)",
                     "cel_sample": "Sampled weights",
                     "local_sign+flat": "Local Sign + U(0,1)",
@@ -1665,19 +1734,19 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
 
 
                 }
-                mode = name_remap[mode]
+                display_mode = name_remap.get(mode, mode)
                 ax.plot(
                     centers,
                     frac,
                     drawstyle="steps-mid",
-                    linewidth=3.0,
-                    alpha=0.7,
-                    label=f"{mode}",
+                    linewidth=2.8,
+                    alpha=0.9,
+                    label=display_mode,
                     color=color,
                 )
                 # Median marker to help compare shifts without cluttering the plot.
                 med = float(np.median(s))
-                ax.axvline(med, color=color, alpha=0.18, linewidth=1.2, linestyle="--")
+                ax.axvline(med, color="#8a8a8a", alpha=0.25, linewidth=1.1, linestyle="--")
                 plotted = True
                 row_y_max[row] = max(row_y_max[row], float(np.max(frac)))
 
@@ -1718,26 +1787,24 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                     ax = flat_axes[idx]
                     if data_mask[idx]:
                         ax.set_ylim(0, y_max)
+                        ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
-        if mode_preset == "all_shuf" and legend_handles and False:
-            fig.legend(
+        if legend_handles and legend_labels:
+            leg = fig.legend(
                 legend_handles,
                 legend_labels,
-                frameon=False,
-                loc="upper center",
-                ncol=2,
-                bbox_to_anchor=(0.5, 1.02),
-                columnspacing=1.2,
-                handlelength=2.0,
-                handletextpad=0.6,
-                borderaxespad=0.8,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.01),
+                ncol=3,
+                frameon=True,
+                fontsize=18,
+                columnspacing=1.0,
+                handlelength=1.8,
+                handletextpad=0.5,
+                borderaxespad=0.2,
             )
-
-        #fig.tight_layout(rect=(0.00, 0.00, 0.96, 0.85))
-        if mode_preset == "all_shuf" and legend_handles and False:
-            fig.tight_layout(rect=(0.01, 0.00, 1.0, 0.94))
-        else:
-            fig.tight_layout(rect=(0.01, 0.00, 1.0, 1.0))
+            leg.get_frame().set_alpha(0.9)
+        fig.subplots_adjust(left=0.09, right=0.995, top=0.965, bottom=0.20, wspace=0.03, hspace=0.18)
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
         name_root = "all_arch_hist_grid_all_shuf" if mode_preset == "all_shuf" else "all_arch_hist_grid"
@@ -1943,8 +2010,8 @@ def main():
     #plot_frac_cv_meanline(disp, combined, args.out_dir,show=True)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=True)
     #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=True)
-    #plot_rho_cv_other_perf(combined, args.out_dir, show=True, model=args.model)
-    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins, mode_preset="all_shuf")
+    plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
+    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_kruskal_wallis_tables(disp)
 

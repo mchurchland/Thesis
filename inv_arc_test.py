@@ -37,24 +37,24 @@ from util.util import load_connectome
 WS_K = 10  # signature compatibility with util.build_reservoir
 
 ALL_JOB_KEYS = (
-    "real",
+    "real",            #x
     "shuffle_weights",
-    "cel_randN",
-    "er_randN",
-    "ws_p01_randN",
-    "conn_shuf",
-    "local_sign",
+    "cel_randN", #x
+    "er_randN", #x
+    "ws_p01_randN", #x
+    "conn_shuf", 
+    "local_sign", #x
     "conn_shuf_only",
-    "cel_sample",
-    "local_sign+flat", 
+    "cel_sample", 
+    "local_sign+flat", #x 
     "local_sign+sample", 
-    "local_sign+binary",
-    "global_sign_pres",
-    "binary_base",
-    "binary_base_topology_shuffle",
-    "binary+shuffle",
-    "binary+conshuffle+wshuffle",
-    "sign_test_og_cel",
+    "local_sign+binary", #x
+    "global_sign_pres", #x
+    "binary_base", #x
+    "binary_base_topology_shuffle", #x
+    "binary+shuffle", #x
+    "binary+conshuffle+wshuffle", #x
+    #"sign_test_og_cel",
 )
 
 ALL_JOB_KEYS = (
