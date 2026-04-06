@@ -29,7 +29,7 @@ SEED_START=0
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
-conda run -n cel python ipc_delay_sensitivity.py \
+conda run -n cel python Parameter_justification/ipc_delay_sensitivity.py \
   --ce-adj "${CE_ADJ}" \
   --ce-ei "${CE_EI}" \
   --out-dir "${OUT_DIR}" \

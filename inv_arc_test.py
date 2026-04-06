@@ -57,11 +57,11 @@ ALL_JOB_KEYS = (
     #"sign_test_og_cel",
 )
 
-ALL_JOB_KEYS = (
-    "real",
-    "er_randN",
-    "local_sign",
-)
+#ALL_JOB_KEYS = (
+#    "real",
+#    "er_randN",
+#    "local_sign",
+#)
 
 TOPOLOGY_SHUFFLE_JOB_KEYS = (
     "real",

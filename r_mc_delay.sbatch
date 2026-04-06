@@ -28,7 +28,7 @@ SEED_START=0
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
-conda run -n cel python mc_delay_sensitivity.py \
+conda run -n cel python Parameter_justification/mc_delay_sensitivity.py \
   --ce-adj "${CE_ADJ}" \
   --ce-ei "${CE_EI}" \
   --out-dir "${OUT_DIR}" \

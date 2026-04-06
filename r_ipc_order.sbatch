@@ -29,7 +29,7 @@ MAX_ORDER=10
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
-conda run -n cel python ipc_order_sweep_ce.py \
+conda run -n cel python Parameter_justification/ipc_order_sweep_ce.py \
   --ce-adj "${CE_ADJ}" \
   --ce-ei "${CE_EI}" \
   --out-dir "${OUT_DIR}" \
