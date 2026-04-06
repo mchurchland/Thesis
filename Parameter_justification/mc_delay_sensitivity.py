@@ -22,7 +22,7 @@ from network_stats.stats import compute_MC
 from util.util import load_connectome, set_seed
 
 # Reuse existing sweep helpers to keep model construction and seed/model behavior aligned.
-from ipc_order_sweep_ce import (
+from Parameter_justification.ipc_order_sweep_ce import (
     _build_model_reservoir,
     _expand_models,
     _model_title,

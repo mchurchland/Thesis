@@ -21,7 +21,7 @@ from network_stats.run_one import run_reservoir_with_pre
 from util.util import load_connectome, set_seed
 
 # Reuse existing sweep helpers to keep model construction and IPC logic identical.
-from ipc_order_sweep_ce import (
+from Parameter_justification.ipc_order_sweep_ce import (
     _build_model_reservoir,
     _expand_models,
     _model_title,
