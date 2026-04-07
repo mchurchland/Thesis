@@ -173,7 +173,7 @@ def _compute_mean_table(combined: pd.DataFrame, metrics: list[str] | None = None
     """
     df = _assign_group_ids(combined)
     if metrics is None:
-        metrics = [m for m in ("MC","IPC","KR","GR","cosine_similarity","wt_mean","mean") if m in df.columns]
+        metrics = [m for m in ("MC","IPC","KR","GR","kl_to_gaussian","cosine_similarity","wt_mean","mean") if m in df.columns]
     metrics = [m for m in metrics if m in df.columns]
     if not metrics:
         return pd.DataFrame(columns=["mode","src","group_id","metric","mean","n_hparams"])
