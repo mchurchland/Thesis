@@ -211,11 +211,17 @@ def build_reservoir(
     elif feature_conn == "weight_test": 
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
+        W = ce_W_bio.copy().astype(np.float32)
+
+        sel_p = W > 0 ## get the positive weights of the selection
+        sel_n = W < 0 ## get the negative weights of the selection
 
         assert alpha != None
-        W = ce_W_bio.copy().astype(np.float32)
-        #W = _cel_to_bin(W)
         W = scale_weights(W,alpha=alpha,rng=rng)
+        
+        W[sel_p] = np.abs(W[sel_p])
+        W[sel_n] = -np.abs(W[sel_n])
+            
         
     elif feature_conn == "sign_test_cel":
         if ce_W_bio is None:

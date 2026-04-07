@@ -53,4 +53,4 @@ conda run -n cel python inv_arc_test.py \
   --ws-p 0.1 \
   --er-p 0.1 \
   --cuda ${SLURM_LOCALID}\
-  --alpha 0.0 1.0 5.0 10.0 100.0 1000.0
+  --alpha 0.0 1.0 5.0 10.0

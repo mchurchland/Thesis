@@ -6,7 +6,7 @@ from typing import Sequence
 
 import numpy as np
 import torch
-from scipy.stats import entropy, norm
+from scipy.stats import entropy, halfnorm
 
 from network_stats.run_one import run_one
 from util.util import build_reservoir, degree_matched_shuffle_directed, _cel_to_bin, \
@@ -19,9 +19,9 @@ def _kl_empirical_to_fitted_gaussian(
     eps: float = 1e-12,
 ) -> float:
     """
-    KL(empirical || Gaussian) for edge weights.
-    Uses nonzero weights only and compares histogram masses to fitted Gaussian
-    masses over the same bins.
+    Magnitude-only KL on edge weights.
+    Computes KL(|W| || fitted shifted-half-normal) on nonzero finite weights.
+    Kept under the historical metric key name `kl_to_gaussian` for compatibility.
     """
     x = values.reshape(-1)
     x = x[np.isfinite(x)]
@@ -29,17 +29,25 @@ def _kl_empirical_to_fitted_gaussian(
     if x.size < 2:
         return float("nan")
 
-    mu = float(np.mean(x))
-    sigma = float(np.std(x))
+    x_abs = np.abs(x)
+    x_max = float(np.max(x_abs))
+    if x_max <= 0.0:
+        return 0.0
+
+    loc = float(np.min(x_abs))
+    y = x_abs - loc
+    sigma = float(np.sqrt(np.mean(y * y)))
     if sigma <= eps:
         return 0.0
 
-    counts, edges = np.histogram(x, bins=bins)
+    counts, edges = np.histogram(x_abs, bins=bins, range=(loc, x_max))
     p = counts.astype(np.float64)
     p = np.clip(p, eps, None)
     p = p / p.sum()
 
-    q = np.diff(norm.cdf(edges, loc=mu, scale=sigma))
+    # Shifted half-normal CDF over the same bin edges.
+    q_cdf = halfnorm.cdf(edges, loc=loc, scale=sigma)
+    q = np.diff(q_cdf)
     q = np.clip(q, eps, None)
     q = q / q.sum()
     return float(entropy(p, q))
