@@ -57,15 +57,15 @@ ANALYSIS_MODE_FILTER = [
     #"celW+connShuf",
     #"conn_shuf_only",
     #-------- main experiment above was shuffle experiment
-                "real",
-            "cel+randN",
-            "er+randN",
-            "ws_p0.1+randN",
-            "local_sign", ##this is n(0,1) model
-            "local_sign+flat",
-            "local_sign+binary",
-            "global_sign_pres",
-            "binary_base",
+      #          "real",
+      #      "cel+randN",
+      #      "er+randN",
+      #      "ws_p0.1+randN",
+      #      "local_sign", ##this is n(0,1) model
+      #      "local_sign+flat",
+      #      "local_sign+binary",
+      #      "global_sign_pres",
+      #      "binary_base",
 ]
 
 # ---------------------------- CLI ----------------------------
@@ -158,6 +158,11 @@ def parse_args():
         "--compare-tost-out",
         default="",
         help="Optional CSV path for per-pair TOST preservation details.",
+    )
+    ap.add_argument(
+        "--local-sign-binary-csv",
+        default="",
+        help="Optional extra combined CSV used only to overlay mode='real' as a wall on weight-gauss plots.",
     )
     return ap.parse_args()
 
@@ -374,6 +379,36 @@ def _normalize_compare_metrics(spec: str):
         if not key:
             continue
         out.append(aliases.get(key.lower(), key))
+    return out
+
+
+def _load_local_sign_binary_overlay(local_csv: str):
+    if not local_csv:
+        return None
+    if not os.path.isfile(local_csv):
+        print(f"[warn] real-wall overlay CSV not found: {local_csv}")
+        return None
+
+    extra = _read_combined_csv(local_csv)
+    extra = _ensure_columns(extra)
+    extra = extra[extra["mode"].astype(str) == "real"].copy()
+    if extra.empty:
+        print(f"[warn] real-wall overlay: no mode='real' rows in {local_csv}")
+        return None
+
+    disp_extra = _compute_dispersion_table(extra, mode="cv")
+    mean_extra = _compute_mean_table(extra)
+    out = {
+        "cv_lookup": disp_extra.groupby(["mode", "metric"])["dispersion"].mean(),
+        "mean_lookup": mean_extra.groupby(["mode", "metric"])["mean"].mean(),
+        "kl_value": np.nan,
+    }
+    if "kl_to_gaussian" in extra.columns:
+        kl_tbl = _compute_mean_table(extra, metrics=["kl_to_gaussian"])
+        kl_lookup = kl_tbl.groupby("mode")["mean"].mean()
+        out["kl_value"] = float(kl_lookup.get("real", np.nan))
+    else:
+        print("[warn] real-wall overlay missing 'kl_to_gaussian'; using KL baseline z=0.0 for overlay wall.")
     return out
 
 
@@ -662,9 +697,9 @@ def _tight_layout_quiet(fig):
 def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
     """Apply a cleaner, publication-friendly 3D style."""
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
-    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=0)
-    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=2)
-    ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=4)
+    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=-2)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=0)
+    ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=0)
     y_formatter = ax.yaxis.get_major_formatter()
     if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
         y_formatter.set_useOffset(False)
@@ -736,6 +771,17 @@ def _pad_height_center(img: np.ndarray, target_h: int) -> np.ndarray:
     out = np.full((target_h, w, 4), 255, dtype=np.uint8)
     top = (target_h - h) // 2
     out[top:top + h, :w] = img
+    return out
+
+
+def _pad_width_center(img: np.ndarray, target_w: int) -> np.ndarray:
+    """Pad image to target width with white background, centered horizontally."""
+    h, w = img.shape[:2]
+    if w >= target_w:
+        return img
+    out = np.full((h, target_w, 4), 255, dtype=np.uint8)
+    left = (target_w - w) // 2
+    out[:, left:left + w] = img
     return out
 
 
@@ -1138,18 +1184,16 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
-    saved_paths = _save_3d_front_back(
-        fig,
-        ax,
-        out_fig,
-        front_view=(40, -85),
-        back_view=(40, 95),
-
-
-        dpi=600,
-        tick_labelsize=16,
-        tick_pad=-4,
-    )
+    #saved_paths = _save_3d_front_back(
+    #    fig,
+    #    ax,
+    #    out_fig,
+    #    front_view=(40, -85),
+    #    back_view=(40, 95),
+    #   dpi=600,
+    #    tick_labelsize=16,
+    #    tick_pad=-4,
+    #)
     if show:
         plt.show()
     plt.close(fig)
@@ -1157,12 +1201,18 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
         print(f"[saved] {out_path}")
 
 
-def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
+def plot_weight_gauss_mean_cv(
+    disp: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    show: bool = True,
+    local_sign_binary_csv: str = "",
+):
     """
     3D line plot for weight_test (and other numeric modes):
       x = Gaussian magnitude (alpha) on log scale (log10 transform)
-      y = mean of an invariance column (prefers `kl_to_gaussian`)
-      z = mean CV (dispersion) per metric (MC/IPC/KR/GR)
+      y = mean CV (dispersion) per metric (MC/IPC/KR/GR)
+      z = mean of an invariance column (prefers `kl_to_gaussian`)
     CV is not computed for the invariance column; we reuse the dispersion table for MC/IPC/KR/GR only.
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -1182,11 +1232,24 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
         v = mode_to_value(m)
         if np.isfinite(v):
             mode_vals.append((m, v))
+    overlay = _load_local_sign_binary_overlay(local_sign_binary_csv)
     if not mode_vals:
         print("[warn] plot_weight_gauss_mean_cv: no modes with numeric values found.")
         return
     mode_vals = sorted(mode_vals, key=lambda t: t[1])
-    modes = [m for m, _ in mode_vals]
+    pos_logs = [np.log10(v) for _, v in mode_vals if v > 0]
+    if not pos_logs:
+        print("[warn] plot_weight_gauss_mean_cv: need at least one positive noise magnitude.")
+        return
+    has_zero = any(v == 0 for _, v in mode_vals)
+    x_zero = (min(pos_logs) - 0.60) if has_zero else np.nan
+
+    def _x_plot(v: float) -> float:
+        if v > 0:
+            return float(np.log10(v))
+        if v == 0 and has_zero:
+            return float(x_zero)
+        return float("nan")
 
     mean_tbl = _compute_mean_table(combined)
     inv_metric = "kl_to_gaussian"
@@ -1214,7 +1277,7 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
         print("[warn] plot_weight_gauss_mean_cv: no overlapping metrics with mean+CV.")
         return
 
-    # Choose a scaling for the invariance column so y-values stay in a readable range.
+    # Choose a scaling for the invariance column so z-values stay in a readable range.
     max_mean = np.nanmax(mean_mean_lookup.values) if len(mean_mean_lookup) else np.nan
     if np.isfinite(max_mean) and max_mean > 0:
         z_power = int(np.floor(np.log10(max_mean)))
@@ -1225,26 +1288,70 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
 
     fig = plt.figure(figsize=(8, 6), dpi=140)
     ax = fig.add_subplot(111, projection="3d")
+
+
     colors = mpl.colormaps["tab10"]
     plotted = False
-    inv_vals_scaled = []
+    x_line_vals = [_x_plot(v) for _, v in mode_vals]
+    x_line_vals = [x for x in x_line_vals if np.isfinite(x)]
+    x_min_line = float(np.min(x_line_vals))
+    x_max_line = float(np.max(x_line_vals))
+    z_vals = mean_mean_lookup.to_numpy(dtype=float) / z_scale
+    z_min = float(np.nanmin(z_vals)) if z_vals.size else 0.0
+    z_max = float(np.nanmax(z_vals)) if z_vals.size else 1.0
+    if not np.isfinite(z_min) or not np.isfinite(z_max):
+        z_min, z_max = 0.0, 1.0
+    if abs(z_max - z_min) < 1e-12:
+        z_min -= 0.5
+        z_max += 0.5
 
     for idx, metric in enumerate(metrics):
         rows = []
         for mode, x_raw in mode_vals:
             y_cv = cv_lookup.get((mode, metric), np.nan)
             z_mean = mean_mean_lookup.get(mode, np.nan)
-            if not (np.isfinite(y_cv) and np.isfinite(z_mean) and x_raw > 0):
+            x_plot = _x_plot(x_raw)
+            if not (np.isfinite(y_cv) and np.isfinite(z_mean) and np.isfinite(x_plot)):
                 continue
             inv_scaled = z_mean / z_scale
-            rows.append((np.log10(x_raw), y_cv, inv_scaled))
-            inv_vals_scaled.append(inv_scaled)
+            rows.append((x_plot, y_cv, inv_scaled))
         if not rows:
             continue
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
+        # y-axis is metric value, z-axis is KL.
         ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
         plotted = True
+
+        if overlay is not None:
+            z_lsb = overlay["cv_lookup"].get(("real", metric), np.nan)
+            if has_zero:
+                y0 = [r[1] for r in rows if abs(r[0] - x_zero) < 1e-12]
+                if y0:
+                    z_lsb = float(y0[0])
+            if np.isfinite(z_lsb):
+                x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
+                y_plane = np.full_like(x_plane, float(z_lsb))
+                z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
+                ax.plot_surface(
+                    x_plane,
+                    y_plane,
+                    z_plane,
+                    color=colors(idx % 10),
+                    alpha=0.12,
+                    shade=False,
+                    linewidth=0.0,
+                    antialiased=False,
+                )
+                ax.plot(
+                    [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
+                    [z_lsb, z_lsb, z_lsb, z_lsb, z_lsb],
+                    [z_min, z_min, z_max, z_max, z_min],
+                    color=colors(idx % 10),
+                    linewidth=1.0,
+                    alpha=0.7,
+                )
+                plotted = True
 
     if not plotted:
         plt.close(fig)
@@ -1256,8 +1363,15 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
     ax.set_zlabel(z_label_base, fontsize=18, labelpad=10)
     # helpful x ticks at common magnitudes if they are within range
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
-    ax.set_xticks(np.log10(xticks))
-    ax.set_xticklabels([str(v) for v in xticks])
+    xtick_pos = [np.log10(v) for v in xticks]
+    xtick_lbl = [str(v) for v in xticks]
+    if has_zero:
+        xtick_pos = [x_zero] + xtick_pos
+        xtick_lbl = ["0"] + xtick_lbl
+    ax.set_xticks(xtick_pos)
+    ax.set_xticklabels(xtick_lbl)
+    x_pad = 0.08 * (x_max_line - x_min_line if x_max_line > x_min_line else 1.0)
+    ax.set_xlim(x_min_line - x_pad, x_max_line + x_pad)
     #ax.legend()
     _tight_layout_quiet(fig)
 
@@ -1281,12 +1395,18 @@ def plot_weight_gauss_mean_cv(disp: pd.DataFrame, combined: pd.DataFrame, out_di
         print(f"[saved] {out_path}")
 
 
-def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
+def plot_weight_gauss_mean_perf(
+    disp: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    show: bool = True,
+    local_sign_binary_csv: str = "",
+):
     """
     3D line plot like plot_weight_gauss_mean_cv but using mean performance instead of mean CV:
       x = Gaussian magnitude (alpha) on log scale
-      y = invariance column (prefers `kl_to_gaussian`)
-      z = mean performance (per metric MC/IPC/KR/GR)
+      y = mean performance (per metric MC/IPC/KR/GR)
+      z = invariance column (prefers `kl_to_gaussian`)
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -1305,10 +1425,24 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
         v = mode_to_value(m)
         if np.isfinite(v):
             mode_vals.append((m, v))
+    overlay = _load_local_sign_binary_overlay(local_sign_binary_csv)
     if not mode_vals:
         print("[warn] plot_weight_gauss_mean_perf: no modes with numeric values found.")
         return
     mode_vals = sorted(mode_vals, key=lambda t: t[1])
+    pos_logs = [np.log10(v) for _, v in mode_vals if v > 0]
+    if not pos_logs:
+        print("[warn] plot_weight_gauss_mean_perf: need at least one positive noise magnitude.")
+        return
+    has_zero = any(v == 0 for _, v in mode_vals)
+    x_zero = (min(pos_logs) - 0.60) if has_zero else np.nan
+
+    def _x_plot(v: float) -> float:
+        if v > 0:
+            return float(np.log10(v))
+        if v == 0 and has_zero:
+            return float(x_zero)
+        return float("nan")
 
     mean_tbl = _compute_mean_table(combined)
     mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
@@ -1347,26 +1481,70 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
 
     fig = plt.figure(figsize=(8, 6), dpi=140)
     ax = fig.add_subplot(111, projection="3d")
+
+
     colors = mpl.colormaps["tab10"]
     plotted = False
-    inv_vals_scaled = []
+    x_line_vals = [_x_plot(v) for _, v in mode_vals]
+    x_line_vals = [x for x in x_line_vals if np.isfinite(x)]
+    x_min_line = float(np.min(x_line_vals))
+    x_max_line = float(np.max(x_line_vals))
+    z_vals = mean_mean_lookup.to_numpy(dtype=float) / z_scale
+    z_min = float(np.nanmin(z_vals)) if z_vals.size else 0.0
+    z_max = float(np.nanmax(z_vals)) if z_vals.size else 1.0
+    if not np.isfinite(z_min) or not np.isfinite(z_max):
+        z_min, z_max = 0.0, 1.0
+    if abs(z_max - z_min) < 1e-12:
+        z_min -= 0.5
+        z_max += 0.5
 
     for idx, metric in enumerate(metrics):
         rows = []
         for mode, x_raw in mode_vals:
             y_mean = mean_lookup.get((mode, metric), np.nan)
             z_mean = mean_mean_lookup.get(mode, np.nan)
-            if not (np.isfinite(y_mean) and np.isfinite(z_mean) and x_raw > 0):
+            x_plot = _x_plot(x_raw)
+            if not (np.isfinite(y_mean) and np.isfinite(z_mean) and np.isfinite(x_plot)):
                 continue
             inv_scaled = z_mean / z_scale
-            rows.append((np.log10(x_raw), y_mean, inv_scaled))
-            inv_vals_scaled.append(inv_scaled)
+            rows.append((x_plot, y_mean, inv_scaled))
         if not rows:
             continue
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
+        # y-axis is metric value, z-axis is KL.
         ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
         plotted = True
+
+        if overlay is not None:
+            z_lsb = overlay["mean_lookup"].get(("real", metric), np.nan)
+            if has_zero:
+                y0 = [r[1] for r in rows if abs(r[0] - x_zero) < 1e-12]
+                if y0:
+                    z_lsb = float(y0[0])
+            if np.isfinite(z_lsb):
+                x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
+                y_plane = np.full_like(x_plane, float(z_lsb))
+                z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
+                ax.plot_surface(
+                    x_plane,
+                    y_plane,
+                    z_plane,
+                    color=colors(idx % 10),
+                    alpha=0.12,
+                    shade=False,
+                    linewidth=0.0,
+                    antialiased=False,
+                )
+                ax.plot(
+                    [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
+                    [z_lsb, z_lsb, z_lsb, z_lsb, z_lsb],
+                    [z_min, z_min, z_max, z_max, z_min],
+                    color=colors(idx % 10),
+                    linewidth=1.0,
+                    alpha=0.7,
+                )
+                plotted = True
 
     if not plotted:
         plt.close(fig)
@@ -1377,27 +1555,408 @@ def plot_weight_gauss_mean_perf(disp: pd.DataFrame, combined: pd.DataFrame, out_
     ax.set_ylabel("Mean Metric Value", fontsize=18, labelpad=10)
     ax.set_zlabel(z_label_base, fontsize=18, labelpad=18)
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
-    ax.set_xticks(np.log10(xticks))
-    ax.set_xticklabels([str(v) for v in xticks])
+    xtick_pos = [np.log10(v) for v in xticks]
+    xtick_lbl = [str(v) for v in xticks]
+    if has_zero:
+        xtick_pos = [x_zero] + xtick_pos
+        xtick_lbl = ["0"] + xtick_lbl
+    ax.set_xticks(xtick_pos)
+    ax.set_xticklabels(xtick_lbl)
+    x_pad = 0.08 * (x_max_line - x_min_line if x_max_line > x_min_line else 1.0)
+    ax.set_xlim(x_min_line - x_pad, x_max_line + x_pad)
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "weight_mean_perf_log3d.png")
-    saved_paths = _save_3d_front_back(
-        fig,
-        ax,
-        out_fig,
-        front_view=(35, -65),
-        back_view=(35, 115),
-
-        dpi=600,
-        tick_labelsize=16,
-        tick_pad=-2,
-    )
+    #saved_paths = _save_3d_front_back(
+    #    fig,
+    #    ax,
+    #    out_fig,
+    #    front_view=(22, -15),
+    #    back_view=(22, 35),
+    #
+    #    dpi=600,
+    #    tick_labelsize=16,
+    #    tick_pad=-2,
+    #)
     if show:
         plt.show()
     plt.close(fig)
     for out_path in saved_paths:
         print(f"[saved] {out_path}")
+
+
+def plot_weight_gauss_perf_cv_grid(
+    disp: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    show: bool = True,
+    local_sign_binary_csv: str = "",
+):
+    """
+    Direct combined 2x2 figure (no intermediate perf/cv files):
+      top row: mean performance (front/back)
+      bottom:  mean CV (front/back)
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    def mode_to_value(mode: str) -> float:
+        mode_str = str(mode)
+        nums = re.findall(r"[0-9]+(?:\\.[0-9]+)?", mode_str)
+        for tok in nums:
+            try:
+                return float(tok)
+            except Exception:
+                continue
+        return np.nan
+
+    mode_vals = []
+    for m in combined["mode"].unique():
+        v = mode_to_value(m)
+        if np.isfinite(v):
+            mode_vals.append((m, v))
+    overlay = _load_local_sign_binary_overlay(local_sign_binary_csv)
+    if not mode_vals:
+        print("[warn] plot_weight_gauss_perf_cv_grid: no modes with numeric values found.")
+        return
+    mode_vals = sorted(mode_vals, key=lambda t: t[1])
+    pos_logs = [np.log10(v) for _, v in mode_vals if v > 0]
+    if not pos_logs:
+        print("[warn] plot_weight_gauss_perf_cv_grid: need at least one positive noise magnitude.")
+        return
+    has_zero = any(v == 0 for _, v in mode_vals)
+    x_zero = (min(pos_logs) - 0.60) if has_zero else np.nan
+
+    def _x_plot(v: float) -> float:
+        if v > 0:
+            return float(np.log10(v))
+        if v == 0 and has_zero:
+            return float(x_zero)
+        return float("nan")
+
+    mean_tbl = _compute_mean_table(combined)
+    mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
+    cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
+    inv_metric = "kl_to_gaussian"
+    if inv_metric not in combined.columns:
+        print(
+            "[warn] plot_weight_gauss_perf_cv_grid: required column 'kl_to_gaussian' not found. "
+            "Regenerate combined CSVs from runs that include kl_to_gaussian."
+        )
+        return
+    inv_tbl = _compute_mean_table(combined, metrics=[inv_metric])
+    kl_lookup = (
+        inv_tbl[inv_tbl["metric"] == inv_metric]
+        .groupby("mode")["mean"]
+        .mean()
+    )
+    if kl_lookup.empty:
+        print(f"[warn] plot_weight_gauss_perf_cv_grid: no values for invariance metric '{inv_metric}'.")
+        return
+
+    metrics = [m for m in ("MC", "IPC", "KR", "GR") if (m in mean_tbl["metric"].unique()) and (m in disp["metric"].unique())]
+    if not metrics:
+        print("[warn] plot_weight_gauss_perf_cv_grid: no overlapping metrics with mean+CV.")
+        return
+
+    max_kl = np.nanmax(kl_lookup.values) if len(kl_lookup) else np.nan
+    if np.isfinite(max_kl) and max_kl > 0:
+        z_power = int(np.floor(np.log10(max_kl)))
+        z_scale = 10.0 ** z_power
+    else:
+        z_scale = 1.0
+
+    colors = mpl.colormaps["tab10"]
+    x_line_vals = [_x_plot(v) for _, v in mode_vals]
+    x_line_vals = [x for x in x_line_vals if np.isfinite(x)]
+    if not x_line_vals:
+        print("[warn] plot_weight_gauss_perf_cv_grid: no finite x values to plot.")
+        return
+    x_min_line = float(np.min(x_line_vals))
+    x_max_line = float(np.max(x_line_vals))
+    z_vals = kl_lookup.to_numpy(dtype=float) / z_scale
+    z_min = float(np.nanmin(z_vals)) if z_vals.size else 0.0
+    z_max = float(np.nanmax(z_vals)) if z_vals.size else 1.0
+    if not np.isfinite(z_min) or not np.isfinite(z_max):
+        z_min, z_max = 0.0, 1.0
+    if abs(z_max - z_min) < 1e-12:
+        z_min -= 0.5
+        z_max += 0.5
+
+    zero_mode = next((mode for mode, raw in mode_vals if raw == 0), None)
+
+    def _latex_escape(text: str) -> str:
+        out = str(text)
+        replacements = {
+            "\\": r"\textbackslash{}",
+            "&": r"\&",
+            "%": r"\%",
+            "_": r"\_",
+            "#": r"\#",
+            "$": r"\$",
+            "{": r"\{",
+            "}": r"\}",
+        }
+        for src, dst in replacements.items():
+            out = out.replace(src, dst)
+        return out
+
+    def _fmt_num(x: float, digits: int = 3) -> str:
+        if not np.isfinite(x):
+            return "--"
+        return f"{x:.{digits}g}"
+
+    def _fmt_signed(x: float, digits: int = 3) -> str:
+        if not np.isfinite(x):
+            return "--"
+        return f"{x:+.{digits}g}"
+
+    def _fmt_mode_value(raw_value: float) -> str:
+        if not np.isfinite(raw_value):
+            return "NA"
+        if abs(raw_value - round(raw_value)) < 1e-12:
+            return str(int(round(raw_value)))
+        return f"{raw_value:.3g}"
+
+    def _print_metric_differences(y_lookup, y_label: str, tex_name: str):
+        overlay_lookup = None
+        if overlay is not None:
+            overlay_lookup = overlay["mean_lookup"] if y_label == "Mean Metric Value" else overlay["cv_lookup"]
+
+        baseline_info = {}
+        for metric in metrics:
+            baseline_value = np.nan
+            baseline_mode = ""
+            baseline_source = ""
+
+            if overlay_lookup is not None:
+                baseline_value = overlay_lookup.get(("real", metric), np.nan)
+                if np.isfinite(baseline_value):
+                    baseline_mode = "real"
+                    baseline_source = "overlay"
+
+            if zero_mode is not None:
+                zero_value = y_lookup.get((zero_mode, metric), np.nan)
+                if np.isfinite(zero_value):
+                    baseline_value = zero_value
+                    baseline_mode = zero_mode
+                    baseline_source = "zero-noise mode"
+
+            if not np.isfinite(baseline_value):
+                for mode, _ in mode_vals:
+                    cand = y_lookup.get((mode, metric), np.nan)
+                    if np.isfinite(cand):
+                        baseline_value = cand
+                        baseline_mode = str(mode)
+                        baseline_source = "first finite mode"
+                        break
+
+            if np.isfinite(baseline_value):
+                baseline_info[metric] = {
+                    "baseline_value": float(baseline_value),
+                    "baseline_mode": baseline_mode,
+                    "baseline_source": baseline_source,
+                }
+
+        if not baseline_info:
+            return
+
+        data_modes = []
+        for mode, raw_value in mode_vals:
+            if mode == zero_mode:
+                continue
+            if any(np.isfinite(y_lookup.get((mode, metric), np.nan)) for metric in metrics):
+                data_modes.append((mode, raw_value))
+
+        lines = [
+            "\\begin{tabular}{" + ("l" + "c" * (1 + len(data_modes))) + "}",
+            "\\toprule",
+        ]
+
+        header_cells = ["Metric", "Baseline"]
+        for _, raw_value in data_modes:
+            header_cells.append(f"$\\alpha={_fmt_mode_value(raw_value)}$")
+        lines.append(" & ".join(header_cells) + r" \\")
+        lines.append("\\midrule")
+
+        for metric in metrics:
+            info = baseline_info.get(metric)
+            if info is None:
+                continue
+            baseline_value = info["baseline_value"]
+            denom = abs(baseline_value)
+            row_cells = [_latex_escape(metric), _fmt_num(baseline_value, digits=4)]
+            for mode, _ in data_modes:
+                value = y_lookup.get((mode, metric), np.nan)
+                if not np.isfinite(value):
+                    row_cells.append("--")
+                    continue
+                delta = float(value - baseline_value)
+                if denom > 1e-12:
+                    pct_delta = 100.0 * delta / denom
+                    cell = f"{_fmt_signed(delta)} ({_fmt_signed(pct_delta)}\\%)"
+                else:
+                    cell = _fmt_signed(delta)
+                row_cells.append(cell)
+            lines.append(" & ".join(row_cells) + r" \\")
+
+        lines.append("\\bottomrule")
+        lines.append("\\end{tabular}")
+        latex_table = "\n".join(lines)
+
+        out_tex = _safe_path(os.path.join(out_dir, tex_name))
+        with open(out_tex, "w", encoding="utf-8") as handle:
+            handle.write(latex_table + "\n")
+
+        print(f"[latex] plot_weight_gauss_perf_cv_grid: {y_label}")
+        print(latex_table)
+        print(f"[saved] {out_tex}")
+
+    def _draw_panel(ax, y_lookup, y_label: str):
+        plotted = False
+        y_lo_panel = np.inf
+        y_hi_panel = -np.inf
+        for idx, metric in enumerate(metrics):
+            rows = []
+            for mode, x_raw in mode_vals:
+                y_val = y_lookup.get((mode, metric), np.nan)
+                z_val = kl_lookup.get(mode, np.nan)
+                x_val = _x_plot(x_raw)
+                if not (np.isfinite(y_val) and np.isfinite(z_val) and np.isfinite(x_val)):
+                    continue
+                rows.append((x_val, y_val, z_val / z_scale))
+            if not rows:
+                continue
+            rows = sorted(rows, key=lambda t: t[0])
+            xs, ys, zs = map(np.asarray, zip(*rows))
+            ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10))
+            plotted = True
+            y_lo_panel = min(y_lo_panel, float(np.nanmin(ys)))
+            y_hi_panel = max(y_hi_panel, float(np.nanmax(ys)))
+
+            if overlay is not None:
+                if y_label == "Mean Metric Value":
+                    y_ref = overlay["mean_lookup"].get(("real", metric), np.nan)
+                else:
+                    y_ref = overlay["cv_lookup"].get(("real", metric), np.nan)
+                if has_zero:
+                    y0 = [r[1] for r in rows if abs(r[0] - x_zero) < 1e-12]
+                    if y0:
+                        y_ref = float(y0[0])
+                if np.isfinite(y_ref):
+                    x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
+                    y_plane = np.full_like(x_plane, float(y_ref))
+                    z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
+                    ax.plot_surface(
+                        x_plane,
+                        y_plane,
+                        z_plane,
+                        color=colors(idx % 10),
+                        alpha=0.05,
+                        shade=False,
+                        linewidth=0.0,
+                        antialiased=False,
+                    )
+                    ax.set_facecolor((1, 1, 1, 0))
+
+                    ax.xaxis.pane.fill = False
+                    ax.yaxis.pane.fill = False
+                    ax.zaxis.pane.fill = False
+
+                    ax.xaxis.pane.set_edgecolor((1, 1, 1, 0))
+                    ax.yaxis.pane.set_edgecolor((1, 1, 1, 0))
+                    ax.zaxis.pane.set_edgecolor((1, 1, 1, 0))
+                    ax.plot(
+                        [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
+                        [y_ref, y_ref, y_ref, y_ref, y_ref],
+                        [z_min, z_min, z_max, z_max, z_min],
+                        color=colors(idx % 10),
+                        linewidth=1.0,
+                        alpha=0.7,
+                    )
+
+        if not plotted:
+            ax.set_axis_off()
+            return False
+
+        ax.set_xlabel("log10(Noise Mag.)", fontsize=18, labelpad=6)
+        ax.set_ylabel(y_label, fontsize=18, labelpad=7)
+        ax.zaxis.set_rotate_label(False)
+        ax.set_zlabel("KL to Gaussian", fontsize=18, labelpad=10, rotation=90)
+        ax.zaxis.set_label_coords(1.06, 0.50)
+        ax.xaxis.label.set_clip_on(False)
+        ax.yaxis.label.set_clip_on(False)
+        ax.zaxis.label.set_clip_on(False)
+        xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
+        xtick_pos = [np.log10(v) for v in xticks]
+        xtick_lbl = [str(v) for v in xticks]
+        if has_zero:
+            xtick_pos = [x_zero] + xtick_pos
+            xtick_lbl = ["0"] + xtick_lbl
+        ax.set_xticks(xtick_pos)
+        ax.set_xticklabels(xtick_lbl)
+        x_pad = 0.08 * (x_max_line - x_min_line if x_max_line > x_min_line else 1.0)
+        ax.set_xlim(x_min_line - x_pad, x_max_line + x_pad)
+        if np.isfinite(y_lo_panel) and np.isfinite(y_hi_panel):
+            y_pad = 0.08 * (y_hi_panel - y_lo_panel if y_hi_panel > y_lo_panel else 1.0)
+            ax.set_ylim(y_lo_panel - y_pad, y_hi_panel + y_pad)
+        ax.set_zlim(z_min, z_max)
+        _style_3d_axis(ax, tick_labelsize=18, tick_pad=-1)
+        return True
+
+    _print_metric_differences(
+        cv_lookup,
+        "mean CV",
+        tex_name="weight_gauss_diff_mean_cv_table.tex",
+    )
+    _print_metric_differences(
+        mean_lookup,
+        "Mean Metric Value",
+        tex_name="weight_gauss_diff_mean_perf_table.tex",
+    )
+
+    fig = plt.figure(figsize=(14.0, 10.0), dpi=300)
+    ax00 = fig.add_subplot(2, 2, 1, projection="3d")
+    ax01 = fig.add_subplot(2, 2, 2, projection="3d")
+    ax10 = fig.add_subplot(2, 2, 3, projection="3d")
+    ax11 = fig.add_subplot(2, 2, 4, projection="3d")
+
+    any_plotted = False
+
+    any_plotted |= _draw_panel(ax10, cv_lookup, "mean CV")
+    any_plotted |= _draw_panel(ax11, cv_lookup, "mean CV")
+    any_plotted |= _draw_panel(ax00, mean_lookup, "Mean Metric Value")
+    any_plotted |= _draw_panel(ax01, mean_lookup, "Mean Metric Value")
+    if not any_plotted:
+        plt.close(fig)
+        print("[warn] plot_weight_gauss_perf_cv_grid: no finite data to plot.")
+        return
+
+    front_view = (22, -20)
+    back_view = (22, 20)
+    for ax in (ax00, ax10):
+        ax.view_init(elev=front_view[0], azim=front_view[1])
+        ax.set_zorder(100)
+    for ax in (ax01, ax11):
+        ax.view_init(elev=back_view[0], azim=back_view[1])
+        ax.set_zorder(2)
+
+    # Bottom-row y endpoints can crowd x-corner ticks; prune only y endpoints.
+    for ax in (ax10, ax11,ax00, ax01):
+        ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=4, prune="upper"))
+
+    fig.subplots_adjust(left=-0.00, right=0.955, bottom=-0.0, top=1.05, wspace=0.2, hspace=-0.05)
+    fig.tight_layout()
+    out_png = os.path.join(out_dir, "weight_mean_perf_cv_grid_3d.png")
+    fig.savefig(
+        out_png,
+        dpi=600,
+        facecolor="white",
+        edgecolor="white",
+    )
+    if show:
+        plt.show()
+    plt.close(fig)
+    print(f"[saved] {out_png}")
 
 
 def plot_rho_cv_other_perf(
@@ -1728,9 +2287,15 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                     label=display_mode,
                     color=color,
                 )
-                # Median marker to help compare shifts without cluttering the plot.
+                # Keep the location marker tied to the same architecture color as its histogram.
                 med = float(np.median(s))
-                ax.axvline(med, color="#8a8a8a", alpha=0.25, linewidth=1.1, linestyle="--")
+                ax.axvline(
+                    med,
+                    color=color if color is not None else "#8a8a8a",
+                    alpha=0.4,
+                    linewidth=1.2,
+                    linestyle="--",
+                )
                 plotted = True
                 row_y_max[row] = max(row_y_max[row], float(np.max(frac)))
 
@@ -1992,8 +2557,13 @@ def main():
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_frac_cv_meanline(disp, combined, args.out_dir,show=False)
-    #plot_weight_gauss_mean_cv(disp, combined, args.out_dir, show=False)
-    #plot_weight_gauss_mean_perf(disp, combined, args.out_dir, show=False)
+    plot_weight_gauss_perf_cv_grid(
+        disp,
+        combined,
+        args.out_dir,
+        show=False,
+        local_sign_binary_csv=args.local_sign_binary_csv,
+    )
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
