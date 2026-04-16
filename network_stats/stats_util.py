@@ -71,7 +71,6 @@ def ridge_fit_predict(
 
     # All right-hand sides at once
     B = Xt @ ytr                 # [N, K]
-
     # Single linear solve for all targets
     W = torch.linalg.solve(G, B) # [N, K]
 
@@ -84,9 +83,14 @@ def ridge_fit_predict(
     return yhat
 
 
-def r2_score(y_true: Tensor, y_pred: Tensor) -> float:
-    """Coefficient of determination R^2 (see sklearn.metrics.r2_score: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/_regression.py#L104)."""
-    y_true_c = y_true - y_true.mean()
-    ss_res = torch.sum((y_true - y_pred)**2)
-    ss_tot = torch.sum(y_true_c**2) + 1e-12
-    return float(1.0 - (ss_res / ss_tot))
+
+def corr2_score(y_true: Tensor, y_pred: Tensor, eps: float = 1e-12) -> float:
+    """
+    Squared Pearson correlation used in Jaeger-style memory capacity.
+    """
+    y_true_c = y_true - y_true.mean() ## remove the means
+    y_pred_c = y_pred - y_pred.mean() ## remove the means 
+    num = torch.sum(y_true_c * y_pred_c) ## this is top on pearson correlation
+    den = torch.sqrt(torch.sum(y_true_c**2) * torch.sum(y_pred_c**2)) + eps
+    corr2 = (num / den) ** 2
+    return float(torch.clamp(corr2, 0.0, 1.0))

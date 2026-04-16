@@ -1,4 +1,4 @@
-from network_stats.stats_util import legendre_P,effective_rank_from_states,ridge_fit_predict,r2_score
+from network_stats.stats_util import corr2_score,legendre_P,effective_rank_from_states,ridge_fit_predict
 from torch import Tensor
 import torch ; import numpy as np
 
@@ -13,7 +13,7 @@ def compute_IPC(
     orders: list[int] = [1, 3, 5],
 ) -> float:
     """
-    Information Processing Capacity (approx.): sum of R^2 for Legendre targets
+    Information Processing Capacity (approx.): sum of for Legendre targets
     P_k(u_{t - d}) for k in orders, d=1..max_delay.
 
     This version batches all Legendre orders for a fixed delay d, so that
@@ -23,20 +23,12 @@ def compute_IPC(
     See: Dambre et al., 2012, Sci. Rep. 2:514; batching pattern similar to scikit-learn Ridge
     multi-target solves (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_ridge.py).
     """
-    def to_m11(u: Tensor) -> Tensor:
-        umax = u.max()
-        umin = u.min()
-        return (2.0 * (u - umin) / (umax - umin + 1e-12)) - 1.0
-
-    utr_s = to_m11(utr)
-    ute_s = to_m11(ute)
-
     total = 0.0
 
     for d in range(1, max_delay + 1):
         # shared slices for this delay
-        base_tr = utr_s[:-d]          # [T_train - d, 1] or [T_train - d]
-        base_te = ute_s[:-d]          # [T_test  - d, 1] or [T_test  - d]
+        base_tr = utr[:-d]          # [T_train - d, 1] or [T_train - d]
+        base_te = ute[:-d]          # [T_test  - d, 1] or [T_test  - d]
         Xtr_d   = Xtr[d:]             # [T_train - d, N]
         Xte_d   = Xte[d:]             # [T_test  - d, N]
 
@@ -64,9 +56,8 @@ def compute_IPC(
         Yhat = ridge_fit_predict(Xtr_d, Ytr, Xte_d, alpha, DEVICE=device)
         # Yhat: [T_test - d, max_order]
 
-        # accumulate R^2 per column
         for j in range(Ytr.shape[1]):
-            total += max(0.0, r2_score(Yte[:, j], Yhat[:, j]))
+            total += corr2_score(Yte[:, j], Yhat[:, j])
 
     return float(total)
 
@@ -78,21 +69,21 @@ def compute_KR(X: Tensor) -> float:
 
 def compute_MC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor, max_delay: int, alpha: float,device:torch.device) -> tuple[float, np.ndarray]:
     """
-    Linear memory capacity (sum of R^2 over delays).
-    Inputs/targets are assumed zero-mean. just linear version of ipc
+    Linear memory capacity using Jaeger's squared-correlation definition.
+    Inputs/targets are assumed zero-mean.
     See: Jaeger, 2002, GMD Report 152; reservoirpy metric analogue:
          https://github.com/reservoirpy/reservoirpy/blob/master/reservoirpy/metrics/memory_capacity.py
     """
-    r2s = []
+    capacities = []
     for tau in range(1, max_delay + 1):
         ytr = utr[:-tau]
         yte = ute[:-tau]
-        Xtr_d = Xtr[tau:]
-        Xte_d = Xte[tau:]
+        Xtr_d = Xtr[tau:] ##so that they are the same dimensiobn
+        Xte_d = Xte[tau:] ##so that they are the same dimesions
         yhat = ridge_fit_predict(Xtr_d, ytr, Xte_d, alpha,DEVICE=device)
-        r2s.append(r2_score(yte, yhat))
-    r2s = np.array(r2s, dtype=np.float32)
-    return float(np.sum(np.clip(r2s, 0.0, 1.0))), r2s
+        capacities.append(corr2_score(yte, yhat))
+    capacities = np.array(capacities, dtype=np.float32)
+    return float(np.sum(capacities)), capacities
 
 
 def compute_GR(X_clean: Tensor, X_noisy: Tensor) -> float:

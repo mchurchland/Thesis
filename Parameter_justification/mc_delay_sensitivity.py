@@ -117,7 +117,6 @@ def main() -> None:
 
                         t_total = args.washout + args.t_train + args.t_test
                         u = (torch.rand(t_total, 1, device=device) * 2.0 - 1.0)
-                        u = u - u.mean()
 
                         X, _ = run_reservoir_with_pre(Wt, Win, u, leak)
                         Xtr = X[args.washout:args.washout + args.t_train]

@@ -23,7 +23,7 @@ import torch
 
 from inv_arc_test import _pick_device
 from network_stats.run_one import run_reservoir_with_pre
-from network_stats.stats_util import legendre_P, ridge_fit_predict, r2_score
+from network_stats.stats_util import legendre_P, ridge_fit_predict, corr2_score
 from util.util import build_reservoir, load_connectome, set_seed
 
 
@@ -113,7 +113,6 @@ def main() -> None:
 
     t_total = args.washout + args.t_train + args.t_test
     u = (torch.rand(t_total, 1, device=device) * 2.0 - 1.0)
-    u = u - u.mean()
 
     X, _ = run_reservoir_with_pre(Wt, Win, u, args.leak)
     avg_signal = X.mean(dim=1, keepdim=True)
@@ -145,10 +144,10 @@ def main() -> None:
     p3_train = p3[args.washout:args.washout + args.t_train].squeeze(1)
     p2_test = p2[args.washout + args.t_train:].squeeze(1)
     p3_test = p3[args.washout + args.t_train:].squeeze(1)
-    p2_r2_train = r2_score(p2_train, yhat_train[:, 0])
-    p3_r2_train = r2_score(p3_train, yhat_train[:, 1])
-    p2_r2_test = r2_score(p2_test, yhat_test[:, 0])
-    p3_r2_test = r2_score(p3_test, yhat_test[:, 1])
+    p2_r2_train = corr2_score(p2_train, yhat_train[:, 0])
+    p3_r2_train = corr2_score(p3_train, yhat_train[:, 1])
+    p2_r2_test = corr2_score(p2_test, yhat_test[:, 0])
+    p3_r2_test = corr2_score(p3_test, yhat_test[:, 1])
 
     t = np.arange(t_total)
     u_np = u.squeeze(1).detach().cpu().numpy()
