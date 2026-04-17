@@ -694,11 +694,18 @@ def _tight_layout_quiet(fig):
         fig.tight_layout()
 
 
-def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
+def _style_3d_axis(
+    ax,
+    tick_labelsize: int = 11,
+    tick_pad: int = 2,
+    pane_fill: bool = True,
+    pane_facecolor=(1.0, 1.0, 1.0, 1.0),
+    pane_edgecolor=(0.85, 0.85, 0.85, 1.0),
+):
     """Apply a cleaner, publication-friendly 3D style."""
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
     ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=-2)
-    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=0)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=-2)
     ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=0)
     y_formatter = ax.yaxis.get_major_formatter()
     if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
@@ -708,7 +715,21 @@ def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
 
     try:
         for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
-            axis.pane.set_facecolor((1.0, 1.0, 1.0, 1.0))
+            axis.pane.fill = pane_fill
+            axis.pane.set_facecolor(pane_facecolor)
+            axis.pane.set_edgecolor(pane_edgecolor)
+    except Exception:
+        pass
+
+
+def _clear_3d_axis_background(ax):
+    """Make the 3D axis background transparent while keeping guide lines visible."""
+    try:
+        ax.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        ax.patch.set_alpha(0.0)
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+            axis.pane.fill = False
+            axis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
             axis.pane.set_edgecolor((0.85, 0.85, 0.85, 1.0))
     except Exception:
         pass
@@ -794,6 +815,9 @@ def _save_3d_front_back(
     dpi: int = 600,
     tick_labelsize: int = 11,
     tick_pad: int = 2,
+    pane_fill: bool = True,
+    pane_facecolor=(1.0, 1.0, 1.0, 1.0),
+    pane_edgecolor=(0.85, 0.85, 0.85, 1.0),
 ):
     """Save one publication PNG with front/back views side-by-side."""
     if isinstance(axes, (list, tuple, np.ndarray)):
@@ -802,7 +826,14 @@ def _save_3d_front_back(
         axes_list = [axes] if axes is not None else []
 
     for ax in axes_list:
-        _style_3d_axis(ax, tick_labelsize=tick_labelsize, tick_pad=tick_pad)
+        _style_3d_axis(
+            ax,
+            tick_labelsize=tick_labelsize,
+            tick_pad=tick_pad,
+            pane_fill=pane_fill,
+            pane_facecolor=pane_facecolor,
+            pane_edgecolor=pane_edgecolor,
+        )
 
     front_png = _safe_path(out_png)
     front_root, front_ext = os.path.splitext(front_png)
@@ -909,8 +940,8 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         return
 
     mode_order = [
-        "sign_test0.0","sign_test0.1","sign_test0.2","sign_test0.3","sign_test0.4",
-        "sign_test0.5","sign_test0.6","sign_test0.7","sign_test0.8","sign_test0.9","sign_test1.0",
+        "sign_test_og_cel0.0","sign_test_og_cel0.1","sign_test_og_cel0.2","sign_test_og_cel0.3","sign_test_og_cel0.4",
+        "sign_test_og_cel0.5","sign_test_og_cel0.6","sign_test_og_cel0.7","sign_test_og_cel0.8","sign_test_og_cel0.9","sign_test_og_cel1.0",
     ]
     #mode_order = [
     #    "weight_test0.0","weight_test1.0","weight_test5.0","weight_test10.0","weight_test100.0",
@@ -918,6 +949,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     #]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     if not modes:
+        print("fdfsa")
         return
 
     def mode_to_value(mode: str) -> float:
@@ -1184,16 +1216,16 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
-    #saved_paths = _save_3d_front_back(
-    #    fig,
-    #    ax,
-    #    out_fig,
-    #    front_view=(40, -85),
-    #    back_view=(40, 95),
-    #   dpi=600,
-    #    tick_labelsize=16,
-    #    tick_pad=-4,
-    #)
+    saved_paths = _save_3d_front_back(
+        fig,
+        ax,
+        out_fig,
+        front_view=(20, -25),
+        back_view=(20, 145),
+       dpi=600,
+        tick_labelsize=16,
+        tick_pad=-4,
+    )
     if show:
         plt.show()
     plt.close(fig)
@@ -1242,6 +1274,7 @@ def plot_weight_gauss_mean_cv(
         print("[warn] plot_weight_gauss_mean_cv: need at least one positive noise magnitude.")
         return
     has_zero = any(v == 0 for _, v in mode_vals)
+    zero_mode = next((mode for mode, raw in mode_vals if raw == 0), None)
     x_zero = (min(pos_logs) - 0.60) if has_zero else np.nan
 
     def _x_plot(v: float) -> float:
@@ -1323,35 +1356,32 @@ def plot_weight_gauss_mean_cv(
         ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
         plotted = True
 
-        if overlay is not None:
+        z_lsb = cv_lookup.get((zero_mode, metric), np.nan) if zero_mode is not None else np.nan
+        if not np.isfinite(z_lsb) and overlay is not None:
             z_lsb = overlay["cv_lookup"].get(("real", metric), np.nan)
-            if has_zero:
-                y0 = [r[1] for r in rows if abs(r[0] - x_zero) < 1e-12]
-                if y0:
-                    z_lsb = float(y0[0])
-            if np.isfinite(z_lsb):
-                x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
-                y_plane = np.full_like(x_plane, float(z_lsb))
-                z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
-                ax.plot_surface(
-                    x_plane,
-                    y_plane,
-                    z_plane,
-                    color=colors(idx % 10),
-                    alpha=0.12,
-                    shade=False,
-                    linewidth=0.0,
-                    antialiased=False,
-                )
-                ax.plot(
-                    [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
-                    [z_lsb, z_lsb, z_lsb, z_lsb, z_lsb],
-                    [z_min, z_min, z_max, z_max, z_min],
-                    color=colors(idx % 10),
-                    linewidth=1.0,
-                    alpha=0.7,
-                )
-                plotted = True
+        if np.isfinite(z_lsb):
+            x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
+            y_plane = np.full_like(x_plane, float(z_lsb))
+            z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
+            ax.plot_surface(
+                x_plane,
+                y_plane,
+                z_plane,
+                color=colors(idx % 10),
+                alpha=0.12,
+                shade=False,
+                linewidth=0.0,
+                antialiased=False,
+            )
+            ax.plot(
+                [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
+                [z_lsb, z_lsb, z_lsb, z_lsb, z_lsb],
+                [z_min, z_min, z_max, z_max, z_min],
+                color=colors(idx % 10),
+                linewidth=1.0,
+                alpha=0.7,
+            )
+            plotted = True
 
     if not plotted:
         plt.close(fig)
@@ -1380,13 +1410,14 @@ def plot_weight_gauss_mean_cv(
         fig,
         ax,
         out_fig,
-        front_view=(35, -65),
-        back_view=(35, 115),
-
-
+        front_view=(25, -15),
+        back_view=(25, 15),
         dpi=600,
         tick_labelsize=16,
         tick_pad=-2,
+        pane_fill=True,
+        pane_facecolor=(0.95, 0.95, 0.95, 0.90),
+        pane_edgecolor=(0.78, 0.78, 0.78, 1.0),
     )
     if show:
         plt.show()
@@ -1856,15 +1887,6 @@ def plot_weight_gauss_perf_cv_grid(
                         linewidth=0.0,
                         antialiased=False,
                     )
-                    ax.set_facecolor((1, 1, 1, 0))
-
-                    ax.xaxis.pane.fill = False
-                    ax.yaxis.pane.fill = False
-                    ax.zaxis.pane.fill = False
-
-                    ax.xaxis.pane.set_edgecolor((1, 1, 1, 0))
-                    ax.yaxis.pane.set_edgecolor((1, 1, 1, 0))
-                    ax.zaxis.pane.set_edgecolor((1, 1, 1, 0))
                     ax.plot(
                         [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
                         [y_ref, y_ref, y_ref, y_ref, y_ref],
@@ -1901,6 +1923,7 @@ def plot_weight_gauss_perf_cv_grid(
             ax.set_ylim(y_lo_panel - y_pad, y_hi_panel + y_pad)
         ax.set_zlim(z_min, z_max)
         _style_3d_axis(ax, tick_labelsize=18, tick_pad=-1)
+        _clear_3d_axis_background(ax)
         return True
 
     _print_metric_differences(
@@ -2556,7 +2579,7 @@ def main():
 
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    #plot_frac_cv_meanline(disp, combined, args.out_dir,show=False)
+    #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
     plot_weight_gauss_perf_cv_grid(
         disp,
         combined,
@@ -2565,7 +2588,7 @@ def main():
         local_sign_binary_csv=args.local_sign_binary_csv,
     )
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
-    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)
 

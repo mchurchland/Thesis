@@ -1,0 +1,84 @@
+MC & celW+connShuf vs conn_shuf_only & 0.01656 & 7.926e-20 \\
+MC & celW+connShuf vs shuffle & 0.01656 & 1.844e-14 \\
+MC & conn_shuf_only vs shuffle & 0.01656 & 1.615e-15 \\
+IPC & celW+connShuf vs conn_shuf_only & 0.01213 & 6.19e-07 \\
+IPC & celW+connShuf vs shuffle & 0.01213 & 4.58e-09 \\
+IPC & conn_shuf_only vs shuffle & 0.01213 & 2.501e-12 \\
+KR & celW+connShuf vs conn_shuf_only & 0.01722 & 4.406e-30 \\
+KR & celW+connShuf vs shuffle & 0.01722 & 2.781e-27 \\
+KR & conn_shuf_only vs shuffle & 0.01722 & 8.019e-21 \\
+GR & celW+connShuf vs conn_shuf_only & 0.02759 & 4.394e-70 \\
+GR & celW+connShuf vs shuffle & 0.02759 & 7.459e-46 \\
+GR & conn_shuf_only vs shuffle & 0.02759 & 4.201e-41 \\
+
+
+
+
+MC & binary+conshuffle+wshuffle vs binary+shuffle & 0.01368 & 7.998e-12 \\
+MC & binary+conshuffle+wshuffle vs global_sign_pres & 0.01368 & 0.04546 \\
+MC & binary+shuffle vs global_sign_pres & 0.01368 & 7.225e-05 \\
+MC & global_sign_pres vs local_sign+binary & 0.01368 & 2.114e-05 \\
+IPC & binary+conshuffle+wshuffle vs binary+shuffle & 0.0106 & 8.308e-10 \\
+IPC & binary+conshuffle+wshuffle vs global_sign_pres & 0.0106 & 2.293e-11 \\
+IPC & binary+conshuffle+wshuffle vs local_sign+binary & 0.0106 & 7.678e-11 \\
+IPC & binary+shuffle vs global_sign_pres & 0.0106 & 1.491e-07 \\
+IPC & binary+shuffle vs local_sign+binary & 0.0106 & 3.382e-07 \\
+IPC & global_sign_pres vs local_sign+binary & 0.0106 & 7.407e-15 \\
+KR & binary+conshuffle+wshuffle vs binary+shuffle & 0.01317 & 4.991e-12 \\
+KR & binary+conshuffle+wshuffle vs global_sign_pres & 0.01317 & 6.44e-08 \\
+KR & binary+conshuffle+wshuffle vs local_sign+binary & 0.01317 & 2.063e-20 \\
+KR & binary+shuffle vs global_sign_pres & 0.01317 & 4.512e-16 \\
+KR & binary+shuffle vs local_sign+binary & 0.01317 & 1.584e-13 \\
+KR & global_sign_pres vs local_sign+binary & 0.01317 & 3.403e-09 \\
+GR & binary+conshuffle+wshuffle vs binary+shuffle & 0.02224 & 3.981e-30 \\
+GR & binary+conshuffle+wshuffle vs global_sign_pres & 0.02224 & 1.419e-47 \\
+GR & binary+conshuffle+wshuffle vs local_sign+binary & 0.02224 & 9.588e-23 \\
+GR & binary+shuffle vs global_sign_pres & 0.02224 & 7.492e-30 \\
+GR & binary+shuffle vs local_sign+binary & 0.02224 & 9.344e-10 \\
+GR & global_sign_pres vs local_sign+binary & 0.02224 & 1.875e-20 \\
+
+
+
+MC & binary+conshuffle+wshuffle vs binary+shuffle & 0.01364 & 9.719e-12 \\
+IPC & binary+conshuffle+wshuffle vs binary+shuffle & 0.01063 & 7.378e-10 \\
+IPC & binary+conshuffle+wshuffle vs local_sign+binary & 0.01063 & 6.776e-11 \\
+IPC & binary+shuffle vs local_sign+binary & 0.01063 & 3.057e-07 \\
+KR & binary+conshuffle+wshuffle vs binary+shuffle & 0.01311 & 6.688e-12 \\
+KR & binary+conshuffle+wshuffle vs local_sign+binary & 0.01311 & 3.028e-20 \\
+KR & binary+shuffle vs local_sign+binary & 0.01311 & 2.15e-13 \\
+GR & binary+conshuffle+wshuffle vs binary+shuffle & 0.02218 & 6.219e-30 \\
+GR & binary+conshuffle+wshuffle vs local_sign+binary & 0.02218 & 1.435e-22 \\
+GR & binary+shuffle vs local_sign+binary & 0.02218 & 1.202e-09 \\
+
+
+MC & binary_base vs global_sign_pres & 0.0151 & 0.007238 \\
+MC & binary_base vs local_sign+binary & 0.0151 & 5.5e-05 \\
+MC & cel+randN vs ws_p0.1+randN & 0.0151 & 0.02401 \\
+MC & er+randN vs ws_p0.1+randN & 0.0151 & 5.706e-16 \\
+MC & global_sign_pres vs local_sign+binary & 0.0151 & 3.329e-16 \\
+MC & global_sign_pres vs local_sign+flat & 0.0151 & 0.04148 \\
+MC & local_sign vs local_sign+flat & 0.0151 & 0.0001002 \\
+MC & local_sign vs real & 0.0151 & 9.184e-12 \\
+MC & local_sign+flat vs real & 0.0151 & 9.91e-09 \\
+IPC & binary_base vs global_sign_pres & 0.01138 & 6.972e-05 \\
+IPC & binary_base vs local_sign+binary & 0.01138 & 2.129e-08 \\
+IPC & binary_base vs real & 0.01138 & 5.563e-14 \\
+IPC & er+randN vs ws_p0.1+randN & 0.01138 & 8.612e-08 \\
+IPC & global_sign_pres vs local_sign+binary & 0.01138 & 2.079e-11 \\
+IPC & global_sign_pres vs local_sign+flat & 0.01138 & 1.807e-05 \\
+IPC & global_sign_pres vs real & 0.01138 & 1.779e-06 \\
+IPC & local_sign vs local_sign+flat & 0.01138 & 5.499e-06 \\
+IPC & local_sign+binary vs local_sign+flat & 0.01138 & 0.01166 \\
+IPC & local_sign+binary vs real & 0.01138 & 1.938e-10 \\
+KR & er+randN vs ws_p0.1+randN & 0.01441 & 5.98e-05 \\
+KR & global_sign_pres vs local_sign+binary & 0.01441 & 1.116e-11 \\
+KR & global_sign_pres vs real & 0.01441 & 3.929e-21 \\
+KR & local_sign+binary vs real & 0.01441 & 2.716e-20 \\
+GR & binary_base vs local_sign+binary & 0.02375 & 0.0459 \\
+GR & cel+randN vs er+randN & 0.02375 & 3.902e-06 \\
+GR & cel+randN vs ws_p0.1+randN & 0.02375 & 3.849e-08 \\
+GR & er+randN vs ws_p0.1+randN & 0.02375 & 5.565e-65 \\
+GR & global_sign_pres vs local_sign+binary & 0.02375 & 1.613e-24 \\
+GR & global_sign_pres vs real & 0.02375 & 4.416e-41 \\
+GR & local_sign vs local_sign+flat & 0.02375 & 0.03561 \\
+GR & local_sign+binary vs real & 0.02375 & 9.945e-45 \\
