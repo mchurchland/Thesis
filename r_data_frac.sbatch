@@ -20,7 +20,7 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="experiment_full_chunks"
+OUTROOT="sign_test"
 OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${OUTDIR}"
 
@@ -37,7 +37,7 @@ SID_BASE=0
 
 conda run -n cel python inv_arc_test.py \
   --job "sign_test_cel" \
-  --out-dir "cel_${OUTDIR}" \
+  --out-dir "binary_cel_${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
