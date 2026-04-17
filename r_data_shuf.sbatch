@@ -38,7 +38,7 @@ JOB_KIND="all_topology_shuffle"
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "topshuf_${OUTDIR}" \
+  --out-dir "final_shuf_v1_${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \

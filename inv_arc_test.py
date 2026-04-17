@@ -36,24 +36,24 @@ from util.util import load_connectome
 
 WS_K = 10  # signature compatibility with util.build_reservoir
 
-ALL_JOB_KEYS = (
+ALL_JOB_KEYS = ( ## I need to change the names anyways lets do this inclass local_sign+binary should be local
     "real",            #x
-    "shuffle_weights",
+    #"shuffle_weights",
     "cel_randN", #x
     "er_randN", #x
     "ws_p01_randN", #x
-    "conn_shuf", 
+    #"conn_shuf", 
     "local_sign", #x
-    "conn_shuf_only",
-    "cel_sample", 
+    #"conn_shuf_only",
+    #"cel_sample", 
     "local_sign+flat", #x 
-    "local_sign+sample", 
+    #"local_sign+sample", 
     "local_sign+binary", #x
     "global_sign_pres", #x
     "binary_base", #x
-    "binary_base_topology_shuffle", #x
-    "binary+shuffle", #x
-    "binary+conshuffle+wshuffle", #x
+    #"binary_base_topology_shuffle", #x
+    #"binary+shuffle", #x
+    #"binary+conshuffle+wshuffle", #x
     #"sign_test_og_cel",
 )
 
