@@ -68,6 +68,42 @@ ANALYSIS_MODE_FILTER = [
       #      "binary_base",
 ]
 
+SHORT_THESIS_NAMES = {
+    "real": "C. elegans",
+    "shuffle": "Weight shuffle",
+    "shuffle_weights": "Weight shuffle",
+    "celW+connShuf": "Conn. + wt. shuffle",
+    "conn_shuf": "Conn. + wt. shuffle",
+    "conn_shuf_only": "Connection shuffle",
+    "local_sign+binary": "Sign-pres. pm1 wt.",
+    "global_sign_pres": "Sign-pres. pm1 + wt. shuf.",
+    "binary+conshuffle+wshuffle": "pm1 sign-pres. + shuf.",
+    "binary_base": "Binary wt.",
+    "binary_base_topology_shuffle": "Binary wt. + shuf.",
+    "binary+shuffle": "pm1 + conn. shuffle",
+    "cel_randN": "CE Gaussian wt.",
+    "er_randN": "ER Gaussian wt.",
+    "ws_p0.1+randN": "WS Gaussian wt.",
+    "ws_p01_randN": "WS Gaussian wt.",
+    "local_sign": "Sign-pres. Gaussian",
+    "local_sign+flat": "Sign-pres. uniform",
+}
+
+_SHORT_THESIS_NAME_ALIASES = {
+    "shuffle": "shuffle_weights",
+    "cel+randN": "cel_randN",
+    "er+randN": "er_randN",
+    "ws_p0.1+randN": "ws_p01_randN",
+    "celW+connShuf": "conn_shuf",
+}
+
+
+def _short_thesis_name(mode):
+    if not isinstance(mode, str):
+        return mode
+    canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
+    return SHORT_THESIS_NAMES.get(canonical, SHORT_THESIS_NAMES.get(mode, mode))
+
 # ---------------------------- CLI ----------------------------
 
 def parse_args():
@@ -653,6 +689,8 @@ def print_tost_preservation_summary(
             p_new = row.get(p_new_col, np.nan)
             mode_a = row["mode_a"]
             mode_b = row["mode_b"]
+            mode_a_label = _short_thesis_name(mode_a)
+            mode_b_label = _short_thesis_name(mode_b)
             metric = row["metric"]
             ref_mean_a = ref_mean_lookup.get((metric, mode_a), np.nan)
             ref_mean_b = ref_mean_lookup.get((metric, mode_b), np.nan)
@@ -660,17 +698,17 @@ def print_tost_preservation_summary(
             new_mean_b = new_mean_lookup.get((metric, mode_b), np.nan)
             if np.isfinite(p_new):
                 print(
-                    f"[tost] {metric}: {mode_a} vs {mode_b} "
+                    f"[tost] {metric}: {mode_a_label} vs {mode_b_label} "
                     f"(p_{label_ref}={p_ref:.4g}, p_{label_new}={p_new:.4g}, bound={row['bound_ref']:.4g}, "
-                    f"means_{label_ref}=[{mode_a}:{_fmt_mean(ref_mean_a)}, {mode_b}:{_fmt_mean(ref_mean_b)}], "
-                    f"means_{label_new}=[{mode_a}:{_fmt_mean(new_mean_a)}, {mode_b}:{_fmt_mean(new_mean_b)}])"
+                    f"means_{label_ref}=[{mode_a_label}:{_fmt_mean(ref_mean_a)}, {mode_b_label}:{_fmt_mean(ref_mean_b)}], "
+                    f"means_{label_new}=[{mode_a_label}:{_fmt_mean(new_mean_a)}, {mode_b_label}:{_fmt_mean(new_mean_b)}])"
                 )
             else:
                 print(
-                    f"[tost] {metric}: {mode_a} vs {mode_b} "
+                    f"[tost] {metric}: {mode_a_label} vs {mode_b_label} "
                     f"(p_{label_ref}={p_ref:.4g}, p_{label_new}=NA, bound={row['bound_ref']:.4g}, "
-                    f"means_{label_ref}=[{mode_a}:{_fmt_mean(ref_mean_a)}, {mode_b}:{_fmt_mean(ref_mean_b)}], "
-                    f"means_{label_new}=[{mode_a}:{_fmt_mean(new_mean_a)}, {mode_b}:{_fmt_mean(new_mean_b)}])"
+                    f"means_{label_ref}=[{mode_a_label}:{_fmt_mean(ref_mean_a)}, {mode_b_label}:{_fmt_mean(ref_mean_b)}], "
+                    f"means_{label_new}=[{mode_a_label}:{_fmt_mean(new_mean_a)}, {mode_b_label}:{_fmt_mean(new_mean_b)}])"
                 )
         print()
 
@@ -2457,7 +2495,10 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
                         warnings.filterwarnings("ignore", category=RuntimeWarning, module="pingouin")
                         tost = (pg.tost(vals_a, vals_b, np.abs(np.median(vals_all)) * 0.05, paired=False))
                     if tost['pval'].iloc[0]<0.06:
-                        print(rf"{m} & {a} vs {b} & {tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\")
+                        print(
+                            rf"{m} & {_short_thesis_name(a)} vs {_short_thesis_name(b)} & "
+                            rf"{tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\"
+                        )
 
         #print(f"\n{m}")
         #print(df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))  # one table per metric
@@ -2580,17 +2621,17 @@ def main():
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
-    plot_weight_gauss_perf_cv_grid(
-        disp,
-        combined,
-        args.out_dir,
-        show=False,
-        local_sign_binary_csv=args.local_sign_binary_csv,
-    )
+    #plot_weight_gauss_perf_cv_grid(
+    #    disp,
+    #    combined,
+    #    args.out_dir,
+    #    show=False,
+    #    local_sign_binary_csv=args.local_sign_binary_csv,
+    #)
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    #print_kruskal_wallis_tables(disp)
+    print_kruskal_wallis_tables(disp)
 
 
 if __name__ == "__main__":
