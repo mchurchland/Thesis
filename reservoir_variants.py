@@ -21,36 +21,35 @@ def _kl_empirical_to_fitted_gaussian(
     """
     Magnitude-only KL on edge weights.
     Computes KL(|W| || fitted shifted-half-normal) on nonzero finite weights.
-    Kept under the historical metric key name `kl_to_gaussian` for compatibility.
     """
-    x = values.reshape(-1)
-    x = x[np.isfinite(x)]
-    x = x[x != 0]
+    x = values.reshape(-1) ## make it a 1d  array
+    x = x[np.isfinite(x)] ## this is just for safety, the weights should be finite but just in case we remove any inf or nan values
+    x = x[x != 0] ##get non zero
     if x.size < 2:
         return float("nan")
 
-    x_abs = np.abs(x)
+    x_abs = np.abs(x) ## get the absolute
     x_max = float(np.max(x_abs))
     if x_max <= 0.0:
         return 0.0
 
     loc = float(np.min(x_abs))
-    y = x_abs - loc
-    sigma = float(np.sqrt(np.mean(y * y)))
-    if sigma <= eps:
+    y = x_abs - loc ## shift the distribution so that the minimum is at zero
+    sigma = float(np.sqrt(np.mean(y * y))) ## this is the std of the shifted distribution, which is the scale parameter for the half-normal fit
+    if sigma <= eps: ## if the std is zero (all values are the same), this is like invalid it should be inifinite but we do 0.0 it never happens
         return 0.0
 
-    counts, edges = np.histogram(x_abs, bins=bins, range=(loc, x_max))
+    counts, edges = np.histogram(x_abs, bins=bins, range=(loc, x_max)) ## discretize the values into bins
     p = counts.astype(np.float64)
     p = np.clip(p, eps, None)
-    p = p / p.sum()
+    p = p / p.sum() ## get the probabilities
 
     # Shifted half-normal CDF over the same bin edges.
     q_cdf = halfnorm.cdf(edges, loc=loc, scale=sigma)
-    q = np.diff(q_cdf)
-    q = np.clip(q, eps, None)
-    q = q / q.sum()
-    return float(entropy(p, q))
+    q = np.diff(q_cdf) ## this just gets the bin probabilties from the cumulative probabilities, so q_i = CDF(edge_i+1) - CDF(edge_i)
+    q = np.clip(q, eps, None) ## clip at 0
+    q = q / q.sum() ## renormalize
+    return float(entropy(p, q)) ## this is just \sum 1/n log(p_i/q_i) where p is the empirical distribution and q is the fitted distribution
 
 
 @dataclass(frozen=True)
