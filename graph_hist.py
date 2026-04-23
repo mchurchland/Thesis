@@ -104,6 +104,17 @@ def _short_thesis_name(mode):
     canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
     return SHORT_THESIS_NAMES.get(canonical, SHORT_THESIS_NAMES.get(mode, mode))
 
+
+def _short_legend_name(mode):
+    if not isinstance(mode, str):
+        return mode
+    legend_only = {
+        "cel_sample": "Sampled wt.",
+        "local_sign+sample": "Sign-pres. sampled",
+    }
+    canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
+    return legend_only.get(canonical, legend_only.get(mode, _short_thesis_name(mode)))
+
 # ---------------------------- CLI ----------------------------
 
 def parse_args():
@@ -2214,9 +2225,13 @@ def plot_rho_cv_other_perf(
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, mode_preset: str = "all"):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
+    present_modes = list(dict.fromkeys(disp["mode"].astype(str).dropna().tolist()))
+    present_mode_set = set(present_modes)
     # Consistent ordering/colors to make panels easier to compare.
     mode_preset = str(mode_preset or "all").strip().lower()
-    if mode_preset == "all_shuf":
+    if ANALYSIS_MODE_FILTER:
+        mode_order = [str(m) for m in ANALYSIS_MODE_FILTER if str(m) in present_mode_set]
+    elif mode_preset == "all_shuf":
         mode_order = (
                 "global_sign_pres",
                 "real",
@@ -2244,7 +2259,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
             "global_sign_pres",
             "binary_base",
         ]
-    modes = [m for m in mode_order if m in set(disp["mode"].unique())]
+    extras = [m for m in present_modes if m not in mode_order]
+    modes = list(mode_order) + extras
     # Keep these exact colors per request.
     preserved_colors = {
         "real": "#32a2f2",
@@ -2317,28 +2333,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                 counts, _ = np.histogram(s, bins=edges)
                 frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
                 color = color_map.get(mode, None)
-                name_remap = {
-                    "real": "C. elegans",
-                    "cel+randN": "C. elegans + N(0,1)",
-                    "er+randN": "ER + N(0,1)",
-                    "celW+connShuf": "Conn+wt shuffle",
-                    "shuffle": "Weight shuffle",
-                    "conn_shuf_only": "Connection shuffle",
-                    "local_sign": "Local Sign + N(0,1)",
-                    "ws_p0.1+randN": "WS p=0.1 + N(0,1)",
-                    "cel_sample": "Sampled weights",
-                    "local_sign+flat": "Local Sign + U(0,1)",
-                    "local_sign+sample": "Local Sign + Sampled",
-                    "local_sign+binary": "Local Sign + wt +1,-1",
-                    "global_sign_pres" : "Global sign",
-                    "binary_base": "Binary base (unsigned)",
-                    "binary_base_topology_shuffle": "Binary base + topology shuffle",
-                    "binary+shuffle": "Binary sign + shuffle",
-                    "binary+conshuffle+wshuffle": "Binary + conn+weight shuffle",
-
-
-                }
-                display_mode = name_remap.get(mode, mode)
+                display_mode = _short_legend_name(mode)
                 ax.plot(
                     centers,
                     frac,
@@ -2435,7 +2430,14 @@ def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
         sub = combined[combined["mode"] == cname]
         if not sub.empty:
             sub_u = _unique_hparam_rows(sub)
-            plt.scatter(sub_u["GR"], sub_u["MC"], s=36, alpha=0.5, label=cname, c=color)
+            plt.scatter(
+                sub_u["GR"],
+                sub_u["MC"],
+                s=36,
+                alpha=0.5,
+                label=_short_legend_name(cname),
+                c=color,
+            )
     plt.title("MC vs GR across all architectures")
     plt.xlabel("GR (effective rank of Δstate)")
     plt.ylabel("MC (linear memory capacity)")
@@ -2621,17 +2623,17 @@ def main():
     # Plots
     #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
-    #plot_weight_gauss_perf_cv_grid(
-    #    disp,
-    #    combined,
-    #    args.out_dir,
-    #    show=False,
-    #    local_sign_binary_csv=args.local_sign_binary_csv,
-    #)
+    plot_weight_gauss_perf_cv_grid(
+        disp,
+        combined,
+        args.out_dir,
+        show=False,
+        local_sign_binary_csv=args.local_sign_binary_csv,
+    )
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    print_kruskal_wallis_tables(disp)
+    #print_kruskal_wallis_tables(disp)
 
 
 if __name__ == "__main__":

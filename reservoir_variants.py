@@ -150,10 +150,6 @@ def _run_variant_row(
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
-        print( float(scores["MC"]),
-                float(scores["IPC"]),
-                float(scores["KR"]),
-                float(scores["GR"]),)
         rows_local.append(
             (
                 mode_label,

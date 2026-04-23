@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import re
 import sys
@@ -34,6 +35,7 @@ from util.util import (  # noqa: E402
     build_reservoir,
     load_connectome,
 )
+from graph_hist import _short_legend_name  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,24 @@ def _build_variants() -> list[Variant]:
 
 VARIANTS: list[Variant] = _build_variants()
 
+PAPER_MODEL_ORDER: tuple[str, ...] = (
+    "real",
+    "shuffle_weights",
+    "conn_shuf_only",
+    "conn_shuf",
+    "local_sign+binary",
+    "global_sign_pres",
+    "binary+shuffle",
+    "binary+conshuffle+wshuffle",
+    "binary_base",
+    "binary_base_topology_shuffle",
+    "cel_randN",
+    "er_randN",
+    "ws_p01_randN",
+    "local_sign",
+    "local_sign+flat",
+)
+
 # Variants that alter the graph's connectivity (edge locations), not just edge weights.
 CONNECTIVITY_ALTERING_KEYS: frozenset[str] = frozenset(
     {
@@ -160,6 +180,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--show-node-labels", action="store_true", help="Draw neuron-name labels on nodes.")
     p.add_argument("--label-fontsize", type=int, default=10, help="Font size for node labels when enabled.")
     p.add_argument("--panel-title-fontsize", type=int, default=28, help="Panel title font size.")
+    p.add_argument(
+        "--grid-titles",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Show titles above paper-grid panels. Use --no-grid-titles to hide them.",
+    )
     p.add_argument("--suptitle-fontsize", type=int, default=36, help="Figure super-title font size.")
     p.add_argument("--legend-fontsize", type=int, default=24, help="Legend font size.")
     p.add_argument("--cbar-title-fontsize", type=int, default=28, help="Colorbar title font size.")
@@ -176,6 +202,11 @@ def parse_args() -> argparse.Namespace:
         "--truncate-drops-negatives",
         action="store_true",
         help="If set, truncation by --max-edges may drop negative edges. Default keeps all negative edges visible.",
+    )
+    p.add_argument(
+        "--skip-individual",
+        action="store_true",
+        help="Write the index and composite grid figures only; do not regenerate one-model PNGs.",
     )
     return p.parse_args()
 
@@ -298,6 +329,55 @@ def construct_w_with_project_code(
         )
 
     raise ValueError(f"Unknown variant key: {key}")
+
+
+def _panel_letter(index: int) -> str:
+    """Return spreadsheet-style panel letters: A, B, ..., Z, AA, AB."""
+    if index < 0:
+        raise ValueError("Panel index must be nonnegative.")
+    letters: list[str] = []
+    value = index
+    while True:
+        value, rem = divmod(value, 26)
+        letters.append(chr(ord("A") + rem))
+        if value == 0:
+            break
+        value -= 1
+    return "".join(reversed(letters))
+
+
+def _grid_title(variant: Variant) -> str:
+    return _short_legend_name(variant.key)
+
+
+def _paper_variants() -> list[Variant]:
+    variants_by_key = {v.key: v for v in VARIANTS}
+    missing = [key for key in PAPER_MODEL_ORDER if key not in variants_by_key]
+    if missing:
+        raise KeyError(f"Missing paper model key(s): {', '.join(missing)}")
+    return [variants_by_key[key] for key in PAPER_MODEL_ORDER]
+
+
+def build_variant_panel_data(
+    variant: Variant,
+    ce_base: np.ndarray,
+    ce_pos: dict[int, np.ndarray],
+    seed: int,
+    er_p: float,
+    ws_p: float,
+    layout_iters: int,
+    layout_scale: float,
+) -> tuple[np.ndarray, dict[int, np.ndarray]]:
+    W_var = construct_w_with_project_code(variant.key, ce_base, seed + 20_000, er_p=er_p, ws_p=ws_p)
+    panel_pos = ce_pos
+    if variant_alters_connectivity(variant.key):
+        panel_pos = compute_ce_kamada_layout(
+            W_var,
+            seed=seed + 40_000,
+            fallback_iters=layout_iters,
+            layout_scale=layout_scale,
+        )
+    return W_var, panel_pos
 
 
 
@@ -555,15 +635,16 @@ def make_variant_figure(
     figure_dpi: int,
 ) -> None:
     W_ref = ce_base
-    W_var = construct_w_with_project_code(variant.key, ce_base, seed + 20_000, er_p=er_p, ws_p=ws_p)
-    panel_pos = ce_pos
-    if variant_alters_connectivity(variant.key):
-        panel_pos = compute_ce_kamada_layout(
-            W_var,
-            seed=seed + 40_000,
-            fallback_iters=layout_iters,
-            layout_scale=layout_scale,
-        )
+    W_var, panel_pos = build_variant_panel_data(
+        variant=variant,
+        ce_base=ce_base,
+        ce_pos=ce_pos,
+        seed=seed,
+        er_p=er_p,
+        ws_p=ws_p,
+        layout_iters=layout_iters,
+        layout_scale=layout_scale,
+    )
 
     _, ref_w, _ = _edge_subset(W_ref, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
     _var_edges, _var_w, _ = _edge_subset(W_var, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
@@ -611,13 +692,125 @@ def make_variant_figure(
     plt.close(fig)
 
 
-def make_index_figure(outdir: Path, index_fontsize: int, figure_dpi: int) -> None:
+def make_variant_grid_figures(
+    variants: list[Variant],
+    ce_base: np.ndarray,
+    ce_pos: dict[int, np.ndarray],
+    ce_labels: list[str] | None,
+    outdir: Path,
+    seed: int,
+    er_p: float,
+    ws_p: float,
+    max_edges: int,
+    layout_iters: int,
+    layout_scale: float,
+    keep_all_negatives: bool,
+    show_node_labels: bool,
+    label_fontsize: int,
+    panel_title_fontsize: int,
+    show_grid_titles: bool,
+    show_direction: bool,
+    figure_dpi: int,
+) -> list[Path]:
+    lettered = [(idx, _panel_letter(idx), variant) for idx, variant in enumerate(variants)]
+    ncols = 2
+    split_at = math.ceil(len(lettered) / 2)
+    if split_at % ncols and split_at < len(lettered):
+        split_at += ncols - (split_at % ncols)
+    chunks = [lettered[:split_at], lettered[split_at:]]
+
+    _, ref_w, _ = _edge_subset(ce_base, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
+    pos_map, neg_map = build_dual_colormap_norms(ref_w)
+
+    written: list[Path] = []
+    for chunk in chunks:
+        if not chunk:
+            continue
+
+        nrows = math.ceil(len(chunk) / ncols)
+        fig_w = 8.4
+        row_height = 3.25 if show_grid_titles else 3.05
+        fig_h = max(8.0, row_height * nrows)
+        fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), squeeze=False)
+
+        for ax in axes.flat:
+            ax.axis("off")
+
+        for local_idx, (panel_idx, letter, variant) in enumerate(chunk):
+            ax = axes.flat[local_idx]
+            panel_seed = seed + panel_idx * 97
+            W_var, panel_pos = build_variant_panel_data(
+                variant=variant,
+                ce_base=ce_base,
+                ce_pos=ce_pos,
+                seed=panel_seed,
+                er_p=er_p,
+                ws_p=ws_p,
+                layout_iters=layout_iters,
+                layout_scale=layout_scale,
+            )
+            draw_weighted_panel(
+                ax,
+                W_var,
+                panel_pos,
+                title="",
+                panel_title_fontsize=panel_title_fontsize,
+                node_colors=["#666666"] * W_var.shape[0],
+                node_labels=ce_labels if show_node_labels else None,
+                label_fontsize=label_fontsize,
+                node_size=12,
+                max_edges=max_edges,
+                keep_all_negatives=keep_all_negatives,
+                show_direction=show_direction,
+                pos_norm=None if pos_map is None else pos_map["norm"],
+                pos_cmap=None if pos_map is None else pos_map["cmap"],
+                neg_norm=None if neg_map is None else neg_map["norm"],
+                neg_cmap=None if neg_map is None else neg_map["cmap"],
+            )
+            if show_grid_titles:
+                ax.set_title(_grid_title(variant), fontsize=15, pad=2)
+            ax.text(
+                0.018,
+                0.982,
+                letter,
+                transform=ax.transAxes,
+                ha="left",
+                va="top",
+                fontsize=24,
+                fontweight="bold",
+                color="#111111",
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.86, "pad": 0.25},
+                zorder=20,
+            )
+
+        first_letter = chunk[0][1]
+        last_letter = chunk[-1][1]
+        out_path = outdir / f"model_grid_{first_letter}_to_{last_letter}.png"
+        if show_grid_titles:
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.985, bottom=0.005, wspace=0.01, hspace=0.09)
+        else:
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.995, bottom=0.005, wspace=0.01, hspace=0.03)
+        fig.savefig(out_path, dpi=figure_dpi)
+        plt.close(fig)
+        written.append(out_path)
+
+    return written
+
+
+def make_index_figure(
+    variants: list[Variant],
+    outdir: Path,
+    index_fontsize: int,
+    figure_dpi: int,
+) -> None:
     lines = [
-        "Architecture variant graph files (single-panel per model):",
+        "Architecture variant graph files:",
         "Data loading + W construction use project-native util code.",
+        "Lettered portrait grids use the paper model subset.",
+        "",
     ]
-    for v in VARIANTS:
-        lines.append(f"{v.slug}.png  -  {v.title}")
+    for idx, v in enumerate(variants):
+        lines.append(f"{_panel_letter(idx)}  {v.slug}.png  -  {_grid_title(v)}")
 
     fig_h = max(4.0, 0.62 * len(lines))
     fig = plt.figure(figsize=(14, fig_h))
@@ -642,35 +835,64 @@ def main() -> None:
         layout_scale=args.layout_scale,
     )
     keep_all_negatives = not args.truncate_drops_negatives
+    paper_variants = _paper_variants()
 
-    make_index_figure(outdir, index_fontsize=args.index_fontsize, figure_dpi=args.figure_dpi)
-    for i, variant in enumerate(VARIANTS):
-        make_variant_figure(
-            variant=variant,
-            ce_base=ce_base,
-            ce_pos=ce_pos,
-            ce_labels=ce_labels,
-            outdir=outdir,
-            seed=args.seed + i * 97,
-            er_p=args.er_p,
-            ws_p=args.ws_p,
-            max_edges=args.max_edges,
-            layout_iters=args.layout_iters,
-            layout_scale=args.layout_scale,
-            keep_all_negatives=keep_all_negatives,
-            show_node_labels=args.show_node_labels,
-            label_fontsize=args.label_fontsize,
-            panel_title_fontsize=args.panel_title_fontsize,
-            suptitle_fontsize=args.suptitle_fontsize,
-            legend_fontsize=args.legend_fontsize,
-            cbar_title_fontsize=args.cbar_title_fontsize,
-            cbar_label_fontsize=args.cbar_label_fontsize,
-            cbar_tick_fontsize=args.cbar_tick_fontsize,
-            show_direction=args.show_direction,
-            figure_dpi=args.figure_dpi,
-        )
+    make_index_figure(
+        paper_variants,
+        outdir,
+        index_fontsize=args.index_fontsize,
+        figure_dpi=args.figure_dpi,
+    )
+    grid_paths = make_variant_grid_figures(
+        variants=paper_variants,
+        ce_base=ce_base,
+        ce_pos=ce_pos,
+        ce_labels=ce_labels,
+        outdir=outdir,
+        seed=args.seed,
+        er_p=args.er_p,
+        ws_p=args.ws_p,
+        max_edges=args.max_edges,
+        layout_iters=args.layout_iters,
+        layout_scale=args.layout_scale,
+        keep_all_negatives=keep_all_negatives,
+        show_node_labels=args.show_node_labels,
+        label_fontsize=args.label_fontsize,
+        panel_title_fontsize=args.panel_title_fontsize,
+        show_grid_titles=args.grid_titles,
+        show_direction=args.show_direction,
+        figure_dpi=args.figure_dpi,
+    )
+    single_count = 0
+    if not args.skip_individual:
+        for i, variant in enumerate(VARIANTS):
+            make_variant_figure(
+                variant=variant,
+                ce_base=ce_base,
+                ce_pos=ce_pos,
+                ce_labels=ce_labels,
+                outdir=outdir,
+                seed=args.seed + i * 97,
+                er_p=args.er_p,
+                ws_p=args.ws_p,
+                max_edges=args.max_edges,
+                layout_iters=args.layout_iters,
+                layout_scale=args.layout_scale,
+                keep_all_negatives=keep_all_negatives,
+                show_node_labels=args.show_node_labels,
+                label_fontsize=args.label_fontsize,
+                panel_title_fontsize=args.panel_title_fontsize,
+                suptitle_fontsize=args.suptitle_fontsize,
+                legend_fontsize=args.legend_fontsize,
+                cbar_title_fontsize=args.cbar_title_fontsize,
+                cbar_label_fontsize=args.cbar_label_fontsize,
+                cbar_tick_fontsize=args.cbar_tick_fontsize,
+                show_direction=args.show_direction,
+                figure_dpi=args.figure_dpi,
+            )
+            single_count += 1
 
-    print(f"Wrote {1 + len(VARIANTS)} files to: {outdir.resolve()}")
+    print(f"Wrote {1 + len(grid_paths) + single_count} files to: {outdir.resolve()}")
 
 
 if __name__ == "__main__":

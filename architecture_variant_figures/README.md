@@ -12,14 +12,15 @@ python architecture_variant_figures/make_weighted_graph_examples.py
 
 Outputs to `architecture_variant_figures/graph_examples`:
 
-- `01_...png` through `18_...png`: one figure per architecture variant
-  - left panel: biological C. elegans reference graph
-  - right panel: architecture variant graph
-  - both panels use the same Kamada-Kawai node layout for direct comparison
-  - two separate scales are shown (right-side stacked colorbars):
-    - positive edges: `0` to positive max
-    - negative edges: most negative weight to `0`
-  - colorbars are scaled from the left-panel C. elegans reference weights
+- `model_grid_A_to_H.png` and `model_grid_I_to_O.png`: two large, portrait composite figures
+  - grids are two columns by however many rows are needed
+  - panels are lettered in the top-left corner for citation/reference in text
+  - panels use letters only; model names are kept in the file index
+  - the order follows the paper subsection order
+  - `cel_sample` and `local_sign+sample` are omitted from the paper grids
+  - the file index maps each letter to its corresponding architecture variant
+- individual `*.png` files: one single-panel figure per architecture variant
+  - edge colors use separate positive/negative scales derived from the C. elegans reference weights
   - negative edges use the negative color scale (solid edges)
 - `00_file_index.png`: filename/variant index
 
@@ -40,6 +41,8 @@ python architecture_variant_figures/make_weighted_graph_examples.py \
 
 Notes:
 - `--max-edges 0` draws all nonzero connections.
+- Use `--skip-individual` to regenerate only the lettered composite figures and index.
+- Use `--grid-titles` or `--no-grid-titles` to control whether the paper grids show panel titles.
 - If `--max-edges` is positive, the script keeps the strongest edges and (by default) keeps all negative edges too.
 - Use `--truncate-drops-negatives` if you want strict truncation.
 - Use `--show-direction` to draw arrowheads (denser but explicit direction).
