@@ -127,6 +127,8 @@ def parse_args():
                     help="Output directory for dispersion CSV and figures.")
     ap.add_argument("--bins", type=int, default=40,
                     help="Histogram bins for dispersion plots.")
+    ap.add_argument("--frac-cv-bins", type=int, default=4,
+                    help="Mean-CV axis tick bins for the frac/CV/performance mean-line plot.")
     ap.add_argument("--scatter-alpha", type=float, default=0.55,
                     help="Alpha for MC-vs-GR scatter.")
     ap.add_argument(
@@ -1164,7 +1166,13 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 
 
 
-def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
+def plot_frac_cv_meanline(
+    disp: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    bins: int = 4,
+    show: bool = True,
+):
     """
     Single 3D plot with one colored line per metric (MC, IPC, KR, GR):
       x = mode value (parsed numeric component)
@@ -1261,6 +1269,7 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     ax.set_xlabel(x_label, fontsize=18, labelpad=4)
     ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
     ax.set_zlabel("mean Performance", fontsize=18, labelpad=2)
+    ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
     _tight_layout_quiet(fig)
 
@@ -2621,15 +2630,15 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
+    plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
-    plot_weight_gauss_perf_cv_grid(
-        disp,
-        combined,
-        args.out_dir,
-        show=False,
-        local_sign_binary_csv=args.local_sign_binary_csv,
-    )
+    #plot_weight_gauss_perf_cv_grid(
+    #    disp,
+    #    combined,
+    #    args.out_dir,
+    #    show=False,
+    #    local_sign_binary_csv=args.local_sign_binary_csv,
+    #)
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
