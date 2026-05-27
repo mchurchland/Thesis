@@ -141,6 +141,32 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
+def _validate_subset_size(name: str, value: int | None, n_nodes: int) -> int:
+    if value is None:
+        raise ValueError(f"--{name} is required when --random-node-subsets is enabled.")
+    if not (1 <= value <= n_nodes):
+        raise ValueError(f"--{name} must be between 1 and {n_nodes}, got {value}.")
+    return value
+
+
+def _draw_node_subsets(
+    n_nodes: int,
+    k_in: int,
+    k_out: int,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if k_in + k_out > n_nodes:
+        raise ValueError(
+            f"Disjoint input/output subsets require k_in + k_out <= {n_nodes}; "
+            f"got k_in={k_in}, k_out={k_out}."
+        )
+    rng = np.random.default_rng(seed)
+    nodes = rng.choice(n_nodes, size=k_in + k_out, replace=False)
+    input_idx = np.sort(nodes[:k_in]).astype(np.int64)
+    output_idx = np.sort(nodes[k_in:]).astype(np.int64)
+    return input_idx, output_idx
+
+
 def _build_ctx(
     job_key: str,
     WS_K: int,
@@ -155,6 +181,8 @@ def _build_ctx(
     src_tag: str,
     per_neg: float | None = None,
     alpha: float | None = None,
+    input_idx: np.ndarray | None = None,
+    output_idx: np.ndarray | None = None,
 ) -> VariantContext:
     if job_key not in VARIANT_KEYS:
         if (not job_key.startswith("sign_test")) and (not job_key.startswith("weight_test")):
@@ -171,7 +199,9 @@ def _build_ctx(
         ws_p=ws_p,
         src_tag=src_tag,
         per_neg=per_neg,
-        alpha=alpha
+        alpha=alpha,
+        input_idx=input_idx,
+        output_idx=output_idx,
     )
 
 
@@ -251,6 +281,32 @@ def parse_args():
         nargs="+",
         default=0.0,
         help="alphas for the weight test",
+    )
+    p.add_argument(
+        "--random-node-subsets",
+        action="store_true",
+        help=(
+            "Drive/read out disjoint random node subsets: each repeat draws k_in input nodes "
+            "and k_out output nodes shared by every architecture."
+        ),
+    )
+    p.add_argument(
+        "--k-in",
+        type=int,
+        default=None,
+        help="Number of reservoir nodes receiving input when --random-node-subsets is enabled.",
+    )
+    p.add_argument(
+        "--k-out",
+        type=int,
+        default=None,
+        help="Number of reservoir state nodes available to readouts/metrics when --random-node-subsets is enabled.",
+    )
+    p.add_argument(
+        "--subset-seed-offset",
+        type=int,
+        default=7_000_000,
+        help="Offset added to each repeat seed before drawing input/output node subsets.",
     )
 
 
@@ -338,6 +394,23 @@ def main():
         raise ValueError(
             "You must pass both --ce-adj and --ce-ei, or --ce-path to load_connectome()."
         )
+
+    k_in = k_out = None
+    if args.random_node_subsets:
+        n_nodes = int(ce_W_bio.shape[0])
+        k_in = _validate_subset_size("k-in", args.k_in, n_nodes)
+        k_out = _validate_subset_size("k-out", args.k_out, n_nodes)
+        if k_in + k_out > n_nodes:
+            raise ValueError(
+                f"--k-in + --k-out must be <= number of reservoir nodes ({n_nodes}) "
+                "because random input/output subsets are disjoint."
+            )
+        print(
+            f"[INFO] random node subsets enabled: k_in={k_in}, k_out={k_out}; "
+            f"one shared disjoint draw per repeat across architectures."
+        )
+    elif args.k_in is not None or args.k_out is not None:
+        raise ValueError("--k-in/--k-out only apply when --random-node-subsets is enabled.")
         
 
     # Decide CSV name default per job if not overridden
@@ -369,6 +442,17 @@ def main():
             seed_base = args.seed + rep_idx * args.repeat_seed_stride
             set_seed(seed_base)
             sid_base = _sid_base(rep_idx)
+            input_idx = output_idx = None
+            if args.random_node_subsets:
+                # Depends only on the global repeat seed, not on job_key or host.
+                # Separate architecture jobs get the same draw when launched with
+                # the same seed/repeat partitioning/subset offset.
+                input_idx, output_idx = _draw_node_subsets(
+                    ce_W_bio.shape[0],
+                    k_in,
+                    k_out,
+                    seed_base + args.subset_seed_offset,
+                )
 
             if job_key == "shuffle_weights":
                     ctx = _build_ctx(
@@ -383,6 +467,8 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
                     continue
@@ -400,6 +486,8 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
                     continue
@@ -418,6 +506,8 @@ def main():
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
                         per_neg=None,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
                     continue
@@ -435,7 +525,9 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
-                        alpha=alpha
+                        alpha=alpha,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(
                         job_key + str(alpha),
@@ -459,7 +551,9 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
-                        per_neg=frac
+                        per_neg=frac,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(
                         job_key + str(frac),
@@ -489,7 +583,9 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
-                        per_neg=frac
+                        per_neg=frac,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(
                         job_key + str(frac),
@@ -513,7 +609,9 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
-                        per_neg=frac
+                        per_neg=frac,
+                        input_idx=input_idx,
+                        output_idx=output_idx,
                     )
                     _run_and_save(
                         job_key + str(frac),
@@ -535,7 +633,9 @@ def main():
                 er_p=args.er_p,
                 ws_p=args.ws_p,
                 src_tag=args.src_tag,
-                per_neg=None
+                per_neg=None,
+                input_idx=input_idx,
+                output_idx=output_idx,
             )
             _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
 

@@ -33,6 +33,17 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
+RANDOM_NODE_SUBSETS="${RANDOM_NODE_SUBSETS:-0}"
+SUBSET_ARGS=()
+if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
+  : "${K_IN:?Set K_IN when RANDOM_NODE_SUBSETS=1}"
+  : "${K_OUT:?Set K_OUT when RANDOM_NODE_SUBSETS=1}"
+  SUBSET_ARGS=(--random-node-subsets --k-in "${K_IN}" --k-out "${K_OUT}")
+  if [[ -n "${SUBSET_SEED_OFFSET:-}" ]]; then
+    SUBSET_ARGS+=(--subset-seed-offset "${SUBSET_SEED_OFFSET}")
+  fi
+fi
+
 # choose which variant this script runs
 
 conda run -n cel python inv_arc_test.py \
@@ -51,8 +62,9 @@ conda run -n cel python inv_arc_test.py \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --ws-p 0.1 \
   --er-p 0.1 \
-  --cuda ${SLURM_LOCALID}\
-  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+  --cuda ${SLURM_LOCALID} \
+  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 \
+  "${SUBSET_ARGS[@]}"
 
 
   conda run -n cel python inv_arc_test.py \
@@ -71,8 +83,9 @@ conda run -n cel python inv_arc_test.py \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --ws-p 0.1 \
   --er-p 0.1 \
-  --cuda ${SLURM_LOCALID}\
-  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+  --cuda ${SLURM_LOCALID} \
+  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 \
+  "${SUBSET_ARGS[@]}"
 
 conda run -n cel python inv_arc_test.py \
   --job "sign_test_og_cel" \
@@ -90,5 +103,6 @@ conda run -n cel python inv_arc_test.py \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --ws-p 0.1 \
   --er-p 0.1 \
-  --cuda ${SLURM_LOCALID}\
-  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+  --cuda ${SLURM_LOCALID} \
+  --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 \
+  "${SUBSET_ARGS[@]}"

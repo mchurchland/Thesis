@@ -85,6 +85,8 @@ class VariantContext:
     alpha: float | None = None
     src_tag: str = "chunk_0"
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
+    input_idx: np.ndarray | None = None
+    output_idx: np.ndarray | None = None
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -92,6 +94,7 @@ def evaluate_reservoir(
     leak: float,
     device: torch.device,
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS,
+    output_idx: np.ndarray | torch.Tensor | None = None,
 ):
     """Wrapper around run_one with shared defaults."""
     return run_one(
@@ -107,7 +110,20 @@ def evaluate_reservoir(
         sim_params.ipc_max_delay,
         sim_params.ipc_orders,
         sim_params.ridge_alpha,
+        output_idx,
     )
+
+
+def _apply_input_subset(Win: torch.Tensor, input_idx: np.ndarray | None) -> torch.Tensor:
+    """Keep the usual random input weights, but drive only selected nodes."""
+    if input_idx is None:
+        return Win
+    idx = torch.as_tensor(input_idx, device=Win.device, dtype=torch.long)
+    if idx.numel() == 0:
+        raise ValueError("input_idx must contain at least one node when provided.")
+    mask = torch.zeros_like(Win)
+    mask.index_fill_(0, idx, 1.0)
+    return Win * mask
 
 
 def _run_variant_row(
@@ -144,9 +160,10 @@ def _run_variant_row(
             per_neg=ctx.per_neg,
             alpha = ctx.alpha
         )
+        Win = _apply_input_subset(Win, ctx.input_idx)
         w_np = Wt.detach().cpu().numpy().reshape(-1)
         kl_to_gaussian = _kl_empirical_to_fitted_gaussian(w_np)
-        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
         rows_local.append(

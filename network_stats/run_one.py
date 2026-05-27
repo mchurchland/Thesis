@@ -26,7 +26,7 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
 def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: int,
             PERTURB_STD: float, T_TRAIN: int, T_TEST: int,
             MC_MAX_DELAY: int, IPC_MAX_DELAY: int, IPC_ORDERS: list[int],
-            RIDGE_ALPHA: float) -> dict:
+            RIDGE_ALPHA: float, output_idx: Tensor | None = None) -> dict:
     """
     End-to-end reservoir evaluation computing MC/IPC/KR/GR and controllability metrics.
     Wraps the ESN update plus metrics pipeline; see reservoirpy/pyESN for similar evaluation flows:
@@ -36,6 +36,12 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
 
     X, _ = run_reservoir_with_pre(W, Win, u, leak)
     Xn, _  = run_reservoir_with_pre(W, Win, u + PERTURB_STD * torch.randn_like(u), leak)
+    if output_idx is not None:
+        idx = torch.as_tensor(output_idx, device=device, dtype=torch.long)
+        if idx.numel() == 0:
+            raise ValueError("output_idx must contain at least one node when provided.")
+        X = X.index_select(1, idx)
+        Xn = Xn.index_select(1, idx)
 
     Xtr = X[WASHOUT:WASHOUT+T_TRAIN] ## t_train
     Xte = X[WASHOUT+T_TRAIN:] ## t_test
