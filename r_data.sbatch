@@ -27,19 +27,23 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=500
+TOTAL_REPEATS=150
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
-RANDOM_NODE_SUBSETS="${RANDOM_NODE_SUBSETS:-0}"
+RANDOM_NODE_SUBSETS=1
+K_IN=60
+K_OUT=60 ## for 20 %
+SUBSET_SEED_OFFSET=""
+
 SUBSET_ARGS=()
 if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
   : "${K_IN:?Set K_IN when RANDOM_NODE_SUBSETS=1}"
   : "${K_OUT:?Set K_OUT when RANDOM_NODE_SUBSETS=1}"
   SUBSET_ARGS=(--random-node-subsets --k-in "${K_IN}" --k-out "${K_OUT}")
-  if [[ -n "${SUBSET_SEED_OFFSET:-}" ]]; then
+  if [[ -n "${SUBSET_SEED_OFFSET}" ]]; then
     SUBSET_ARGS+=(--subset-seed-offset "${SUBSET_SEED_OFFSET}")
   fi
 fi
