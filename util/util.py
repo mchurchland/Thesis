@@ -219,8 +219,8 @@ def build_reservoir(
         assert alpha != None
         W = scale_weights(W,alpha=alpha,rng=rng)
         
-        W[sel_p] = np.abs(W[sel_p])
-        W[sel_n] = -np.abs(W[sel_n])
+        #W[sel_p] = np.abs(W[sel_p])
+        #W[sel_n] = -np.abs(W[sel_n])
             
         
     elif feature_conn == "sign_test_cel":

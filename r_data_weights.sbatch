@@ -38,7 +38,7 @@ JOB_KIND="weight_test"   # or all / local_sign+sample/ local_sign+flat / shuffle
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "final_weights_${OUTDIR}" \
+  --out-dir "final_weights_nopres_${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
