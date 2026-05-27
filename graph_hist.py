@@ -68,6 +68,53 @@ ANALYSIS_MODE_FILTER = [
       #      "binary_base",
 ]
 
+SHORT_THESIS_NAMES = {
+    "real": "C. elegans",
+    "shuffle": "Weight shuffle",
+    "shuffle_weights": "Weight shuffle",
+    "celW+connShuf": "Conn. + wt. shuffle",
+    "conn_shuf": "Conn. + wt. shuffle",
+    "conn_shuf_only": "Connection shuffle",
+    "local_sign+binary": "Sign-pres. pm1 wt.",
+    "global_sign_pres": "Sign-pres. pm1 + wt. shuf.",
+    "binary+conshuffle+wshuffle": "pm1 sign-pres. + shuf.",
+    "binary_base": "Binary wt.",
+    "binary_base_topology_shuffle": "Binary wt. + shuf.",
+    "binary+shuffle": "pm1 + conn. shuffle",
+    "cel_randN": "CE Gaussian wt.",
+    "er_randN": "ER Gaussian wt.",
+    "ws_p0.1+randN": "WS Gaussian wt.",
+    "ws_p01_randN": "WS Gaussian wt.",
+    "local_sign": "Sign-pres. Gaussian",
+    "local_sign+flat": "Sign-pres. uniform",
+}
+
+_SHORT_THESIS_NAME_ALIASES = {
+    "shuffle": "shuffle_weights",
+    "cel+randN": "cel_randN",
+    "er+randN": "er_randN",
+    "ws_p0.1+randN": "ws_p01_randN",
+    "celW+connShuf": "conn_shuf",
+}
+
+
+def _short_thesis_name(mode):
+    if not isinstance(mode, str):
+        return mode
+    canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
+    return SHORT_THESIS_NAMES.get(canonical, SHORT_THESIS_NAMES.get(mode, mode))
+
+
+def _short_legend_name(mode):
+    if not isinstance(mode, str):
+        return mode
+    legend_only = {
+        "cel_sample": "Sampled wt.",
+        "local_sign+sample": "Sign-pres. sampled",
+    }
+    canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
+    return legend_only.get(canonical, legend_only.get(mode, _short_thesis_name(mode)))
+
 # ---------------------------- CLI ----------------------------
 
 def parse_args():
@@ -80,6 +127,8 @@ def parse_args():
                     help="Output directory for dispersion CSV and figures.")
     ap.add_argument("--bins", type=int, default=40,
                     help="Histogram bins for dispersion plots.")
+    ap.add_argument("--frac-cv-bins", type=int, default=4,
+                    help="Mean-CV axis tick bins for the frac/CV/performance mean-line plot.")
     ap.add_argument("--scatter-alpha", type=float, default=0.55,
                     help="Alpha for MC-vs-GR scatter.")
     ap.add_argument(
@@ -653,6 +702,8 @@ def print_tost_preservation_summary(
             p_new = row.get(p_new_col, np.nan)
             mode_a = row["mode_a"]
             mode_b = row["mode_b"]
+            mode_a_label = _short_thesis_name(mode_a)
+            mode_b_label = _short_thesis_name(mode_b)
             metric = row["metric"]
             ref_mean_a = ref_mean_lookup.get((metric, mode_a), np.nan)
             ref_mean_b = ref_mean_lookup.get((metric, mode_b), np.nan)
@@ -660,17 +711,17 @@ def print_tost_preservation_summary(
             new_mean_b = new_mean_lookup.get((metric, mode_b), np.nan)
             if np.isfinite(p_new):
                 print(
-                    f"[tost] {metric}: {mode_a} vs {mode_b} "
+                    f"[tost] {metric}: {mode_a_label} vs {mode_b_label} "
                     f"(p_{label_ref}={p_ref:.4g}, p_{label_new}={p_new:.4g}, bound={row['bound_ref']:.4g}, "
-                    f"means_{label_ref}=[{mode_a}:{_fmt_mean(ref_mean_a)}, {mode_b}:{_fmt_mean(ref_mean_b)}], "
-                    f"means_{label_new}=[{mode_a}:{_fmt_mean(new_mean_a)}, {mode_b}:{_fmt_mean(new_mean_b)}])"
+                    f"means_{label_ref}=[{mode_a_label}:{_fmt_mean(ref_mean_a)}, {mode_b_label}:{_fmt_mean(ref_mean_b)}], "
+                    f"means_{label_new}=[{mode_a_label}:{_fmt_mean(new_mean_a)}, {mode_b_label}:{_fmt_mean(new_mean_b)}])"
                 )
             else:
                 print(
-                    f"[tost] {metric}: {mode_a} vs {mode_b} "
+                    f"[tost] {metric}: {mode_a_label} vs {mode_b_label} "
                     f"(p_{label_ref}={p_ref:.4g}, p_{label_new}=NA, bound={row['bound_ref']:.4g}, "
-                    f"means_{label_ref}=[{mode_a}:{_fmt_mean(ref_mean_a)}, {mode_b}:{_fmt_mean(ref_mean_b)}], "
-                    f"means_{label_new}=[{mode_a}:{_fmt_mean(new_mean_a)}, {mode_b}:{_fmt_mean(new_mean_b)}])"
+                    f"means_{label_ref}=[{mode_a_label}:{_fmt_mean(ref_mean_a)}, {mode_b_label}:{_fmt_mean(ref_mean_b)}], "
+                    f"means_{label_new}=[{mode_a_label}:{_fmt_mean(new_mean_a)}, {mode_b_label}:{_fmt_mean(new_mean_b)}])"
                 )
         print()
 
@@ -694,11 +745,18 @@ def _tight_layout_quiet(fig):
         fig.tight_layout()
 
 
-def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
+def _style_3d_axis(
+    ax,
+    tick_labelsize: int = 11,
+    tick_pad: int = 2,
+    pane_fill: bool = True,
+    pane_facecolor=(1.0, 1.0, 1.0, 1.0),
+    pane_edgecolor=(0.85, 0.85, 0.85, 1.0),
+):
     """Apply a cleaner, publication-friendly 3D style."""
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
     ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=-2)
-    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=0)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=-2)
     ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=0)
     y_formatter = ax.yaxis.get_major_formatter()
     if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
@@ -708,7 +766,21 @@ def _style_3d_axis(ax, tick_labelsize: int = 11, tick_pad: int = 2):
 
     try:
         for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
-            axis.pane.set_facecolor((1.0, 1.0, 1.0, 1.0))
+            axis.pane.fill = pane_fill
+            axis.pane.set_facecolor(pane_facecolor)
+            axis.pane.set_edgecolor(pane_edgecolor)
+    except Exception:
+        pass
+
+
+def _clear_3d_axis_background(ax):
+    """Make the 3D axis background transparent while keeping guide lines visible."""
+    try:
+        ax.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        ax.patch.set_alpha(0.0)
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+            axis.pane.fill = False
+            axis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
             axis.pane.set_edgecolor((0.85, 0.85, 0.85, 1.0))
     except Exception:
         pass
@@ -794,6 +866,9 @@ def _save_3d_front_back(
     dpi: int = 600,
     tick_labelsize: int = 11,
     tick_pad: int = 2,
+    pane_fill: bool = True,
+    pane_facecolor=(1.0, 1.0, 1.0, 1.0),
+    pane_edgecolor=(0.85, 0.85, 0.85, 1.0),
 ):
     """Save one publication PNG with front/back views side-by-side."""
     if isinstance(axes, (list, tuple, np.ndarray)):
@@ -802,7 +877,14 @@ def _save_3d_front_back(
         axes_list = [axes] if axes is not None else []
 
     for ax in axes_list:
-        _style_3d_axis(ax, tick_labelsize=tick_labelsize, tick_pad=tick_pad)
+        _style_3d_axis(
+            ax,
+            tick_labelsize=tick_labelsize,
+            tick_pad=tick_pad,
+            pane_fill=pane_fill,
+            pane_facecolor=pane_facecolor,
+            pane_edgecolor=pane_edgecolor,
+        )
 
     front_png = _safe_path(out_png)
     front_root, front_ext = os.path.splitext(front_png)
@@ -909,8 +991,8 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
         return
 
     mode_order = [
-        "sign_test0.0","sign_test0.1","sign_test0.2","sign_test0.3","sign_test0.4",
-        "sign_test0.5","sign_test0.6","sign_test0.7","sign_test0.8","sign_test0.9","sign_test1.0",
+        "sign_test_og_cel0.0","sign_test_og_cel0.1","sign_test_og_cel0.2","sign_test_og_cel0.3","sign_test_og_cel0.4",
+        "sign_test_og_cel0.5","sign_test_og_cel0.6","sign_test_og_cel0.7","sign_test_og_cel0.8","sign_test_og_cel0.9","sign_test_og_cel1.0",
     ]
     #mode_order = [
     #    "weight_test0.0","weight_test1.0","weight_test5.0","weight_test10.0","weight_test100.0",
@@ -918,6 +1000,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     #]
     modes = [m for m in mode_order if m in set(disp["mode"].unique())]
     if not modes:
+        print("fdfsa")
         return
 
     def mode_to_value(mode: str) -> float:
@@ -1083,7 +1166,13 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
 
 
 
-def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: str, show: bool = True):
+def plot_frac_cv_meanline(
+    disp: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    bins: int = 4,
+    show: bool = True,
+):
     """
     Single 3D plot with one colored line per metric (MC, IPC, KR, GR):
       x = mode value (parsed numeric component)
@@ -1180,20 +1269,21 @@ def plot_frac_cv_meanline(disp: pd.DataFrame, combined: pd.DataFrame, out_dir: s
     ax.set_xlabel(x_label, fontsize=18, labelpad=4)
     ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
     ax.set_zlabel("mean Performance", fontsize=18, labelpad=2)
+    ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
-    #saved_paths = _save_3d_front_back(
-    #    fig,
-    #    ax,
-    #    out_fig,
-    #    front_view=(40, -85),
-    #    back_view=(40, 95),
-    #   dpi=600,
-    #    tick_labelsize=16,
-    #    tick_pad=-4,
-    #)
+    saved_paths = _save_3d_front_back(
+        fig,
+        ax,
+        out_fig,
+        front_view=(20, -25),
+        back_view=(20, 145),
+       dpi=600,
+        tick_labelsize=16,
+        tick_pad=-4,
+    )
     if show:
         plt.show()
     plt.close(fig)
@@ -1242,6 +1332,7 @@ def plot_weight_gauss_mean_cv(
         print("[warn] plot_weight_gauss_mean_cv: need at least one positive noise magnitude.")
         return
     has_zero = any(v == 0 for _, v in mode_vals)
+    zero_mode = next((mode for mode, raw in mode_vals if raw == 0), None)
     x_zero = (min(pos_logs) - 0.60) if has_zero else np.nan
 
     def _x_plot(v: float) -> float:
@@ -1323,35 +1414,32 @@ def plot_weight_gauss_mean_cv(
         ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
         plotted = True
 
-        if overlay is not None:
+        z_lsb = cv_lookup.get((zero_mode, metric), np.nan) if zero_mode is not None else np.nan
+        if not np.isfinite(z_lsb) and overlay is not None:
             z_lsb = overlay["cv_lookup"].get(("real", metric), np.nan)
-            if has_zero:
-                y0 = [r[1] for r in rows if abs(r[0] - x_zero) < 1e-12]
-                if y0:
-                    z_lsb = float(y0[0])
-            if np.isfinite(z_lsb):
-                x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
-                y_plane = np.full_like(x_plane, float(z_lsb))
-                z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
-                ax.plot_surface(
-                    x_plane,
-                    y_plane,
-                    z_plane,
-                    color=colors(idx % 10),
-                    alpha=0.12,
-                    shade=False,
-                    linewidth=0.0,
-                    antialiased=False,
-                )
-                ax.plot(
-                    [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
-                    [z_lsb, z_lsb, z_lsb, z_lsb, z_lsb],
-                    [z_min, z_min, z_max, z_max, z_min],
-                    color=colors(idx % 10),
-                    linewidth=1.0,
-                    alpha=0.7,
-                )
-                plotted = True
+        if np.isfinite(z_lsb):
+            x_plane = np.array([[x_min_line, x_max_line], [x_min_line, x_max_line]], dtype=float)
+            y_plane = np.full_like(x_plane, float(z_lsb))
+            z_plane = np.array([[z_min, z_min], [z_max, z_max]], dtype=float)
+            ax.plot_surface(
+                x_plane,
+                y_plane,
+                z_plane,
+                color=colors(idx % 10),
+                alpha=0.12,
+                shade=False,
+                linewidth=0.0,
+                antialiased=False,
+            )
+            ax.plot(
+                [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
+                [z_lsb, z_lsb, z_lsb, z_lsb, z_lsb],
+                [z_min, z_min, z_max, z_max, z_min],
+                color=colors(idx % 10),
+                linewidth=1.0,
+                alpha=0.7,
+            )
+            plotted = True
 
     if not plotted:
         plt.close(fig)
@@ -1380,13 +1468,14 @@ def plot_weight_gauss_mean_cv(
         fig,
         ax,
         out_fig,
-        front_view=(35, -65),
-        back_view=(35, 115),
-
-
+        front_view=(25, -15),
+        back_view=(25, 15),
         dpi=600,
         tick_labelsize=16,
         tick_pad=-2,
+        pane_fill=True,
+        pane_facecolor=(0.95, 0.95, 0.95, 0.90),
+        pane_edgecolor=(0.78, 0.78, 0.78, 1.0),
     )
     if show:
         plt.show()
@@ -1856,15 +1945,6 @@ def plot_weight_gauss_perf_cv_grid(
                         linewidth=0.0,
                         antialiased=False,
                     )
-                    ax.set_facecolor((1, 1, 1, 0))
-
-                    ax.xaxis.pane.fill = False
-                    ax.yaxis.pane.fill = False
-                    ax.zaxis.pane.fill = False
-
-                    ax.xaxis.pane.set_edgecolor((1, 1, 1, 0))
-                    ax.yaxis.pane.set_edgecolor((1, 1, 1, 0))
-                    ax.zaxis.pane.set_edgecolor((1, 1, 1, 0))
                     ax.plot(
                         [x_min_line, x_max_line, x_max_line, x_min_line, x_min_line],
                         [y_ref, y_ref, y_ref, y_ref, y_ref],
@@ -1901,6 +1981,7 @@ def plot_weight_gauss_perf_cv_grid(
             ax.set_ylim(y_lo_panel - y_pad, y_hi_panel + y_pad)
         ax.set_zlim(z_min, z_max)
         _style_3d_axis(ax, tick_labelsize=18, tick_pad=-1)
+        _clear_3d_axis_background(ax)
         return True
 
     _print_metric_differences(
@@ -2153,9 +2234,13 @@ def plot_rho_cv_other_perf(
 def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, mode_preset: str = "all"):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
+    present_modes = list(dict.fromkeys(disp["mode"].astype(str).dropna().tolist()))
+    present_mode_set = set(present_modes)
     # Consistent ordering/colors to make panels easier to compare.
     mode_preset = str(mode_preset or "all").strip().lower()
-    if mode_preset == "all_shuf":
+    if ANALYSIS_MODE_FILTER:
+        mode_order = [str(m) for m in ANALYSIS_MODE_FILTER if str(m) in present_mode_set]
+    elif mode_preset == "all_shuf":
         mode_order = (
                 "global_sign_pres",
                 "real",
@@ -2183,7 +2268,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
             "global_sign_pres",
             "binary_base",
         ]
-    modes = [m for m in mode_order if m in set(disp["mode"].unique())]
+    extras = [m for m in present_modes if m not in mode_order]
+    modes = list(mode_order) + extras
     # Keep these exact colors per request.
     preserved_colors = {
         "real": "#32a2f2",
@@ -2256,28 +2342,7 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                 counts, _ = np.histogram(s, bins=edges)
                 frac = counts.astype(float) / max(len(s), 1)  # normalize by N so areas comparable
                 color = color_map.get(mode, None)
-                name_remap = {
-                    "real": "C. elegans",
-                    "cel+randN": "C. elegans + N(0,1)",
-                    "er+randN": "ER + N(0,1)",
-                    "celW+connShuf": "Conn+wt shuffle",
-                    "shuffle": "Weight shuffle",
-                    "conn_shuf_only": "Connection shuffle",
-                    "local_sign": "Local Sign + N(0,1)",
-                    "ws_p0.1+randN": "WS p=0.1 + N(0,1)",
-                    "cel_sample": "Sampled weights",
-                    "local_sign+flat": "Local Sign + U(0,1)",
-                    "local_sign+sample": "Local Sign + Sampled",
-                    "local_sign+binary": "Local Sign + wt +1,-1",
-                    "global_sign_pres" : "Global sign",
-                    "binary_base": "Binary base (unsigned)",
-                    "binary_base_topology_shuffle": "Binary base + topology shuffle",
-                    "binary+shuffle": "Binary sign + shuffle",
-                    "binary+conshuffle+wshuffle": "Binary + conn+weight shuffle",
-
-
-                }
-                display_mode = name_remap.get(mode, mode)
+                display_mode = _short_legend_name(mode)
                 ax.plot(
                     centers,
                     frac,
@@ -2374,7 +2439,14 @@ def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
         sub = combined[combined["mode"] == cname]
         if not sub.empty:
             sub_u = _unique_hparam_rows(sub)
-            plt.scatter(sub_u["GR"], sub_u["MC"], s=36, alpha=0.5, label=cname, c=color)
+            plt.scatter(
+                sub_u["GR"],
+                sub_u["MC"],
+                s=36,
+                alpha=0.5,
+                label=_short_legend_name(cname),
+                c=color,
+            )
     plt.title("MC vs GR across all architectures")
     plt.xlabel("GR (effective rank of Δstate)")
     plt.ylabel("MC (linear memory capacity)")
@@ -2434,7 +2506,10 @@ def print_kruskal_wallis_tables(disp: pd.DataFrame):
                         warnings.filterwarnings("ignore", category=RuntimeWarning, module="pingouin")
                         tost = (pg.tost(vals_a, vals_b, np.abs(np.median(vals_all)) * 0.05, paired=False))
                     if tost['pval'].iloc[0]<0.06:
-                        print(rf"{m} & {a} vs {b} & {tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\")
+                        print(
+                            rf"{m} & {_short_thesis_name(a)} vs {_short_thesis_name(b)} & "
+                            rf"{tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\"
+                        )
 
         #print(f"\n{m}")
         #print(df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))  # one table per metric
@@ -2555,17 +2630,17 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    #plot_frac_arch_histograms(disp, args.out_dir, args.bins)
-    #plot_frac_cv_meanline(disp, combined, args.out_dir,show=False)
-    plot_weight_gauss_perf_cv_grid(
-        disp,
-        combined,
-        args.out_dir,
-        show=False,
-        local_sign_binary_csv=args.local_sign_binary_csv,
-    )
+    plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
+    #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
+    #plot_weight_gauss_perf_cv_grid(
+    #    disp,
+    #    combined,
+    #    args.out_dir,
+    #    show=False,
+    #    local_sign_binary_csv=args.local_sign_binary_csv,
+    #)
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
-    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     #print_kruskal_wallis_tables(disp)
 

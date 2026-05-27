@@ -1,0 +1,92 @@
+IPC & Binary wt. vs Binary wt. + shuf. & 0.01039 & 2.887e-08 \\
+KR & Binary wt. vs Binary wt. + shuf. & 0.01215 & 0.002745 \\
+GR & Binary wt. vs Binary wt. + shuf. & 0.02068 & 5.831e-35 \\
+
+MC & pm1 sign-pres. + shuf. vs pm1 + conn. shuffle & 0.01368 & 7.998e-12 \\
+MC & pm1 sign-pres. + shuf. vs Sign-pres. pm1 + wt. shuf. & 0.01368 & 0.04546 \\
+MC & pm1 + conn. shuffle vs Sign-pres. pm1 + wt. shuf. & 0.01368 & 7.225e-05 \\
+MC & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.01368 & 2.114e-05 \\
+IPC & pm1 sign-pres. + shuf. vs pm1 + conn. shuffle & 0.0106 & 8.308e-10 \\
+IPC & pm1 sign-pres. + shuf. vs Sign-pres. pm1 + wt. shuf. & 0.0106 & 2.293e-11 \\
+IPC & pm1 sign-pres. + shuf. vs Sign-pres. pm1 wt. & 0.0106 & 7.678e-11 \\
+IPC & pm1 + conn. shuffle vs Sign-pres. pm1 + wt. shuf. & 0.0106 & 1.491e-07 \\
+IPC & pm1 + conn. shuffle vs Sign-pres. pm1 wt. & 0.0106 & 3.382e-07 \\
+IPC & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.0106 & 7.407e-15 \\
+KR & pm1 sign-pres. + shuf. vs pm1 + conn. shuffle & 0.01317 & 4.991e-12 \\
+KR & pm1 sign-pres. + shuf. vs Sign-pres. pm1 + wt. shuf. & 0.01317 & 6.44e-08 \\
+KR & pm1 sign-pres. + shuf. vs Sign-pres. pm1 wt. & 0.01317 & 2.063e-20 \\
+KR & pm1 + conn. shuffle vs Sign-pres. pm1 + wt. shuf. & 0.01317 & 4.512e-16 \\
+KR & pm1 + conn. shuffle vs Sign-pres. pm1 wt. & 0.01317 & 1.584e-13 \\
+KR & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.01317 & 3.403e-09 \\
+GR & pm1 sign-pres. + shuf. vs pm1 + conn. shuffle & 0.02224 & 3.981e-30 \\
+GR & pm1 sign-pres. + shuf. vs Sign-pres. pm1 + wt. shuf. & 0.02224 & 1.419e-47 \\
+GR & pm1 sign-pres. + shuf. vs Sign-pres. pm1 wt. & 0.02224 & 9.588e-23 \\
+GR & pm1 + conn. shuffle vs Sign-pres. pm1 + wt. shuf. & 0.02224 & 7.492e-30 \\
+GR & pm1 + conn. shuffle vs Sign-pres. pm1 wt. & 0.02224 & 9.344e-10 \\
+GR & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.02224 & 1.875e-20 \\
+
+MC & Conn. + wt. shuffle vs Connection shuffle & 0.01656 & 7.926e-20 \\
+MC & Conn. + wt. shuffle vs Weight shuffle & 0.01656 & 1.844e-14 \\
+MC & Connection shuffle vs Weight shuffle & 0.01656 & 1.615e-15 \\
+IPC & Conn. + wt. shuffle vs Connection shuffle & 0.01213 & 6.19e-07 \\
+IPC & Conn. + wt. shuffle vs Weight shuffle & 0.01213 & 4.58e-09 \\
+IPC & Connection shuffle vs Weight shuffle & 0.01213 & 2.501e-12 \\
+KR & Conn. + wt. shuffle vs Connection shuffle & 0.01722 & 4.406e-30 \\
+KR & Conn. + wt. shuffle vs Weight shuffle & 0.01722 & 2.781e-27 \\
+KR & Connection shuffle vs Weight shuffle & 0.01722 & 8.019e-21 \\
+GR & Conn. + wt. shuffle vs Connection shuffle & 0.02759 & 4.394e-70 \\
+GR & Conn. + wt. shuffle vs Weight shuffle & 0.02759 & 7.459e-46 \\
+GR & Connection shuffle vs Weight shuffle & 0.02759 & 4.201e-41 \\
+
+MC & Binary wt. vs Sign-pres. pm1 + wt. shuf. & 0.0151 & 0.007238 \\
+MC & Binary wt. vs Sign-pres. pm1 wt. & 0.0151 & 5.5e-05 \\
+MC & CE Gaussian wt. vs WS Gaussian wt. & 0.0151 & 0.02401 \\
+MC & ER Gaussian wt. vs WS Gaussian wt. & 0.0151 & 5.706e-16 \\
+MC & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.0151 & 3.329e-16 \\
+MC & Sign-pres. pm1 + wt. shuf. vs Sign-pres. uniform & 0.0151 & 0.04148 \\
+MC & Sign-pres. Gaussian vs Sign-pres. uniform & 0.0151 & 0.0001002 \\
+MC & Sign-pres. Gaussian vs C. elegans & 0.0151 & 9.184e-12 \\
+MC & Sign-pres. uniform vs C. elegans & 0.0151 & 9.91e-09 \\
+IPC & Binary wt. vs Sign-pres. pm1 + wt. shuf. & 0.01138 & 6.972e-05 \\
+IPC & Binary wt. vs Sign-pres. pm1 wt. & 0.01138 & 2.129e-08 \\
+IPC & Binary wt. vs C. elegans & 0.01138 & 5.563e-14 \\
+IPC & ER Gaussian wt. vs WS Gaussian wt. & 0.01138 & 8.612e-08 \\
+IPC & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.01138 & 2.079e-11 \\
+IPC & Sign-pres. pm1 + wt. shuf. vs Sign-pres. uniform & 0.01138 & 1.807e-05 \\
+IPC & Sign-pres. pm1 + wt. shuf. vs C. elegans & 0.01138 & 1.779e-06 \\
+IPC & Sign-pres. Gaussian vs Sign-pres. uniform & 0.01138 & 5.499e-06 \\
+IPC & Sign-pres. pm1 wt. vs Sign-pres. uniform & 0.01138 & 0.01166 \\
+IPC & Sign-pres. pm1 wt. vs C. elegans & 0.01138 & 1.938e-10 \\
+KR & ER Gaussian wt. vs WS Gaussian wt. & 0.01441 & 5.98e-05 \\
+KR & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.01441 & 1.116e-11 \\
+KR & Sign-pres. pm1 + wt. shuf. vs C. elegans & 0.01441 & 3.929e-21 \\
+KR & Sign-pres. pm1 wt. vs C. elegans & 0.01441 & 2.716e-20 \\
+GR & Binary wt. vs Sign-pres. pm1 wt. & 0.02375 & 0.0459 \\
+GR & CE Gaussian wt. vs ER Gaussian wt. & 0.02375 & 3.902e-06 \\
+GR & CE Gaussian wt. vs WS Gaussian wt. & 0.02375 & 3.849e-08 \\
+GR & ER Gaussian wt. vs WS Gaussian wt. & 0.02375 & 5.565e-65 \\
+GR & Sign-pres. pm1 + wt. shuf. vs Sign-pres. pm1 wt. & 0.02375 & 1.613e-24 \\
+GR & Sign-pres. pm1 + wt. shuf. vs C. elegans & 0.02375 & 4.416e-41 \\
+GR & Sign-pres. Gaussian vs Sign-pres. uniform & 0.02375 & 0.03561 \\
+GR & Sign-pres. pm1 wt. vs C. elegans & 0.02375 & 9.945e-45 \\
+
+
+___
+
+SHORT_THESIS_NAMES = {
+    "real": "CElegans",
+    "conn_shuf_only": "ConnShuf",
+    "shuffle_weights": "WtShuf",
+    "conn_shuf": "Conn+WtShuf",
+    "local_sign+binary": "CEpm1SignPres",
+    "global_sign_pres": "CEpm1SignPresWtShuf",
+    "binary+conshuffle+wshuffle": "pm1Conn+WtShuf",
+    "binary_base": "CEBinary",
+    "binary_base_topology_shuffle": "CEBinary+ConnShuf",
+    "cel_randN": "CEGausWt",
+    "er_randN": "ERGausWt",
+    "ws_p01_randN": "WSGausWt",
+    "local_sign": "SignPresGaus",
+    "local_sign+flat": "SignPresUnif",
+    "binary+shuffle": "pm1ConnShuffle",
+}

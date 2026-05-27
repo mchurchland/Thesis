@@ -21,36 +21,35 @@ def _kl_empirical_to_fitted_gaussian(
     """
     Magnitude-only KL on edge weights.
     Computes KL(|W| || fitted shifted-half-normal) on nonzero finite weights.
-    Kept under the historical metric key name `kl_to_gaussian` for compatibility.
     """
-    x = values.reshape(-1)
-    x = x[np.isfinite(x)]
-    x = x[x != 0]
+    x = values.reshape(-1) ## make it a 1d  array
+    x = x[np.isfinite(x)] ## this is just for safety, the weights should be finite but just in case we remove any inf or nan values
+    x = x[x != 0] ##get non zero
     if x.size < 2:
         return float("nan")
 
-    x_abs = np.abs(x)
+    x_abs = np.abs(x) ## get the absolute
     x_max = float(np.max(x_abs))
     if x_max <= 0.0:
         return 0.0
 
     loc = float(np.min(x_abs))
-    y = x_abs - loc
-    sigma = float(np.sqrt(np.mean(y * y)))
-    if sigma <= eps:
+    y = x_abs - loc ## shift the distribution so that the minimum is at zero
+    sigma = float(np.sqrt(np.mean(y * y))) ## this is the std of the shifted distribution, which is the scale parameter for the half-normal fit
+    if sigma <= eps: ## if the std is zero (all values are the same), this is like invalid it should be inifinite but we do 0.0 it never happens
         return 0.0
 
-    counts, edges = np.histogram(x_abs, bins=bins, range=(loc, x_max))
+    counts, edges = np.histogram(x_abs, bins=bins, range=(loc, x_max)) ## discretize the values into bins
     p = counts.astype(np.float64)
     p = np.clip(p, eps, None)
-    p = p / p.sum()
+    p = p / p.sum() ## get the probabilities
 
     # Shifted half-normal CDF over the same bin edges.
     q_cdf = halfnorm.cdf(edges, loc=loc, scale=sigma)
-    q = np.diff(q_cdf)
-    q = np.clip(q, eps, None)
-    q = q / q.sum()
-    return float(entropy(p, q))
+    q = np.diff(q_cdf) ## this just gets the bin probabilties from the cumulative probabilities, so q_i = CDF(edge_i+1) - CDF(edge_i)
+    q = np.clip(q, eps, None) ## clip at 0
+    q = q / q.sum() ## renormalize
+    return float(entropy(p, q)) ## this is just \sum 1/n log(p_i/q_i) where p is the empirical distribution and q is the fitted distribution
 
 
 @dataclass(frozen=True)
@@ -86,6 +85,8 @@ class VariantContext:
     alpha: float | None = None
     src_tag: str = "chunk_0"
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
+    input_idx: np.ndarray | None = None
+    output_idx: np.ndarray | None = None
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -93,6 +94,7 @@ def evaluate_reservoir(
     leak: float,
     device: torch.device,
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS,
+    output_idx: np.ndarray | torch.Tensor | None = None,
 ):
     """Wrapper around run_one with shared defaults."""
     return run_one(
@@ -108,7 +110,20 @@ def evaluate_reservoir(
         sim_params.ipc_max_delay,
         sim_params.ipc_orders,
         sim_params.ridge_alpha,
+        output_idx,
     )
+
+
+def _apply_input_subset(Win: torch.Tensor, input_idx: np.ndarray | None) -> torch.Tensor:
+    """Keep the usual random input weights, but drive only selected nodes."""
+    if input_idx is None:
+        return Win
+    idx = torch.as_tensor(input_idx, device=Win.device, dtype=torch.long)
+    if idx.numel() == 0:
+        raise ValueError("input_idx must contain at least one node when provided.")
+    mask = torch.zeros_like(Win)
+    mask.index_fill_(0, idx, 1.0)
+    return Win * mask
 
 
 def _run_variant_row(
@@ -145,15 +160,12 @@ def _run_variant_row(
             per_neg=ctx.per_neg,
             alpha = ctx.alpha
         )
+        Win = _apply_input_subset(Win, ctx.input_idx)
         w_np = Wt.detach().cpu().numpy().reshape(-1)
         kl_to_gaussian = _kl_empirical_to_fitted_gaussian(w_np)
-        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params)
+        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
-        print( float(scores["MC"]),
-                float(scores["IPC"]),
-                float(scores["KR"]),
-                float(scores["GR"]),)
         rows_local.append(
             (
                 mode_label,
