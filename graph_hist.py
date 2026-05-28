@@ -47,15 +47,15 @@ ANALYSIS_MODE_FILTER = [
     #"binary_base_topology_shuffle",
     #"binary_base"
     #------------------------------
-    #"binary+shuffle",
-    #"local_sign+binary",
-    #"global_sign_pres",
-    #"binary+conshuffle+wshuffle"
+    "binary+shuffle",
+    "local_sign+binary",
+    "global_sign_pres",
+    "binary+conshuffle+wshuffle"
     #------------------------------
-    "real",
-    "shuffle",
-    "celW+connShuf",
-    "conn_shuf_only",
+    #"real",
+    #"shuffle",
+    #"celW+connShuf",
+    #"conn_shuf_only",
     #-------- main experiment above was shuffle experiment
       #          "real",
       #      "cel+randN",
