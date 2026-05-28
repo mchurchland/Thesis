@@ -33,9 +33,9 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
-RANDOM_NODE_SUBSETS=0
-K_IN=""
-K_OUT=""
+RANDOM_NODE_SUBSETS=1
+K_IN=60
+K_OUT=60
 SUBSET_SEED_OFFSET=""
 
 SUBSET_ARGS=()
@@ -53,7 +53,7 @@ JOB_KIND="all_topology_shuffle"
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "final_shuf_v1_${OUTDIR}" \
+  --out-dir "shuf_sep_${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
