@@ -52,10 +52,10 @@ ANALYSIS_MODE_FILTER = [
     #"global_sign_pres",
     #"binary+conshuffle+wshuffle"
     #------------------------------
-    #"real",
-    #"shuffle",
-    #"celW+connShuf",
-    #"conn_shuf_only",
+    "real",
+    "shuffle",
+    "celW+connShuf",
+    "conn_shuf_only",
     #-------- main experiment above was shuffle experiment
       #          "real",
       #      "cel+randN",
@@ -947,7 +947,7 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 raise ValueError(f"Missing required column: {c}")
     # types
-    df["mode"] = df["mode"].astype(str)
+    df["mode"] = df["mode"].astype(str).str.strip()
     extras = [c for c in df.columns if c not in needed]
     return df[needed + extras].copy()
 
@@ -959,8 +959,21 @@ def _filter_to_modes(df: pd.DataFrame, modes=None, label: str = "data") -> pd.Da
     allow = [str(m).strip() for m in (modes or []) if str(m).strip()]
     if not allow:
         return df
-    out = df[df["mode"].astype(str).isin(allow)].copy()
+    mode_values = df["mode"].astype(str).str.strip()
+    mode_counts = mode_values.value_counts(dropna=False)
+    out = df[mode_values.isin(allow)].copy()
     print(f"[info] {label}: mode filter active ({len(allow)} mode(s)); kept {len(out)}/{len(df)} rows")
+    requested_counts = {mode: int(mode_counts.get(mode, 0)) for mode in allow}
+    print(
+        f"[info] {label}: requested mode counts: "
+        + ", ".join(f"{mode}={count}" for mode, count in requested_counts.items())
+    )
+    missing = [mode for mode, count in requested_counts.items() if count == 0]
+    if missing:
+        available = sorted(mode_values.dropna().unique().tolist())
+        preview = ", ".join(available[:16]) + (" ..." if len(available) > 16 else "")
+        print(f"[warn] {label}: requested mode(s) absent from input: {', '.join(missing)}")
+        print(f"[info] {label}: available modes: {preview}")
     return out
 
 
