@@ -60,7 +60,37 @@ def _sample_from_cel_sign(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndar
     return W
 
 def _cel_to_bin(Wbio: np.ndarray) -> np.ndarray:
-    return Wbio.astype(np.bool).astype(np.float32)
+    return Wbio.astype(bool).astype(np.float32)
+
+
+def _signed_binary_from_cel(Wbio: np.ndarray) -> np.ndarray:
+    W = _cel_to_bin(Wbio)
+    W[Wbio < 0] *= -1.0
+    return W.astype(np.float32, copy=False)
+
+
+def _binary_to_cel_interpolation(
+    Wbio: np.ndarray,
+    alpha: float,
+    rng: np.random.Generator,
+    *,
+    shuffle_magnitudes: bool = False,
+) -> np.ndarray:
+    if not (0.0 <= alpha <= 1.0):
+        raise ValueError("binary-to-CEL interpolation alpha must be between 0 and 1.")
+
+    Wbio = Wbio.astype(np.float32, copy=False)
+    W = np.zeros_like(Wbio, dtype=np.float32)
+    mask = Wbio != 0
+    signs = np.sign(Wbio[mask]).astype(np.float32)
+    magnitudes = np.abs(Wbio[mask]).astype(np.float32)
+    if shuffle_magnitudes:
+        magnitudes = magnitudes.copy()
+        rng.shuffle(magnitudes)
+
+    interpolated_magnitudes = (1.0 - alpha) + alpha * magnitudes
+    W[mask] = signs * interpolated_magnitudes
+    return W
 
 def load_connectome(adj_path: str | None, ei_path: str | None):
     """
@@ -208,20 +238,38 @@ def build_reservoir(
             W = ce_W_bio.copy().astype(np.float32)
             # Keep the CE edge set as-is; if a different nnz_target was provided, ignore for CEL row.
             # Row-normalize magnitudes for stability like before:
-    elif feature_conn == "weight_test": 
+    elif feature_conn in ("weight_test", "weight_test_unsigned", "weight_test_signed"):
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
 
-        sel_p = W > 0 ## get the positive weights of the selection
-        sel_n = W < 0 ## get the negative weights of the selection
-
         assert alpha != None
-        W = scale_weights(W,alpha=alpha,rng=rng)
-        
-        #W[sel_p] = np.abs(W[sel_p])
-        #W[sel_n] = -np.abs(W[sel_n])
-            
+        W = scale_weights(
+            W,
+            alpha=alpha,
+            rng=rng,
+            preserve_sign=(feature_conn == "weight_test_signed"),
+        )
+    elif feature_conn == "weight_test_binary_to_cel":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        assert alpha != None
+        W = _binary_to_cel_interpolation(
+            ce_W_bio,
+            alpha=alpha,
+            rng=rng,
+            shuffle_magnitudes=False,
+        )
+    elif feature_conn == "weight_test_binary_to_shuffled_cel":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        assert alpha != None
+        W = _binary_to_cel_interpolation(
+            ce_W_bio,
+            alpha=alpha,
+            rng=rng,
+            shuffle_magnitudes=True,
+        )
         
     elif feature_conn == "sign_test_cel":
         if ce_W_bio is None:
@@ -296,42 +344,18 @@ def build_reservoir(
     elif feature_conn == "local_sign+binary":
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
-        W = ce_W_bio.copy().astype(np.float32)
-
-        sel_p = W > 0 ## get the positive weights of the selection
-        sel_n = W < 0 ## get the negative weights of the selection
-        
-
-        W = _cel_to_bin(Wbio = W)
-        W[sel_p] = np.abs(W[sel_p])
-        W[sel_n] = -np.abs(W[sel_n])
+        W = _signed_binary_from_cel(ce_W_bio)
 
     elif feature_conn == "binary+shuffle": ## need data on this one
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
-        W = ce_W_bio.copy().astype(np.float32)
-
-        sel_p = W > 0 ## get the positive weights of the selection
-        sel_n = W < 0 ## get the negative weights of the selection
-        
-
-        W = _cel_to_bin(Wbio = W)
-        W[sel_p] = np.abs(W[sel_p])
-        W[sel_n] = -np.abs(W[sel_n])
+        W = _signed_binary_from_cel(ce_W_bio)
         W = degree_matched_shuffle_directed(W,tries=20_000,rng=rng).astype(np.float32)
     
     elif feature_conn == "binary+conshuffle+wshuffle": ## need data on this one
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
-        W = ce_W_bio.copy().astype(np.float32)
-
-        sel_p = W > 0 ## get the positive weights of the selection
-        sel_n = W < 0 ## get the negative weights of the selection
-        
-
-        W = _cel_to_bin(Wbio = W)
-        W[sel_p] = np.abs(W[sel_p])
-        W[sel_n] = -np.abs(W[sel_n])
+        W = _signed_binary_from_cel(ce_W_bio)
         W = _conn_and_w_shuffle_ce(Wbio = W,rng=rng)
 
         
@@ -591,17 +615,24 @@ def apply_percent_negative(W:np.ndarray,per_neg:float,rng:np.random.Generator): 
     return W
 
 
-def scale_weights(Wbio: np.ndarray, alpha: float, rng: np.random.Generator):
+def scale_weights(
+    Wbio: np.ndarray,
+    alpha: float,
+    rng: np.random.Generator,
+    *,
+    preserve_sign: bool = False,
+):
     assert alpha >= 0
-    if alpha == 0:
-        return Wbio
 
     W = Wbio.astype(np.float32, copy=True)
     mask = W != 0
-    # Add signed Gaussian noise to existing edges only.
-    # Keeps sparsity pattern fixed while allowing sign/magnitude to change.
-    noise = rng.normal(0.0, 1.0, size=mask.sum()).astype(np.float32)
-    W[mask] = W[mask] + alpha * noise
+    if alpha != 0:
+        # Add signed Gaussian noise to existing edges only.
+        # Keeps sparsity pattern fixed while allowing sign/magnitude to change.
+        noise = rng.normal(0.0, 1.0, size=mask.sum()).astype(np.float32)
+        W[mask] = W[mask] + alpha * noise
+    if preserve_sign:
+        W[mask] = np.sign(Wbio[mask]).astype(np.float32) * np.abs(W[mask])
     return W
 
 def spectral_norm(W: Tensor) -> float:

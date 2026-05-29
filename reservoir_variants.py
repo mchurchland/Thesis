@@ -227,6 +227,10 @@ VARIANT_LABELS = {
     "sign_test" : "sign_test",
     "sign_test_er" : "sign_test_er",
     "weight_test" : "weight_test",
+    "weight_test_unsigned": "weight_test_unsigned",
+    "weight_test_signed": "weight_test_signed",
+    "weight_test_binary_to_cel": "weight_test_binary_to_cel",
+    "weight_test_binary_to_shuffled_cel": "weight_test_binary_to_shuffled_cel",
     "binary+shuffle" : "binary+shuffle",
     "sign_test_og_cel": "sign_test_og_cel"
 }
@@ -248,7 +252,11 @@ VARIANT_DESCRIPTIONS = {
     "sign_test_cel" : "celegan connectome binarized, can pass in a percent to flip and it will flip the sign of that many conenctions",
     "sign_test_og_cel" : "celegan connectome, can pass in a percent to flip and it will flip the sign of that many conenctions does not convert the weights to binary",
     "sign_test_er" : "ER connectome, can pass in a percent to flip and it will flip the sign of that many connections",
-    "weight_test" : "celegan connectome, can pass in an alpha to add a guasian dist times that alpha to the weights",
+    "weight_test" : "Backward-compatible alias for weight_test_unsigned.",
+    "weight_test_unsigned": "C. elegans weights plus signed Gaussian noise; signs may change.",
+    "weight_test_signed": "C. elegans weights plus Gaussian noise with original edge signs restored.",
+    "weight_test_binary_to_cel": "Interpolate from sign-preserving binary weights to empirical C. elegans magnitudes.",
+    "weight_test_binary_to_shuffled_cel": "Interpolate from sign-preserving binary weights to shuffled empirical C. elegans magnitudes.",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
     "binary_base": "Unsigned CE binary base (0/1): topology and magnitudes fixed except binarization.",
     "binary_base_topology_shuffle": "Unsigned CE binary base with degree-preserving topology shuffle.",
@@ -262,6 +270,14 @@ VARIANT_ALIASES = {
 }
 
 VARIANT_KEYS: tuple[str, ...] = tuple(VARIANT_LABELS.keys())
+
+WEIGHT_TEST_FEATURES = {
+    "weight_test_binary_to_shuffled_cel": "weight_test_binary_to_shuffled_cel",
+    "weight_test_binary_to_cel": "weight_test_binary_to_cel",
+    "weight_test_unsigned": "weight_test_unsigned",
+    "weight_test_signed": "weight_test_signed",
+    "weight_test": "weight_test_unsigned",
+}
 
 
 def _seed(ctx: VariantContext, *, offset: int, sid_stride: int = 0) -> int:
@@ -277,6 +293,13 @@ def _nnz_match_ce(ctx: VariantContext) -> int:
 
 def _resolve_key(key: str) -> str:
     return VARIANT_ALIASES.get(key, key)
+
+
+def _weight_test_feature_conn(key: str) -> str:
+    for prefix, feature_conn in WEIGHT_TEST_FEATURES.items():
+        if key.startswith(prefix):
+            return feature_conn
+    raise ValueError(f"Unknown weight_test variant key: {key}")
 
 
 def _require_ce(ctx: VariantContext):
@@ -504,7 +527,7 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         seed_base = _seed(ctx, offset=1)
         return _run_variant_row(
             ctx,
-            feature_conn="weight_test",
+            feature_conn=_weight_test_feature_conn(key),
             mode_label=key,
             ce_override=None,
             nnz_target=None,

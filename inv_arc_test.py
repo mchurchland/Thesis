@@ -77,6 +77,14 @@ TOPOLOGY_SHUFFLE_JOB_KEYS = (
 
 )
 
+WEIGHT_TEST_JOB_KEYS = (
+    "weight_test",
+    "weight_test_unsigned",
+    "weight_test_signed",
+    "weight_test_binary_to_cel",
+    "weight_test_binary_to_shuffled_cel",
+)
+
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
 SWEEP_LEAK = [0.6, 0.8, 1.0]
 SWEEP_U    = [0.1, 0.5, 1.0, 1.5]
@@ -282,7 +290,7 @@ def parse_args():
         type=float,
         nargs="+",
         default=0.0,
-        help="alphas for the weight test",
+        help="Alpha values for weight tests. Use [0, 1] values for binary-to-CEL interpolation tests.",
     )
     p.add_argument(
         "--random-node-subsets",
@@ -438,6 +446,17 @@ def main():
         def _sid_base(rep_idx: int) -> int:
             return args.sid + rep_idx
 
+        if job_key in (
+            "weight_test_binary_to_cel",
+            "weight_test_binary_to_shuffled_cel",
+        ):
+            bad_alphas = [alpha for alpha in alphas if not (0.0 <= alpha <= 1.0)]
+            if bad_alphas:
+                raise ValueError(
+                    f"{job_key} uses interpolation alphas and requires values in [0, 1]; "
+                    f"got {bad_alphas}."
+                )
+
 
         for rep_pos, rep_idx in enumerate(repeat_ids):
             append_base = append_start or rep_pos > 0
@@ -513,10 +532,11 @@ def main():
                     )
                     _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
                     continue
-            if job_key == "weight_test":
-                for frac_idx, alpha in enumerate(alphas):
+            if job_key in WEIGHT_TEST_JOB_KEYS:
+                for alpha_idx, alpha in enumerate(alphas):
+                    alpha_job_key = job_key + str(alpha)
                     ctx = _build_ctx(
-                        job_key + str(alpha),
+                        alpha_job_key,
                         WS_K,
                         ce_W_bio,
                         None,
@@ -532,11 +552,11 @@ def main():
                         output_idx=output_idx,
                     )
                     _run_and_save(
-                        job_key + str(alpha),
+                        alpha_job_key,
                         ctx,
                         out_dir,
                         csv_name,
-                        append=(append_base or frac_idx > 0),
+                        append=(append_base or alpha_idx > 0),
                     )
                 continue
             if job_key == "sign_test_cel":

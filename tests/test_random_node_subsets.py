@@ -7,7 +7,8 @@ import pytest
 import torch
 
 from inv_arc_test import _draw_node_subsets
-from reservoir_variants import _apply_input_subset
+from reservoir_variants import _apply_input_subset, _weight_test_feature_conn
+from util.util import _binary_to_cel_interpolation, scale_weights
 from network_stats.run_one import run_reservoir_with_pre
 import network_stats.run_one as run_one_module
 
@@ -55,6 +56,84 @@ def test_input_subset_masks_direct_drive_to_selected_nodes_only():
 
     assert torch.count_nonzero(X.index_select(1, unselected)) == 0
     assert torch.all(torch.abs(X.index_select(1, selected)) > 0)
+
+
+def test_weight_test_signed_preserves_original_edge_signs():
+    W = np.array(
+        [
+            [0.0, 2.0, -3.0],
+            [4.0, 0.0, -5.0],
+            [0.0, 6.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    out = scale_weights(
+        W,
+        alpha=10.0,
+        rng=np.random.default_rng(123),
+        preserve_sign=True,
+    )
+
+    mask = W != 0
+    assert np.array_equal(np.sign(out[mask]), np.sign(W[mask]))
+
+
+def test_binary_to_cel_interpolation_endpoints_and_shuffled_control():
+    W = np.array(
+        [
+            [0.0, 2.0, -3.0],
+            [4.0, 0.0, -5.0],
+            [-6.0, 7.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    mask = W != 0
+
+    binary = _binary_to_cel_interpolation(
+        W,
+        alpha=0.0,
+        rng=np.random.default_rng(1),
+    )
+    empirical = _binary_to_cel_interpolation(
+        W,
+        alpha=1.0,
+        rng=np.random.default_rng(1),
+    )
+    shuffled = _binary_to_cel_interpolation(
+        W,
+        alpha=1.0,
+        rng=np.random.default_rng(1),
+        shuffle_magnitudes=True,
+    )
+
+    assert np.array_equal(binary[mask], np.sign(W[mask]))
+    assert np.array_equal(empirical, W)
+    assert np.array_equal(np.sign(shuffled[mask]), np.sign(W[mask]))
+    assert np.array_equal(np.sort(np.abs(shuffled[mask])), np.sort(np.abs(W[mask])))
+    assert not np.array_equal(np.abs(shuffled[mask]), np.abs(W[mask]))
+
+
+def test_binary_to_cel_interpolation_rejects_out_of_range_alpha():
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        _binary_to_cel_interpolation(
+            np.array([[0.0, 2.0]], dtype=np.float32),
+            alpha=1.5,
+            rng=np.random.default_rng(1),
+        )
+
+
+def test_weight_test_dynamic_keys_resolve_to_expected_feature_connections():
+    assert _weight_test_feature_conn("weight_test0.0") == "weight_test_unsigned"
+    assert _weight_test_feature_conn("weight_test_unsigned10.0") == "weight_test_unsigned"
+    assert _weight_test_feature_conn("weight_test_signed10.0") == "weight_test_signed"
+    assert (
+        _weight_test_feature_conn("weight_test_binary_to_cel0.5")
+        == "weight_test_binary_to_cel"
+    )
+    assert (
+        _weight_test_feature_conn("weight_test_binary_to_shuffled_cel0.5")
+        == "weight_test_binary_to_shuffled_cel"
+    )
 
 
 def test_run_one_passes_only_output_subset_to_metrics(monkeypatch):
