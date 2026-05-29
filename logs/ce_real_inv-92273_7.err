@@ -1,0 +1,16 @@
+usage: inv_arc_test.py [-h] --job
+                       {binary+conshuffle+wshuffle,binary+shuffle,binary_base,binary_base_topology_shuffle,cel_randN,cel_sample,conn_shuf,conn_shuf_only,er_randN,global_sign_pres,local_sign,local_sign+binary,local_sign+flat,local_sign+sample,real,shuffle_weights,sign_test,sign_test_cel,sign_test_er,sign_test_og_cel,weight_test,ws_p01_randN,all,all_topology_shuffle}
+                       --out-dir OUT_DIR [--ce-adj CE_ADJ] [--ce-ei CE_EI]
+                       [--csv-name CSV_NAME] [--src-tag SRC_TAG] [--seed SEED]
+                       [--sid SID] [--rho-test] [--er-p ER_P] [--ws-p WS_P]
+                       [--sign-flip-frac SIGN_FLIP_FRAC [SIGN_FLIP_FRAC ...]]
+                       [--alphas ALPHAS [ALPHAS ...]] [--random-node-subsets]
+                       [--k-in K_IN] [--k-out K_OUT]
+                       [--subset-seed-offset SUBSET_SEED_OFFSET]
+                       [--split SPLIT] [--rank RANK] [--n-repeats N_REPEATS]
+                       [--repeat-split REPEAT_SPLIT]
+                       [--repeat-rank REPEAT_RANK]
+                       [--repeat-seed-stride REPEAT_SEED_STRIDE] [--cuda CUDA]
+inv_arc_test.py: error: argument --job: invalid choice: 'sign_test_cel_sep' (choose from 'binary+conshuffle+wshuffle', 'binary+shuffle', 'binary_base', 'binary_base_topology_shuffle', 'cel_randN', 'cel_sample', 'conn_shuf', 'conn_shuf_only', 'er_randN', 'global_sign_pres', 'local_sign', 'local_sign+binary', 'local_sign+flat', 'local_sign+sample', 'real', 'shuffle_weights', 'sign_test', 'sign_test_cel', 'sign_test_er', 'sign_test_og_cel', 'weight_test', 'ws_p01_randN', 'all', 'all_topology_shuffle')
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job sign_test_cel_sep --out-dir binary_cel_sign_test/chunk_7 --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_7 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 250 --repeat-split 20 --repeat-rank 7 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0 --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 --random-node-subsets --k-in 60 --k-out 60` failed. (See above for error)

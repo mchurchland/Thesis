@@ -33,9 +33,9 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
-RANDOM_NODE_SUBSETS=0
-K_IN=""
-K_OUT=""
+RANDOM_NODE_SUBSETS=1
+K_IN=60
+K_OUT=60
 SUBSET_SEED_OFFSET=""
 
 SUBSET_ARGS=()
@@ -52,7 +52,7 @@ fi
 
 conda run -n cel python inv_arc_test.py \
   --job "sign_test_cel" \
-  --out-dir "binary_cel_${OUTDIR}" \
+  --out-dir "binary_cel_sep${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
@@ -73,7 +73,7 @@ conda run -n cel python inv_arc_test.py \
 
   conda run -n cel python inv_arc_test.py \
   --job "sign_test_er" \
-  --out-dir "er_${OUTDIR}" \
+  --out-dir "er_sep${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
@@ -93,7 +93,7 @@ conda run -n cel python inv_arc_test.py \
 
 conda run -n cel python inv_arc_test.py \
   --job "sign_test_og_cel" \
-  --out-dir "cel_og_${OUTDIR}" \
+  --out-dir "cel_og_sep${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
   --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
