@@ -230,6 +230,16 @@ def _safe_path(path: str) -> str:
         k += 1
 
 
+def _mode_numeric_value(mode: str) -> float:
+    nums = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", str(mode))
+    for tok in nums:
+        try:
+            return float(tok)
+        except Exception:
+            continue
+    return np.nan
+
+
 def _read_combined_csv(path: str) -> pd.DataFrame:
     """Read combined CSV and trim malformed extra columns per row if needed."""
     try:
@@ -421,6 +431,9 @@ def _normalize_compare_metrics(spec: str):
         "cosine": "cosine_similarity",
         "kl": "kl_to_gaussian",
         "kl_gaussian": "kl_to_gaussian",
+        "mag_cv": "wt_mag_cv",
+        "magnitude_cv": "wt_mag_cv",
+        "wt_mag_cv": "wt_mag_cv",
     }
     out = []
     for tok in str(spec).split(","):
@@ -478,7 +491,7 @@ def plot_mode_self_drop_comparison(
         print("[warn] no overlapping mode/metric rows to plot self-drop comparison.")
         return
 
-    metric_order = ["MC", "IPC", "KR", "GR", "kl_to_gaussian", "cosine_similarity", "wt_mean"]
+    metric_order = ["MC", "IPC", "KR", "GR", "kl_to_gaussian", "wt_mag_cv", "cosine_similarity", "wt_mean"]
     metrics_present = list(dat["metric"].dropna().unique())
     metrics = [m for m in metric_order if m in metrics_present] + [m for m in metrics_present if m not in metric_order]
     pivot = dat.pivot_table(
@@ -1321,14 +1334,7 @@ def plot_weight_gauss_mean_cv(
     os.makedirs(out_dir, exist_ok=True)
 
     def mode_to_value(mode: str) -> float:
-        mode_str = str(mode)
-        nums = re.findall(r"[0-9]+(?:\\.[0-9]+)?", mode_str)
-        for tok in nums:
-            try:
-                return float(tok)
-            except Exception:
-                continue
-        return np.nan
+        return _mode_numeric_value(mode)
 
     mode_vals = []
     for m in combined["mode"].unique():
@@ -1513,14 +1519,7 @@ def plot_weight_gauss_mean_perf(
     os.makedirs(out_dir, exist_ok=True)
 
     def mode_to_value(mode: str) -> float:
-        mode_str = str(mode)
-        nums = re.findall(r"[0-9]+(?:\\.[0-9]+)?", mode_str)
-        for tok in nums:
-            try:
-                return float(tok)
-            except Exception:
-                continue
-        return np.nan
+        return _mode_numeric_value(mode)
 
     mode_vals = []
     for m in combined["mode"].unique():
@@ -1698,18 +1697,12 @@ def plot_weight_gauss_perf_cv_grid(
     Direct combined 2x2 figure (no intermediate perf/cv files):
       top row: mean performance (front/back)
       bottom:  mean CV (front/back)
+      x-axis: raw Gaussian noise magnitude alpha
     """
     os.makedirs(out_dir, exist_ok=True)
 
     def mode_to_value(mode: str) -> float:
-        mode_str = str(mode)
-        nums = re.findall(r"[0-9]+(?:\\.[0-9]+)?", mode_str)
-        for tok in nums:
-            try:
-                return float(tok)
-            except Exception:
-                continue
-        return np.nan
+        return _mode_numeric_value(mode)
 
     mode_vals = []
     for m in combined["mode"].unique():
@@ -1721,28 +1714,20 @@ def plot_weight_gauss_perf_cv_grid(
         print("[warn] plot_weight_gauss_perf_cv_grid: no modes with numeric values found.")
         return
     mode_vals = sorted(mode_vals, key=lambda t: t[1])
-    pos_logs = [np.log10(v) for _, v in mode_vals if v > 0]
-    if not pos_logs:
-        print("[warn] plot_weight_gauss_perf_cv_grid: need at least one positive noise magnitude.")
-        return
     has_zero = any(v == 0 for _, v in mode_vals)
-    x_zero = (min(pos_logs) - 0.60) if has_zero else np.nan
+    x_zero = 0.0 if has_zero else np.nan
 
     def _x_plot(v: float) -> float:
-        if v > 0:
-            return float(np.log10(v))
-        if v == 0 and has_zero:
-            return float(x_zero)
-        return float("nan")
+        return float(v) if np.isfinite(v) else float("nan")
 
     mean_tbl = _compute_mean_table(combined)
     mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
     cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
-    inv_metric = "kl_to_gaussian"
+    inv_metric = "wt_mag_cv" if "wt_mag_cv" in combined.columns else "kl_to_gaussian"
     if inv_metric not in combined.columns:
         print(
-            "[warn] plot_weight_gauss_perf_cv_grid: required column 'kl_to_gaussian' not found. "
-            "Regenerate combined CSVs from runs that include kl_to_gaussian."
+            "[warn] plot_weight_gauss_perf_cv_grid: required column 'wt_mag_cv' or 'kl_to_gaussian' not found. "
+            "Regenerate combined CSVs from runs that include weight diagnostics."
         )
         return
     inv_tbl = _compute_mean_table(combined, metrics=[inv_metric])
@@ -1751,6 +1736,7 @@ def plot_weight_gauss_perf_cv_grid(
         .groupby("mode")["mean"]
         .mean()
     )
+    z_label = "Magnitude CV" if inv_metric == "wt_mag_cv" else "KL to Gaussian"
     if kl_lookup.empty:
         print(f"[warn] plot_weight_gauss_perf_cv_grid: no values for invariance metric '{inv_metric}'.")
         return
@@ -1761,7 +1747,9 @@ def plot_weight_gauss_perf_cv_grid(
         return
 
     max_kl = np.nanmax(kl_lookup.values) if len(kl_lookup) else np.nan
-    if np.isfinite(max_kl) and max_kl > 0:
+    if inv_metric == "wt_mag_cv":
+        z_scale = 1.0
+    elif np.isfinite(max_kl) and max_kl > 0:
         z_power = int(np.floor(np.log10(max_kl)))
         z_scale = 10.0 ** z_power
     else:
@@ -1971,22 +1959,15 @@ def plot_weight_gauss_perf_cv_grid(
             ax.set_axis_off()
             return False
 
-        ax.set_xlabel("log10(Noise Mag.)", fontsize=18, labelpad=6)
+        ax.set_xlabel("Noise Mag.", fontsize=18, labelpad=6)
         ax.set_ylabel(y_label, fontsize=18, labelpad=7)
         ax.zaxis.set_rotate_label(False)
-        ax.set_zlabel("KL to Gaussian", fontsize=18, labelpad=10, rotation=90)
+        ax.set_zlabel(z_label, fontsize=18, labelpad=10, rotation=90)
         ax.zaxis.set_label_coords(1.06, 0.50)
         ax.xaxis.label.set_clip_on(False)
         ax.yaxis.label.set_clip_on(False)
         ax.zaxis.label.set_clip_on(False)
-        xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
-        xtick_pos = [np.log10(v) for v in xticks]
-        xtick_lbl = [str(v) for v in xticks]
-        if has_zero:
-            xtick_pos = [x_zero] + xtick_pos
-            xtick_lbl = ["0"] + xtick_lbl
-        ax.set_xticks(xtick_pos)
-        ax.set_xticklabels(xtick_lbl)
+        ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5))
         x_pad = 0.08 * (x_max_line - x_min_line if x_max_line > x_min_line else 1.0)
         ax.set_xlim(x_min_line - x_pad, x_max_line + x_pad)
         if np.isfinite(y_lo_panel) and np.isfinite(y_hi_panel):
@@ -2643,15 +2624,9 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
+    #plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
-    #plot_weight_gauss_perf_cv_grid(
-    #    disp,
-    #    combined,
-    #    args.out_dir,
-    #    show=False,
-    #    local_sign_binary_csv=args.local_sign_binary_csv,
-    #)
+    plot_weight_gauss_perf_cv_grid(    disp, combined, args.out_dir, show=False, local_sign_binary_csv=args.local_sign_binary_csv,)
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
