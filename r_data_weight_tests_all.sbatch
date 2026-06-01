@@ -50,7 +50,7 @@ else
   ALPHAS=(0.0 1.0 5.0 10.0)
 fi
 
-OUTROOT="final_weight_tests_all_sep"
+OUTROOT="final_weight_tests_all"
 OUTDIR="${OUTROOT}/${JOB_KIND}/chunk_${REPEAT_RANK}"
 mkdir -p "${OUTDIR}"
 
@@ -61,9 +61,9 @@ TOTAL_REPEATS=250
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
-RANDOM_NODE_SUBSETS=1
-K_IN=60
-K_OUT=60
+RANDOM_NODE_SUBSETS=0
+K_IN=""
+K_OUT=""
 SUBSET_SEED_OFFSET=""
 
 SUBSET_ARGS=()
