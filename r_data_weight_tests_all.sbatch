@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=1-00:00:00
-#SBATCH --array=0-79             # 4 weight-test variants x 20 repeat partitions
+#SBATCH --array=0-31             # 32 total array tasks across all weight-test variants
 #SBATCH --output=logs/%x-%A_%a.out
 #SBATCH --error=logs/%x-%A_%a.err
 
@@ -22,28 +22,29 @@ export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 VARIANTS=(
   "weight_test_unsigned"
   "weight_test_signed"
+  "weight_test_cel_to_shuffled_cel"
   "weight_test_binary_to_cel"
   "weight_test_binary_to_shuffled_cel"
 )
 
 N_VARIANTS=${#VARIANTS[@]}
 ARRAY_MIN="${SLURM_ARRAY_TASK_MIN:-0}"
-ARRAY_MAX="${SLURM_ARRAY_TASK_MAX:-79}"
+ARRAY_MAX="${SLURM_ARRAY_TASK_MAX:-31}"
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 TASK_OFFSET=$(( TASK_ID - ARRAY_MIN ))
 TOTAL_ARRAY_TASKS=$(( ARRAY_MAX - ARRAY_MIN + 1 ))
 
-if (( TOTAL_ARRAY_TASKS % N_VARIANTS != 0 )); then
-  echo "Array size ${TOTAL_ARRAY_TASKS} must be divisible by ${N_VARIANTS} variants." >&2
+if (( TOTAL_ARRAY_TASKS < N_VARIANTS )); then
+  echo "Array size ${TOTAL_ARRAY_TASKS} must be at least ${N_VARIANTS} variants." >&2
   exit 1
 fi
 
 VARIANT_IDX=$(( TASK_OFFSET % N_VARIANTS ))
 REPEAT_RANK=$(( TASK_OFFSET / N_VARIANTS ))
-REPEAT_SPLIT=$(( TOTAL_ARRAY_TASKS / N_VARIANTS ))
+REPEAT_SPLIT=$(( (TOTAL_ARRAY_TASKS + N_VARIANTS - 1 - VARIANT_IDX) / N_VARIANTS ))
 JOB_KIND="${VARIANTS[VARIANT_IDX]}"
 
-if [[ "${JOB_KIND}" == weight_test_binary_to_* ]]; then
+if [[ "${JOB_KIND}" == weight_test_binary_to_* || "${JOB_KIND}" == "weight_test_cel_to_shuffled_cel" ]]; then
   ALPHAS=(0.0 0.25 0.5 0.75 1.0)
 else
   ALPHAS=(0.0 1.0 5.0 10.0)

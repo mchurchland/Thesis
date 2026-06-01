@@ -20,7 +20,6 @@ import numpy as np
 import torch
 from matplotlib import colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.lines import Line2D
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:

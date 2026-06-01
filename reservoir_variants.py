@@ -9,7 +9,7 @@ import torch
 from scipy.stats import entropy, halfnorm
 
 from network_stats.run_one import run_one
-from util.util import build_reservoir, degree_matched_shuffle_directed, _cel_to_bin, \
+from util.util import build_reservoir, _cel_to_bin, \
     _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel,scale_to_sr
 from sklearn.metrics.pairwise import cosine_similarity
 

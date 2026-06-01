@@ -49,8 +49,8 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
 fi
 
 # choose which variant this script runs
-JOB_KIND="weight_test_unsigned"   # weight_test_unsigned / weight_test_signed / weight_test_binary_to_cel / weight_test_binary_to_shuffled_cel
-if [[ "${JOB_KIND}" == weight_test_binary_to_* ]]; then
+JOB_KIND="weight_test_unsigned"   # weight_test_unsigned / weight_test_signed / weight_test_cel_to_shuffled_cel / weight_test_binary_to_cel / weight_test_binary_to_shuffled_cel
+if [[ "${JOB_KIND}" == weight_test_binary_to_* || "${JOB_KIND}" == "weight_test_cel_to_shuffled_cel" ]]; then
   ALPHAS=(0.0 0.25 0.5 0.75 1.0)
 else
   ALPHAS=(0.0 1.0 5.0 10.0)

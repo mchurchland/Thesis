@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from torch import Tensor
 import torch
 import os
