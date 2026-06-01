@@ -52,18 +52,6 @@ def _kl_empirical_to_fitted_gaussian(
     return float(entropy(p, q)) ## this is just \sum 1/n log(p_i/q_i) where p is the empirical distribution and q is the fitted distribution
 
 
-def _weight_magnitude_cv(values: np.ndarray, eps: float = 1e-12) -> float:
-    x = values.reshape(-1)
-    x = x[np.isfinite(x)]
-    x = np.abs(x[x != 0])
-    if x.size == 0:
-        return float("nan")
-    mean = float(np.mean(x))
-    if abs(mean) <= eps:
-        return float("nan")
-    return float(np.std(x) / mean)
-
-
 @dataclass(frozen=True)
 class SimulationParams:
     """Container for the time-series/metric settings used by run_one."""
@@ -175,7 +163,6 @@ def _run_variant_row(
         Win = _apply_input_subset(Win, ctx.input_idx)
         w_np = Wt.detach().cpu().numpy().reshape(-1)
         kl_to_gaussian = _kl_empirical_to_fitted_gaussian(w_np)
-        wt_mag_cv = _weight_magnitude_cv(w_np)
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
@@ -198,7 +185,6 @@ def _run_variant_row(
                     )[0, 0]
                 ),
                 kl_to_gaussian,
-                wt_mag_cv,
                 seed_base,
                 ctx.src_tag,
             )
@@ -213,7 +199,7 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "kl_to_gaussian", "wt_mag_cv", "seed", "src"])
+            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "kl_to_gaussian", "seed", "src"])
         w.writerows(rows)
 
 

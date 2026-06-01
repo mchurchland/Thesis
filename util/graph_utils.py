@@ -43,6 +43,7 @@ def _read_glob(pattern: str) -> pd.DataFrame | None:
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Fill missing columns with defaults and order them (pandas-style align/assign)."""
     df = df.copy()
+    df = df.drop(columns=["wt_mag_cv"], errors="ignore")
     needed = ["mode","shuffle_id","rho_target","leak","input_scale","MC","IPC","KR","GR","src"]
     for c in needed:
         if c not in df.columns:
@@ -173,7 +174,7 @@ def _compute_mean_table(combined: pd.DataFrame, metrics: list[str] | None = None
     """
     df = _assign_group_ids(combined)
     if metrics is None:
-        metrics = [m for m in ("MC","IPC","KR","GR","kl_to_gaussian","wt_mag_cv","cosine_similarity","wt_mean","mean") if m in df.columns]
+        metrics = [m for m in ("MC","IPC","KR","GR","kl_to_gaussian","cosine_similarity","wt_mean","mean") if m in df.columns]
     metrics = [m for m in metrics if m in df.columns]
     if not metrics:
         return pd.DataFrame(columns=["mode","src","group_id","metric","mean","n_hparams"])

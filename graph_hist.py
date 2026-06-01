@@ -213,6 +213,11 @@ def parse_args():
         default="",
         help="Optional extra combined CSV used only to overlay mode='real' as a wall on weight-gauss plots.",
     )
+    ap.add_argument(
+        "--weight-gauss-cv-only",
+        action="store_true",
+        help="Plot weight-test modes as 2D interpolation fraction vs mean CV and mean metric value; do not use KL.",
+    )
     return ap.parse_args()
 
 
@@ -431,9 +436,6 @@ def _normalize_compare_metrics(spec: str):
         "cosine": "cosine_similarity",
         "kl": "kl_to_gaussian",
         "kl_gaussian": "kl_to_gaussian",
-        "mag_cv": "wt_mag_cv",
-        "magnitude_cv": "wt_mag_cv",
-        "wt_mag_cv": "wt_mag_cv",
     }
     out = []
     for tok in str(spec).split(","):
@@ -491,7 +493,7 @@ def plot_mode_self_drop_comparison(
         print("[warn] no overlapping mode/metric rows to plot self-drop comparison.")
         return
 
-    metric_order = ["MC", "IPC", "KR", "GR", "kl_to_gaussian", "wt_mag_cv", "cosine_similarity", "wt_mean"]
+    metric_order = ["MC", "IPC", "KR", "GR", "kl_to_gaussian", "cosine_similarity", "wt_mean"]
     metrics_present = list(dat["metric"].dropna().unique())
     metrics = [m for m in metric_order if m in metrics_present] + [m for m in metrics_present if m not in metric_order]
     pivot = dat.pivot_table(
@@ -1686,6 +1688,114 @@ def plot_weight_gauss_mean_perf(
         print(f"[saved] {out_path}")
 
 
+def plot_weight_gauss_cv_metric_2d(
+    disp: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    show: bool = True,
+):
+    """
+    2D weight-test plot for interpolation sweeps:
+      x = interpolation fraction parsed from mode
+      left y = mean CV across repeat groups
+      right y = mean metric value across repeat groups
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    if disp.empty:
+        print("[warn] plot_weight_gauss_cv_metric_2d: dispersion table is empty.")
+        return
+
+    mode_vals = []
+    for mode in disp["mode"].dropna().unique():
+        value = _mode_numeric_value(mode)
+        if np.isfinite(value):
+            mode_vals.append((mode, value))
+    if not mode_vals:
+        print("[warn] plot_weight_gauss_cv_metric_2d: no modes with numeric values found.")
+        return
+    mode_vals = sorted(mode_vals, key=lambda t: t[1])
+
+    mean_tbl = _compute_mean_table(combined)
+    cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
+    mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
+    disp_metrics = set(disp["metric"].dropna().unique())
+    mean_metrics = set(mean_tbl["metric"].dropna().unique())
+    metrics = [m for m in ("MC", "IPC", "KR", "GR") if m in disp_metrics and m in mean_metrics]
+    if not metrics:
+        print("[warn] plot_weight_gauss_cv_metric_2d: no overlapping MC/IPC/KR/GR metrics found.")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.8, 3.6), dpi=300, sharex=True)
+    colors = mpl.colormaps["tab10"]
+
+    def _draw_panel(ax, lookup, y_label: str) -> bool:
+        plotted = False
+        for idx, metric in enumerate(metrics):
+            rows = []
+            for mode, x_val in mode_vals:
+                y_val = lookup.get((mode, metric), np.nan)
+                if np.isfinite(x_val) and np.isfinite(y_val):
+                    rows.append((float(x_val), float(y_val)))
+            if not rows:
+                continue
+            rows = sorted(rows, key=lambda t: t[0])
+            xs, ys = map(np.asarray, zip(*rows))
+            ax.plot(
+                xs,
+                ys,
+                marker="o",
+                linewidth=2.0,
+                markersize=5.0,
+                color=colors(idx % 10),
+                label=metric,
+            )
+            plotted = True
+        ax.set_ylabel(y_label, fontsize=14)
+        ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5))
+        ax.tick_params(axis="both", labelsize=11)
+        ax.grid(True, alpha=0.25, linewidth=0.8)
+        return plotted
+
+    plotted_cv = _draw_panel(axes[0], cv_lookup, "mean CV")
+    plotted_mean = _draw_panel(axes[1], mean_lookup, "Mean Metric Value")
+
+    if not (plotted_cv or plotted_mean):
+        plt.close(fig)
+        print("[warn] plot_weight_gauss_cv_metric_2d: no finite data to plot.")
+        return
+
+    x_vals = [value for _, value in mode_vals if np.isfinite(value)]
+    x_min, x_max = float(np.min(x_vals)), float(np.max(x_vals))
+    x_pad = 0.06 * (x_max - x_min if x_max > x_min else 1.0)
+    x_label = "Interpolation fraction"
+    for ax in axes:
+        ax.set_xlim(x_min - x_pad, x_max + x_pad)
+        ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=min(6, max(2, len(set(x_vals))))))
+        ax.set_xlabel(x_label, fontsize=14)
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.subplots_adjust(left=0.075, right=0.99, bottom=0.20, top=0.92, wspace=0.14)
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.025),
+            ncol=len(handles),
+            frameon=False,
+            fontsize=10,
+        )
+    else:
+        fig.subplots_adjust(left=0.075, right=0.99, bottom=0.20, top=0.97, wspace=0.14)
+
+    out_png = os.path.join(out_dir, "weight_mean_cv_metric_2d.png")
+    fig.savefig(out_png, dpi=600, bbox_inches="tight", facecolor="white")
+    if show:
+        plt.show()
+    plt.close(fig)
+    print(f"[saved] {out_png}")
+
+
 def plot_weight_gauss_perf_cv_grid(
     disp: pd.DataFrame,
     combined: pd.DataFrame,
@@ -1723,11 +1833,11 @@ def plot_weight_gauss_perf_cv_grid(
     mean_tbl = _compute_mean_table(combined)
     mean_lookup = mean_tbl.groupby(["mode", "metric"])["mean"].mean()
     cv_lookup = disp.groupby(["mode", "metric"])["dispersion"].mean()
-    inv_metric = "wt_mag_cv" if "wt_mag_cv" in combined.columns else "kl_to_gaussian"
+    inv_metric = "kl_to_gaussian"
     if inv_metric not in combined.columns:
         print(
-            "[warn] plot_weight_gauss_perf_cv_grid: required column 'wt_mag_cv' or 'kl_to_gaussian' not found. "
-            "Regenerate combined CSVs from runs that include weight diagnostics."
+            "[warn] plot_weight_gauss_perf_cv_grid: required column 'kl_to_gaussian' not found. "
+            "Regenerate combined CSVs from runs that include KL weight diagnostics."
         )
         return
     inv_tbl = _compute_mean_table(combined, metrics=[inv_metric])
@@ -1736,7 +1846,8 @@ def plot_weight_gauss_perf_cv_grid(
         .groupby("mode")["mean"]
         .mean()
     )
-    z_label = "Magnitude CV" if inv_metric == "wt_mag_cv" else "KL to Gaussian"
+    z_label = "KL to Gaussian"
+    print(f"[info] plot_weight_gauss_perf_cv_grid: using {inv_metric} for z-axis ({z_label}).")
     if kl_lookup.empty:
         print(f"[warn] plot_weight_gauss_perf_cv_grid: no values for invariance metric '{inv_metric}'.")
         return
@@ -1747,9 +1858,7 @@ def plot_weight_gauss_perf_cv_grid(
         return
 
     max_kl = np.nanmax(kl_lookup.values) if len(kl_lookup) else np.nan
-    if inv_metric == "wt_mag_cv":
-        z_scale = 1.0
-    elif np.isfinite(max_kl) and max_kl > 0:
+    if np.isfinite(max_kl) and max_kl > 0:
         z_power = int(np.floor(np.log10(max_kl)))
         z_scale = 10.0 ** z_power
     else:
@@ -2626,7 +2735,16 @@ def main():
     # Plots
     #plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
-    plot_weight_gauss_perf_cv_grid(    disp, combined, args.out_dir, show=True, local_sign_binary_csv=args.local_sign_binary_csv,)
+    if args.weight_gauss_cv_only:
+        plot_weight_gauss_cv_metric_2d(disp, combined, args.out_dir, show=False)
+    else:
+        plot_weight_gauss_perf_cv_grid(
+            disp,
+            combined,
+            args.out_dir,
+            show=False,
+            local_sign_binary_csv=args.local_sign_binary_csv,
+        )
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
