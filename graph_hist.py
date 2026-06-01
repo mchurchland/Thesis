@@ -2626,7 +2626,7 @@ def main():
     # Plots
     #plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
-    plot_weight_gauss_perf_cv_grid(    disp, combined, args.out_dir, show=False, local_sign_binary_csv=args.local_sign_binary_csv,)
+    plot_weight_gauss_perf_cv_grid(    disp, combined, args.out_dir, show=True, local_sign_binary_csv=args.local_sign_binary_csv,)
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     #plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
