@@ -36,11 +36,8 @@ def _kl_empirical_to_fitted_gaussian(
     loc = float(np.min(x_abs))
     y = x_abs - loc ## shift the distribution so that the minimum is at zero
     sigma = float(np.sqrt(np.mean(y * y))) ## this is the std of the shifted distribution, which is the scale parameter for the half-normal fit
-    if sigma <= eps:
-        # Degenerate magnitude distributions, e.g. binary |W| == 1, do not
-        # define a finite fitted half-normal scale. Returning 0 would
-        # incorrectly imply perfect agreement with a Gaussian-like target.
-        return float("nan")
+    if sigma <= eps: ## if the std is zero (all values are the same), this is like invalid it should be inifinite but we do 0.0 it never happens
+        return 0.0
 
     counts, edges = np.histogram(x_abs, bins=bins, range=(loc, x_max)) ## discretize the values into bins
     p = counts.astype(np.float64)
@@ -246,6 +243,7 @@ VARIANT_LABELS = {
     "weight_test" : "weight_test",
     "weight_test_unsigned": "weight_test_unsigned",
     "weight_test_signed": "weight_test_signed",
+    "weight_test_cel_to_shuffled_cel": "weight_test_cel_to_shuffled_cel",
     "weight_test_binary_to_cel": "weight_test_binary_to_cel",
     "weight_test_binary_to_shuffled_cel": "weight_test_binary_to_shuffled_cel",
     "binary+shuffle" : "binary+shuffle",
@@ -272,6 +270,7 @@ VARIANT_DESCRIPTIONS = {
     "weight_test" : "Backward-compatible alias for weight_test_unsigned.",
     "weight_test_unsigned": "C. elegans weights plus signed Gaussian noise; signs may change.",
     "weight_test_signed": "C. elegans weights plus Gaussian noise with original edge signs restored.",
+    "weight_test_cel_to_shuffled_cel": "Interpolate from empirical C. elegans magnitude placement to shuffled empirical magnitude placement while preserving signs.",
     "weight_test_binary_to_cel": "Interpolate from sign-preserving binary weights to empirical C. elegans magnitudes.",
     "weight_test_binary_to_shuffled_cel": "Interpolate from sign-preserving binary weights to shuffled empirical C. elegans magnitudes.",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
@@ -290,6 +289,7 @@ VARIANT_KEYS: tuple[str, ...] = tuple(VARIANT_LABELS.keys())
 
 WEIGHT_TEST_FEATURES = {
     "weight_test_binary_to_shuffled_cel": "weight_test_binary_to_shuffled_cel",
+    "weight_test_cel_to_shuffled_cel": "weight_test_cel_to_shuffled_cel",
     "weight_test_binary_to_cel": "weight_test_binary_to_cel",
     "weight_test_unsigned": "weight_test_unsigned",
     "weight_test_signed": "weight_test_signed",

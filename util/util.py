@@ -92,6 +92,27 @@ def _binary_to_cel_interpolation(
     W[mask] = signs * interpolated_magnitudes
     return W
 
+
+def _cel_to_shuffled_cel_interpolation(
+    Wbio: np.ndarray,
+    alpha: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    if not (0.0 <= alpha <= 1.0):
+        raise ValueError("CE-to-shuffled-CE interpolation alpha must be between 0 and 1.")
+
+    Wbio = Wbio.astype(np.float32, copy=False)
+    W = np.zeros_like(Wbio, dtype=np.float32)
+    mask = Wbio != 0
+    signs = np.sign(Wbio[mask]).astype(np.float32)
+    magnitudes = np.abs(Wbio[mask]).astype(np.float32)
+    shuffled_magnitudes = magnitudes.copy()
+    rng.shuffle(shuffled_magnitudes)
+
+    interpolated_magnitudes = (1.0 - alpha) * magnitudes + alpha * shuffled_magnitudes
+    W[mask] = signs * interpolated_magnitudes
+    return W
+
 def load_connectome(adj_path: str | None, ei_path: str | None):
     """
     Load C. elegans adjacency and EI labels (Varshney et al., 2011, PLoS Comput. Biol. 7:e1001066).
@@ -269,6 +290,15 @@ def build_reservoir(
             alpha=alpha,
             rng=rng,
             shuffle_magnitudes=True,
+        )
+    elif feature_conn == "weight_test_cel_to_shuffled_cel":
+        if ce_W_bio is None:
+            raise ValueError("Local sign match requires CE adjacency.")
+        assert alpha != None
+        W = _cel_to_shuffled_cel_interpolation(
+            ce_W_bio,
+            alpha=alpha,
+            rng=rng,
         )
         
     elif feature_conn == "sign_test_cel":

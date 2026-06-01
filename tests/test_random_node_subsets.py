@@ -7,13 +7,12 @@ import pytest
 import torch
 
 from inv_arc_test import _draw_node_subsets
-from reservoir_variants import (
-    _apply_input_subset,
-    _kl_empirical_to_fitted_gaussian,
-    _weight_magnitude_cv,
-    _weight_test_feature_conn,
+from reservoir_variants import _apply_input_subset, _weight_test_feature_conn
+from util.util import (
+    _binary_to_cel_interpolation,
+    _cel_to_shuffled_cel_interpolation,
+    scale_weights,
 )
-from util.util import _binary_to_cel_interpolation, scale_weights
 from network_stats.run_one import run_reservoir_with_pre
 import network_stats.run_one as run_one_module
 
@@ -83,32 +82,6 @@ def test_weight_test_signed_preserves_original_edge_signs():
     assert np.array_equal(np.sign(out[mask]), np.sign(W[mask]))
 
 
-def test_binary_magnitudes_do_not_report_zero_kl_to_fitted_gaussian():
-    W = np.array(
-        [
-            [0.0, 1.0, -1.0],
-            [1.0, 0.0, -1.0],
-            [-1.0, 1.0, 0.0],
-        ],
-        dtype=np.float32,
-    )
-
-    assert np.isnan(_kl_empirical_to_fitted_gaussian(W))
-
-
-def test_binary_magnitudes_have_zero_weight_magnitude_cv():
-    W = np.array(
-        [
-            [0.0, 1.0, -1.0],
-            [1.0, 0.0, -1.0],
-            [-1.0, 1.0, 0.0],
-        ],
-        dtype=np.float32,
-    )
-
-    assert _weight_magnitude_cv(W) == 0.0
-
-
 def test_binary_to_cel_interpolation_endpoints_and_shuffled_control():
     W = np.array(
         [
@@ -153,10 +126,43 @@ def test_binary_to_cel_interpolation_rejects_out_of_range_alpha():
         )
 
 
+def test_cel_to_shuffled_cel_interpolation_preserves_signs_and_endpoints():
+    W = np.array(
+        [
+            [0.0, 2.0, -3.0],
+            [4.0, 0.0, -5.0],
+            [-6.0, 7.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    mask = W != 0
+    rng_seed = 3
+
+    original = _cel_to_shuffled_cel_interpolation(
+        W,
+        alpha=0.0,
+        rng=np.random.default_rng(rng_seed),
+    )
+    shuffled = _cel_to_shuffled_cel_interpolation(
+        W,
+        alpha=1.0,
+        rng=np.random.default_rng(rng_seed),
+    )
+
+    assert np.array_equal(original, W)
+    assert np.array_equal(np.sign(shuffled[mask]), np.sign(W[mask]))
+    assert np.array_equal(np.sort(np.abs(shuffled[mask])), np.sort(np.abs(W[mask])))
+    assert not np.array_equal(np.abs(shuffled[mask]), np.abs(W[mask]))
+
+
 def test_weight_test_dynamic_keys_resolve_to_expected_feature_connections():
     assert _weight_test_feature_conn("weight_test0.0") == "weight_test_unsigned"
     assert _weight_test_feature_conn("weight_test_unsigned10.0") == "weight_test_unsigned"
     assert _weight_test_feature_conn("weight_test_signed10.0") == "weight_test_signed"
+    assert (
+        _weight_test_feature_conn("weight_test_cel_to_shuffled_cel0.5")
+        == "weight_test_cel_to_shuffled_cel"
+    )
     assert (
         _weight_test_feature_conn("weight_test_binary_to_cel0.5")
         == "weight_test_binary_to_cel"

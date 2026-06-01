@@ -81,6 +81,7 @@ WEIGHT_TEST_JOB_KEYS = (
     "weight_test",
     "weight_test_unsigned",
     "weight_test_signed",
+    "weight_test_cel_to_shuffled_cel",
     "weight_test_binary_to_cel",
     "weight_test_binary_to_shuffled_cel",
 )
@@ -447,6 +448,7 @@ def main():
             return args.sid + rep_idx
 
         if job_key in (
+            "weight_test_cel_to_shuffled_cel",
             "weight_test_binary_to_cel",
             "weight_test_binary_to_shuffled_cel",
         ):
