@@ -245,6 +245,141 @@ def _mode_numeric_value(mode: str) -> float:
     return np.nan
 
 
+def _write_weight_metric_difference_table(
+    y_lookup,
+    y_label: str,
+    out_dir: str,
+    tex_name: str,
+    mode_vals,
+    metrics,
+    zero_mode=None,
+    overlay_lookup=None,
+    log_prefix: str = "weight_metric_difference_table",
+    mode_value_symbol: str = r"\alpha",
+):
+    baseline_info = {}
+    for metric in metrics:
+        baseline_value = np.nan
+        baseline_mode = ""
+        baseline_source = ""
+
+        if overlay_lookup is not None:
+            baseline_value = overlay_lookup.get(("real", metric), np.nan)
+            if np.isfinite(baseline_value):
+                baseline_mode = "real"
+                baseline_source = "overlay"
+
+        if zero_mode is not None:
+            zero_value = y_lookup.get((zero_mode, metric), np.nan)
+            if np.isfinite(zero_value):
+                baseline_value = zero_value
+                baseline_mode = zero_mode
+                baseline_source = "zero-noise mode"
+
+        if not np.isfinite(baseline_value):
+            for mode, _ in mode_vals:
+                cand = y_lookup.get((mode, metric), np.nan)
+                if np.isfinite(cand):
+                    baseline_value = cand
+                    baseline_mode = str(mode)
+                    baseline_source = "first finite mode"
+                    break
+
+        if np.isfinite(baseline_value):
+            baseline_info[metric] = {
+                "baseline_value": float(baseline_value),
+                "baseline_mode": baseline_mode,
+                "baseline_source": baseline_source,
+            }
+
+    if not baseline_info:
+        return
+
+    def _latex_escape(text: str) -> str:
+        out = str(text)
+        replacements = {
+            "\\": r"\textbackslash{}",
+            "&": r"\&",
+            "%": r"\%",
+            "_": r"\_",
+            "#": r"\#",
+            "$": r"\$",
+            "{": r"\{",
+            "}": r"\}",
+        }
+        for src, dst in replacements.items():
+            out = out.replace(src, dst)
+        return out
+
+    def _fmt_num(x: float, digits: int = 3) -> str:
+        if not np.isfinite(x):
+            return "--"
+        return f"{x:.{digits}g}"
+
+    def _fmt_signed(x: float, digits: int = 3) -> str:
+        if not np.isfinite(x):
+            return "--"
+        return f"{x:+.{digits}g}"
+
+    def _fmt_mode_value(raw_value: float) -> str:
+        if not np.isfinite(raw_value):
+            return "NA"
+        if abs(raw_value - round(raw_value)) < 1e-12:
+            return str(int(round(raw_value)))
+        return f"{raw_value:.3g}"
+
+    data_modes = []
+    for mode, raw_value in mode_vals:
+        if mode == zero_mode:
+            continue
+        if any(np.isfinite(y_lookup.get((mode, metric), np.nan)) for metric in metrics):
+            data_modes.append((mode, raw_value))
+
+    lines = [
+        "\\begin{tabular}{" + ("l" + "c" * (1 + len(data_modes))) + "}",
+        "\\toprule",
+    ]
+
+    header_cells = ["Metric", "Baseline"]
+    for _, raw_value in data_modes:
+        header_cells.append(f"${mode_value_symbol}={_fmt_mode_value(raw_value)}$")
+    lines.append(" & ".join(header_cells) + r" \\")
+    lines.append("\\midrule")
+
+    for metric in metrics:
+        info = baseline_info.get(metric)
+        if info is None:
+            continue
+        baseline_value = info["baseline_value"]
+        denom = abs(baseline_value)
+        row_cells = [_latex_escape(metric), _fmt_num(baseline_value, digits=4)]
+        for mode, _ in data_modes:
+            value = y_lookup.get((mode, metric), np.nan)
+            if not np.isfinite(value):
+                row_cells.append("--")
+                continue
+            delta = float(value - baseline_value)
+            if denom > 1e-12:
+                pct_delta = 100.0 * delta / denom
+                cell = f"{_fmt_signed(delta)} ({_fmt_signed(pct_delta)}\\%)"
+            else:
+                cell = _fmt_signed(delta)
+            row_cells.append(cell)
+        lines.append(" & ".join(row_cells) + r" \\")
+
+    lines.append("\\bottomrule")
+    lines.append("\\end{tabular}")
+    latex_table = "\n".join(lines)
+
+    out_tex = _safe_path(os.path.join(out_dir, tex_name))
+    with open(out_tex, "w", encoding="utf-8") as handle:
+        handle.write(latex_table + "\n")
+
+    print(f"[latex] {log_prefix}: {y_label}")
+    print(latex_table)
+    print(f"[saved] {out_tex}")
+
+
 def _read_combined_csv(path: str) -> pd.DataFrame:
     """Read combined CSV and trim malformed extra columns per row if needed."""
     try:
@@ -1726,6 +1861,30 @@ def plot_weight_gauss_cv_metric_2d(
         print("[warn] plot_weight_gauss_cv_metric_2d: no overlapping MC/IPC/KR/GR metrics found.")
         return
 
+    zero_mode = next((mode for mode, raw in mode_vals if raw == 0), None)
+    _write_weight_metric_difference_table(
+        cv_lookup,
+        "mean CV",
+        out_dir,
+        tex_name="weight_gauss_diff_mean_cv_table.tex",
+        mode_vals=mode_vals,
+        metrics=metrics,
+        zero_mode=zero_mode,
+        log_prefix="plot_weight_gauss_cv_metric_2d",
+        mode_value_symbol="f",
+    )
+    _write_weight_metric_difference_table(
+        mean_lookup,
+        "Mean Metric Value",
+        out_dir,
+        tex_name="weight_gauss_diff_mean_perf_table.tex",
+        mode_vals=mode_vals,
+        metrics=metrics,
+        zero_mode=zero_mode,
+        log_prefix="plot_weight_gauss_cv_metric_2d",
+        mode_value_symbol="f",
+    )
+
     fig, axes = plt.subplots(1, 2, figsize=(9.8, 3.6), dpi=300, sharex=True)
     colors = mpl.colormaps["tab10"]
 
@@ -1883,133 +2042,6 @@ def plot_weight_gauss_perf_cv_grid(
 
     zero_mode = next((mode for mode, raw in mode_vals if raw == 0), None)
 
-    def _latex_escape(text: str) -> str:
-        out = str(text)
-        replacements = {
-            "\\": r"\textbackslash{}",
-            "&": r"\&",
-            "%": r"\%",
-            "_": r"\_",
-            "#": r"\#",
-            "$": r"\$",
-            "{": r"\{",
-            "}": r"\}",
-        }
-        for src, dst in replacements.items():
-            out = out.replace(src, dst)
-        return out
-
-    def _fmt_num(x: float, digits: int = 3) -> str:
-        if not np.isfinite(x):
-            return "--"
-        return f"{x:.{digits}g}"
-
-    def _fmt_signed(x: float, digits: int = 3) -> str:
-        if not np.isfinite(x):
-            return "--"
-        return f"{x:+.{digits}g}"
-
-    def _fmt_mode_value(raw_value: float) -> str:
-        if not np.isfinite(raw_value):
-            return "NA"
-        if abs(raw_value - round(raw_value)) < 1e-12:
-            return str(int(round(raw_value)))
-        return f"{raw_value:.3g}"
-
-    def _print_metric_differences(y_lookup, y_label: str, tex_name: str):
-        overlay_lookup = None
-        if overlay is not None:
-            overlay_lookup = overlay["mean_lookup"] if y_label == "Mean Metric Value" else overlay["cv_lookup"]
-
-        baseline_info = {}
-        for metric in metrics:
-            baseline_value = np.nan
-            baseline_mode = ""
-            baseline_source = ""
-
-            if overlay_lookup is not None:
-                baseline_value = overlay_lookup.get(("real", metric), np.nan)
-                if np.isfinite(baseline_value):
-                    baseline_mode = "real"
-                    baseline_source = "overlay"
-
-            if zero_mode is not None:
-                zero_value = y_lookup.get((zero_mode, metric), np.nan)
-                if np.isfinite(zero_value):
-                    baseline_value = zero_value
-                    baseline_mode = zero_mode
-                    baseline_source = "zero-noise mode"
-
-            if not np.isfinite(baseline_value):
-                for mode, _ in mode_vals:
-                    cand = y_lookup.get((mode, metric), np.nan)
-                    if np.isfinite(cand):
-                        baseline_value = cand
-                        baseline_mode = str(mode)
-                        baseline_source = "first finite mode"
-                        break
-
-            if np.isfinite(baseline_value):
-                baseline_info[metric] = {
-                    "baseline_value": float(baseline_value),
-                    "baseline_mode": baseline_mode,
-                    "baseline_source": baseline_source,
-                }
-
-        if not baseline_info:
-            return
-
-        data_modes = []
-        for mode, raw_value in mode_vals:
-            if mode == zero_mode:
-                continue
-            if any(np.isfinite(y_lookup.get((mode, metric), np.nan)) for metric in metrics):
-                data_modes.append((mode, raw_value))
-
-        lines = [
-            "\\begin{tabular}{" + ("l" + "c" * (1 + len(data_modes))) + "}",
-            "\\toprule",
-        ]
-
-        header_cells = ["Metric", "Baseline"]
-        for _, raw_value in data_modes:
-            header_cells.append(f"$\\alpha={_fmt_mode_value(raw_value)}$")
-        lines.append(" & ".join(header_cells) + r" \\")
-        lines.append("\\midrule")
-
-        for metric in metrics:
-            info = baseline_info.get(metric)
-            if info is None:
-                continue
-            baseline_value = info["baseline_value"]
-            denom = abs(baseline_value)
-            row_cells = [_latex_escape(metric), _fmt_num(baseline_value, digits=4)]
-            for mode, _ in data_modes:
-                value = y_lookup.get((mode, metric), np.nan)
-                if not np.isfinite(value):
-                    row_cells.append("--")
-                    continue
-                delta = float(value - baseline_value)
-                if denom > 1e-12:
-                    pct_delta = 100.0 * delta / denom
-                    cell = f"{_fmt_signed(delta)} ({_fmt_signed(pct_delta)}\\%)"
-                else:
-                    cell = _fmt_signed(delta)
-                row_cells.append(cell)
-            lines.append(" & ".join(row_cells) + r" \\")
-
-        lines.append("\\bottomrule")
-        lines.append("\\end{tabular}")
-        latex_table = "\n".join(lines)
-
-        out_tex = _safe_path(os.path.join(out_dir, tex_name))
-        with open(out_tex, "w", encoding="utf-8") as handle:
-            handle.write(latex_table + "\n")
-
-        print(f"[latex] plot_weight_gauss_perf_cv_grid: {y_label}")
-        print(latex_table)
-        print(f"[saved] {out_tex}")
-
     def _draw_panel(ax, y_lookup, y_label: str):
         plotted = False
         y_lo_panel = np.inf
@@ -2087,15 +2119,27 @@ def plot_weight_gauss_perf_cv_grid(
         _clear_3d_axis_background(ax)
         return True
 
-    _print_metric_differences(
+    _write_weight_metric_difference_table(
         cv_lookup,
         "mean CV",
+        out_dir,
         tex_name="weight_gauss_diff_mean_cv_table.tex",
+        mode_vals=mode_vals,
+        metrics=metrics,
+        zero_mode=zero_mode,
+        overlay_lookup=overlay["cv_lookup"] if overlay is not None else None,
+        log_prefix="plot_weight_gauss_perf_cv_grid",
     )
-    _print_metric_differences(
+    _write_weight_metric_difference_table(
         mean_lookup,
         "Mean Metric Value",
+        out_dir,
         tex_name="weight_gauss_diff_mean_perf_table.tex",
+        mode_vals=mode_vals,
+        metrics=metrics,
+        zero_mode=zero_mode,
+        overlay_lookup=overlay["mean_lookup"] if overlay is not None else None,
+        log_prefix="plot_weight_gauss_perf_cv_grid",
     )
 
     fig = plt.figure(figsize=(14.0, 10.0), dpi=300)
