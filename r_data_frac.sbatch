@@ -27,7 +27,7 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=250
+TOTAL_REPEATS=50
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
@@ -71,7 +71,7 @@ conda run -n cel python inv_arc_test.py \
   "${SUBSET_ARGS[@]}"
 
 
-  conda run -n cel python inv_arc_test.py \
+conda run -n cel python inv_arc_test.py \
   --job "sign_test_er" \
   --out-dir "er_sep${OUTDIR}" \
   --ce-adj Connectome/ce_adj.npy \
@@ -94,8 +94,8 @@ conda run -n cel python inv_arc_test.py \
 conda run -n cel python inv_arc_test.py \
   --job "sign_test_og_cel" \
   --out-dir "cel_og_sep${OUTDIR}" \
-  --ce-adj Connectome/ce_adj.npy \
-  --ce-ei  Connectome/ce_ei.npy \
+  --ce-adj Connectome/ce_adj_new.npy \
+  --ce-ei  Connectome/ce_ei_new.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
   --seed "${START_SEED}" \
   --sid "${SID_BASE}" \
