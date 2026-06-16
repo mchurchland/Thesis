@@ -54,8 +54,8 @@ JOB_KIND="all"   # or all /local_sign+binary/ local_sign+sample/ local_sign+flat
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
   --out-dir "full_v1_${OUTDIR}" \
-  --ce-adj Connectome/ce_adj.npy \
-  --ce-ei  Connectome/ce_ei.npy \
+  --ce-adj Connectome/ce_adj_new.npy \
+  --ce-ei  Connectome/ce_ei_new.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
   --seed "${START_SEED}" \
   --sid "${SID_BASE}" \
