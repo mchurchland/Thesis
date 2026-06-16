@@ -15,7 +15,7 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
     X = torch.zeros(T, N, device=W.device)
     Pre = torch.zeros(T, N, device=W.device)
     for t in range(T):
-        pre = W @ z + (Win @ u[t:t+1, :].T).squeeze()
+        pre = W.T @ z + (Win @ u[t:t+1, :].T).squeeze()
         h = torch.tanh(pre)
         z = (1 - leak) * z + leak * h
         X[t] = z
