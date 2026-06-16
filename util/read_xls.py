@@ -18,6 +18,7 @@
 # Usage:
 #   python build_ce_connectome.py --xls CElegansNeuronTables.xls --out ce \
 #       --include-muscles  # drop this flag to exclude muscles
+#   python build_ce_connectome.py --xls new_cel.xls --new-cel --out ce
 #
 # Requirements:
 #   pip/conda: pandas numpy xlrd (for .xls)  OR openpyxl (for .xlsx with engine="openpyxl")
@@ -136,6 +137,44 @@ def process_neuron_to_muscle(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
         add_edge(acc, src, dst, sign * weight)
     return acc
 
+def new_cel_sign_to_edge_sign(sign_value) -> int:
+    """Map new_cel.xls Sign values to edge signs."""
+    if pd.isna(sign_value):
+        return 0
+    s = str(sign_value).strip().lower()
+    if s in {"+", "plus", "pos", "positive"}:
+        return +1
+    if s in {"-", "minus", "neg", "negative"}:
+        return -1
+    if s in {"complex", "no pred", "no_pred", "nopred", "0", "zero"}:
+        return 0
+    raise ValueError(f"Unknown new_cel Sign value: {sign_value!r}")
+
+def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
+    """
+    Expect new_cel.xls Table Export columns: Source, Target, Edge Weight, Sign.
+    Sign values complex/no pred are kept as zero-weight edges.
+    """
+    cols = {c.lower().strip(): c for c in df.columns}
+    source = cols.get("source")
+    target = cols.get("target")
+    weight_col = cols.get("edge weight") or cols.get("edge_weight")
+    sign_col = cols.get("sign")
+
+    if not all([source, target, weight_col, sign_col]):
+        raise ValueError("new_cel sheet must have columns: Source, Target, Edge Weight, Sign")
+
+    acc: Dict[str, Dict[str, float]] = {}
+    for _, row in df.iterrows():
+        src = str(row[source]).strip()
+        dst = str(row[target]).strip()
+        if src == "" or dst == "" or pd.isna(row[weight_col]):
+            continue
+        weight = float(row[weight_col])
+        sign = new_cel_sign_to_edge_sign(row[sign_col])
+        add_edge(acc, src, dst, sign * weight)
+    return acc
+
 def merge_edge_maps(a: Dict[str, Dict[str, float]], b: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, float]]:
     out = {k: v.copy() for k, v in a.items()}
     for src, d in b.items():
@@ -204,24 +243,30 @@ def main():
     ap.add_argument("--out", default="ce", help="Output prefix (default: ce)")
     ap.add_argument("--include-muscles", action="store_true", help="Include neuron→muscle edges/nodes",default=False)
     ap.add_argument("--engine", default=None, help='pandas Excel engine (auto; use "xlrd" for .xls or "openpyxl" for .xlsx)')
+    ap.add_argument("--new-cel", action="store_true", help='Read the new_cel.xls "Table Export" format')
     args = ap.parse_args()
 
     # Read sheets
     print(f"Reading Excel: {args.xls}")
-    conn_df = read_sheet(args.xls, "Connectome", engine=args.engine)
-    ntm_df  = read_sheet(args.xls, "NeuronsToMuscle", engine=args.engine)
-    print(len(set(conn_df["Origin"].to_numpy()).union((set(conn_df["Target"].to_numpy())))))
-
-    #print(conn_df["Origin"],conn_df['Target'])
-    # Build edge maps
     print("Processing sheets…")
-    conn_map = process_connectome(conn_df)
-    ntm_map  = process_neuron_to_muscle(ntm_df)
-
-    if args.include_muscles:
-        combined = merge_edge_maps(conn_map, ntm_map)
+    if args.new_cel:
+        conn_df = read_sheet(args.xls, "Table Export", engine=args.engine)
+        combined = process_new_cel(conn_df)
+        print(len(set(conn_df["Source"].to_numpy()).union(set(conn_df["Target"].to_numpy()))))
     else:
-        combined = conn_map
+        conn_df = read_sheet(args.xls, "Connectome", engine=args.engine)
+        ntm_df  = read_sheet(args.xls, "NeuronsToMuscle", engine=args.engine)
+        print(len(set(conn_df["Origin"].to_numpy()).union((set(conn_df["Target"].to_numpy())))))
+
+        #print(conn_df["Origin"],conn_df['Target'])
+        # Build edge maps
+        conn_map = process_connectome(conn_df)
+        ntm_map  = process_neuron_to_muscle(ntm_df)
+
+        if args.include_muscles:
+            combined = merge_edge_maps(conn_map, ntm_map)
+        else:
+            combined = conn_map
 
     # Build adjacency and names
     print("Building adjacency…")
@@ -235,11 +280,11 @@ def main():
     ei = infer_ei_labels(W, names)
 
     # Save natural matrix
-    #np.save(f"{args.out}_adj.npy", W.astype(np.float32))
+    np.save(f"{args.out}_adj.npy", W.astype(np.float32))
     #np.save(f"{args.out}_ei.npy", ei.astype(np.float32))
-    #with open(f"{args.out}_nodes.txt", "w") as f:
-    #    for n in names:
-    #        f.write(n + "\n")
+    with open(f"{args.out}_nodes.txt", "w") as f:
+        for n in names:
+            f.write(n + "\n")
     print(f"Saved: {args.out}_adj.npy  {args.out}_ei.npy  {args.out}_nodes.txt")
 
     # Save SR=target-scaled version

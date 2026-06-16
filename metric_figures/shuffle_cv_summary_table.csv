@@ -1,0 +1,28 @@
+Ablation,Result on each metric,Change,Interpretation
+C. elegans (real wt.),"MC 0.306 | IPC 0.212
+KR 0.264 | GR 0.442",real-wt baseline,Real-weight reference for degree-preserving shuffle controls.
+CE weight shuffle,"MC 0.342 | IPC 0.251
+KR 0.353 | GR 0.557","MC inc +12%; IPC inc +18%
+KR inc +34%; GR inc +26%",Real-weight shuffles all move by nearly the same amount; disrupting heterogeneous weight placement lowers invariance.
+Connection shuffle only,"MC 0.339 | IPC 0.249
+KR 0.356 | GR 0.563","MC inc +11%; IPC inc +18%
+KR inc +35%; GR inc +27%","Matches the weight-shuffle effect, implying rewiring mostly acts by moving biological weights to new edges."
+Connection + weight shuffle,"MC 0.338 | IPC 0.254
+KR 0.355 | GR 0.564","MC inc +10%; IPC inc +20%
+KR inc +35%; GR inc +28%",Key confirmation: adding weight shuffle after connection shuffle does not add a new effect; connection shuffle's effect is weight reassignment.
++/-1 sign-pres. baseline,"MC 0.284 | IPC 0.212
+KR 0.261 | GR 0.438",+/-1 baseline,Magnitude heterogeneity is removed while preserving the original sign assignment.
++/-1 sign shuffle,"MC 0.277 | IPC 0.212
+KR 0.266 | GR 0.447","MC same -3%; IPC same +0%
+KR same +2%; GR same +2%",Preserving only global E/I balance is close to local +/-1; exact edge-by-edge sign placement is less important for IPC/KR/GR.
++/-1 connection shuffle,"MC 0.269 | IPC 0.216
+KR 0.264 | GR 0.452","MC dec -5%; IPC same +2%
+KR same +1%; GR same +3%","After weights are collapsed to +/-1, GR/KR/IPC are largely insensitive to rewiring; MC carries residual topology sensitivity."
++/-1 conn. + sign shuffle,"MC 0.266 | IPC 0.214
+KR 0.260 | GR 0.446","MC dec -6%; IPC same +1%
+KR same -0%; GR same +2%",Adding sign shuffle after +/-1 rewiring changes little for GR/KR/IPC; MC remains the main topology-sensitive metric.
+Unsigned binary baseline,"MC 0.275 | IPC 0.209
+KR 0.247 | GR 0.417",binary baseline,"All nonzero edges have identical sign and magnitude, isolating topology most directly."
+Unsigned binary topology shuffle,"MC 0.247 | IPC 0.206
+KR 0.238 | GR 0.414","MC dec -10%; IPC same -1%
+KR same -3%; GR same -1%","In the unsigned binary control, IPC/KR/GR remain stable, while MC is the metric most sensitive to topology."

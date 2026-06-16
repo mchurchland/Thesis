@@ -1,0 +1,27 @@
+Ablation,Result on each metric,Change,Interpretation
+C. elegans,"MC 0.171 | IPC 0.276
+KR 0.205 | GR 0.275",baseline,"Low-dispersion reference: biological topology, sign balance, and heterogeneous weights act together."
+CE Gaussian wt.,"MC 0.293 | IPC 0.198
+KR 0.478 | GR 0.524","MC inc +72%; IPC dec -28%
+KR inc +134%; GR inc +90%",Preserving topology alone is not enough; dropping biological signs and magnitudes moves MC/KR/GR into a higher-CV regime.
+ER Gaussian wt.,"MC 0.350 | IPC 0.219
+KR 0.571 | GR 0.580","MC inc +105%; IPC dec -21%
+KR inc +179%; GR inc +111%","Random topology plus Gaussian weights loses the low-CV profile, showing that connectome structure still matters."
+WS Gaussian wt.,"MC 0.346 | IPC 0.218
+KR 0.581 | GR 0.584","MC inc +103%; IPC dec -21%
+KR inc +184%; GR inc +112%",Matches ER across metrics in the thesis; small-world organization alone does not recover invariance.
+Sign-pres. Gaussian,"MC 0.168 | IPC 0.287
+KR 0.240 | GR 0.324","MC same -1%; IPC same +4%
+KR inc +17%; GR inc +18%","With topology and signs fixed, random magnitudes behave like the uniform control; MC is closest to the connectome."
+Sign-pres. uniform,"MC 0.167 | IPC 0.289
+KR 0.233 | GR 0.318","MC same -2%; IPC inc +5%
+KR inc +14%; GR inc +15%","Uniform and Gaussian sign-preserving magnitudes are similar, but neither fully reproduces IPC/KR/GR."
+Sign-pres. +/-1 wt.,"MC 0.163 | IPC 0.288
+KR 0.217 | GR 0.299","MC dec -5%; IPC same +4%
+KR inc +6%; GR inc +9%","Collapsing weights to +/-1 preserves much of IPC/KR/GR, but thesis equivalence tests say MC is not recovered."
++/-1 sign shuffle,"MC 0.164 | IPC 0.289
+KR 0.226 | GR 0.306","MC same -4%; IPC inc +5%
+KR inc +10%; GR inc +11%",Preserving only global E/I balance is close to local +/-1; exact edge-by-edge sign placement is less important for IPC/KR/GR.
+Unsigned binary wt.,"MC 0.161 | IPC 0.289
+KR 0.213 | GR 0.290","MC dec -6%; IPC inc +5%
+KR same +4%; GR inc +5%",Low CV alone is not the full biological profile; this unsigned model was equivalent to the connectome only for IPC.
