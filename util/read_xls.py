@@ -147,7 +147,7 @@ def new_cel_sign_to_edge_sign(sign_value) -> int:
     if s in {"-", "minus", "neg", "negative"}:
         return -1
     if s in {"complex", "no pred", "no_pred", "nopred", "0", "zero"}:
-        return 0
+        return +1
     raise ValueError(f"Unknown new_cel Sign value: {sign_value!r}")
 
 def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:

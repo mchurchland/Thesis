@@ -19,9 +19,9 @@ export OMP_NUM_THREADS=2
 export MKL_NUM_THREADS=2
 
 # Paths (defaults match the merge script)
-GLOB_SHUF="experiment_full_chunks/chunk_*/invariance_variants.csv"
-GLOB_VARIANTS="experiment_full_chunks/chunk_*/invariance_variants.csv"
-OUT_DIR="experiment_full_merged"
+GLOB_SHUF="full_v1_experiment_full_chunks/chunk_*/invariance_variants.csv"
+GLOB_VARIANTS="full_v1_experiment_full_chunks/chunk_*/invariance_variants.csv"
+OUT_DIR="full_v1_experiment_full_merged"
 
 # Run merge + plots (uses safe, non-destructive outputs)
 #--glob-shuf "${GLOB_SHUF}" \
