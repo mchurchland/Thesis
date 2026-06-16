@@ -421,7 +421,7 @@ def build_reservoir(
         W = _cel_to_bin(Wbio = W)
         W = degree_matched_shuffle_directed(W,tries=20_000,rng=rng).astype(np.float32)
     
-    elif feature_conn == "1": ## this is the real global sign pres
+    elif feature_conn == "global_sign_pres": ## this is the real global sign pres
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
@@ -432,7 +432,7 @@ def build_reservoir(
         W = _cel_to_bin(Wbio = W)
         W[nz[0][sel_n],nz[1][sel_n]] = -W[nz[0][sel_n],nz[1][sel_n]]
 
-    elif feature_conn == "global_sign_pres": ## this is the "fake" global sign pres
+    elif feature_conn == "global_sign_pres_real_weight": ## this is the "fake" global sign pres
         if ce_W_bio is None:
             raise ValueError("Local sign match requires CE adjacency.")
         W = ce_W_bio.copy().astype(np.float32)
