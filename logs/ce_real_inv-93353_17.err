@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 685, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 403, in main
+    ce_W_bio, ce_ei, _  = load_connectome(args.ce_adj, args.ce_ei)
+  File "/home/milesc/Thesis/util/util.py", line 158, in load_connectome
+    raise ValueError("Names length must equal adjacency size.")
+ValueError: Names length must equal adjacency size.
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job all --out-dir full_v1_experiment_full_chunks/chunk_17 --ce-adj Connectome/ce_adj_new.npy --ce-ei Connectome/ce_ei_new.npy --src-tag chunk_17 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 200 --repeat-split 20 --repeat-rank 17 --repeat-seed-stride 100000 --ws-p 0.1 --er-p 0.1 --cuda 0` failed. (See above for error)
