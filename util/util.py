@@ -3,6 +3,38 @@ from torch import Tensor
 import torch
 import os
 import networkx as nx
+from pathlib import Path
+
+
+def _connectome_node_path_candidates(adj_path: str) -> list[Path]:
+    adj = Path(adj_path)
+    stem = adj.stem
+    stems: list[str] = []
+
+    if "_adj" in stem:
+        stems.append(stem.replace("_adj", "_nodes", 1))
+    stems.append("ce_nodes")
+
+    unique_stems = list(dict.fromkeys(stems))
+    return [
+        adj.with_name(f"{node_stem}{suffix}")
+        for node_stem in unique_stems
+        for suffix in (".npy", ".txt")
+    ]
+
+
+def _load_connectome_names(adj_path: str, n_nodes: int) -> np.ndarray | None:
+    for path in _connectome_node_path_candidates(adj_path):
+        if not path.is_file():
+            continue
+        if path.suffix == ".npy":
+            names = np.load(path)
+        else:
+            with path.open("r", encoding="utf-8") as f:
+                names = np.array([ln.strip() for ln in f if ln.strip()])
+        if len(names) == n_nodes:
+            return names
+    return None
 
 def _count_edges(A: np.ndarray) -> int:
     M = np.abs(A) > 0
@@ -125,8 +157,8 @@ def load_connectome(adj_path: str | None, ei_path: str | None):
     Behavior:
       - Replaces NaN/inf in W with 0, zeros self-loops, dtype float32.
       - EI kept in {-1,0,+1}; tiny values -> 0; dtype float32.
-      - If a names file exists alongside the adjacency, builds name2idx.
-        Looks for 'ce_names.npy' (array of str) or 'ce_names.txt' (one per line).
+      - If a matching names file exists alongside the adjacency, builds name2idx.
+        For ce_adj_new.npy, looks for ce_nodes_new.npy/txt before ce_nodes.npy/txt.
     """
     W_bio, ei_labels, name2idx = None, None, None
 
@@ -142,20 +174,9 @@ def load_connectome(adj_path: str | None, ei_path: str | None):
             W_bio = np.where(np.isfinite(W_bio), W_bio, 0.0).astype(np.float32, copy=False)
         np.fill_diagonal(W_bio, 0.0)
 
-        # try to load names from same folder as adj
-        base_dir = os.path.dirname(adj_path)
-        names = None
-        npy_path = os.path.join(base_dir, "ce_nodes.npy")
-        txt_path = os.path.join(base_dir, "ce_nodes.txt")
-        if os.path.isfile(npy_path):
-            names = np.load(npy_path)
-        elif os.path.isfile(txt_path):
-            with open(txt_path, "r", encoding="utf-8") as f:
-                names = np.array([ln.strip() for ln in f if ln.strip()])
+        names = _load_connectome_names(adj_path, W_bio.shape[0])
 
         if names is not None:
-            if len(names) != W_bio.shape[0]:
-                raise ValueError("Names length must equal adjacency size.")
             # build mapping
             name2idx = {str(n): i for i, n in enumerate(names)}
 
