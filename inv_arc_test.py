@@ -64,12 +64,12 @@ ALL_JOB_KEYS = ( ## I need to change the names anyways lets do this inclass loca
 #)
 
 TOPOLOGY_SHUFFLE_JOB_KEYS = (
-    #"real",
-    #"shuffle_weights",
-    #"conn_shuf_only",
-    #"conn_shuf",
-    #"binary_base", ## unsigned binary
-    #"binary_base_topology_shuffle", ##unsigned binary w shuffle
+    "real",
+    "shuffle_weights",
+    "conn_shuf_only",
+    "conn_shuf",
+    "binary_base", ## unsigned binary
+    "binary_base_topology_shuffle", ##unsigned binary w shuffle
     "binary+shuffle",
     "binary+conshuffle+wshuffle",
     "global_sign_pres",
