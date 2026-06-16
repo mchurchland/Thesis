@@ -49,11 +49,11 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
 fi
 
 # choose which variant this script runs
-JOB_KIND="all"   # or all /local_sign+binary/ local_sign+sample/ local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
+JOB_KIND="global_sign_pres"   # or all /local_sign+binary/ local_sign+sample/ local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "full_v1_${OUTDIR}" \
+  --out-dir "global_sign_pres${OUTDIR}" \
   --ce-adj Connectome/ce_adj_new.npy \
   --ce-ei  Connectome/ce_ei_new.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
