@@ -147,7 +147,7 @@ def new_cel_sign_to_edge_sign(sign_value) -> int:
     if s in {"-", "minus", "neg", "negative"}:
         return -1
     if s in {"complex", "no pred", "no_pred", "nopred", "0", "zero"}:
-        return +1
+        return 0
     raise ValueError(f"Unknown new_cel Sign value: {sign_value!r}")
 
 def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
@@ -171,6 +171,10 @@ def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
         if src == "" or dst == "" or pd.isna(row[weight_col]):
             continue
         weight = float(row[weight_col])
+        if weight > 30:
+            weight = 30
+        if weight < -30:
+            weight = -30
         sign = new_cel_sign_to_edge_sign(row[sign_col])
         add_edge(acc, src, dst, sign * weight)
     return acc

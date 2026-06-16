@@ -2387,6 +2387,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
     mode_preset = str(mode_preset or "all").strip().lower()
     if ANALYSIS_MODE_FILTER:
         mode_order = [str(m) for m in ANALYSIS_MODE_FILTER if str(m) in present_mode_set]
+        if "global_sign_pres" in present_mode_set and "global_sign_pres" not in mode_order:
+            mode_order.append("global_sign_pres")
     elif mode_preset == "all_shuf":
         mode_order = (
                 "global_sign_pres",
