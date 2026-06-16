@@ -251,6 +251,11 @@ def parse_args():
     # IO / provenance
     p.add_argument("--csv-name", default=None, help="Optional CSV file name override.")
     p.add_argument("--src-tag", default="chunk_0", help="Provenance tag stored in 'src'.")
+    p.add_argument(
+        "--append-existing",
+        action="store_true",
+        help="Append to an existing output CSV instead of replacing it at the start of this run.",
+    )
 
     # RNG / run ids
     p.add_argument("--seed", type=int, default=0, help="Base RNG seed.")
@@ -665,13 +670,13 @@ def main():
 
     if args.job == "all":
         out_csv = os.path.join(out_dir, csv_name)
-        append_across = os.path.exists(out_csv)
+        append_across = args.append_existing and os.path.exists(out_csv)
         for idx, job_key in enumerate(ALL_JOB_KEYS):
             _run_job(job_key, append_start=(append_across or idx > 0))
             append_across = True
     elif args.job == "all_topology_shuffle":
         out_csv = os.path.join(out_dir, csv_name)
-        append_across = os.path.exists(out_csv)
+        append_across = args.append_existing and os.path.exists(out_csv)
         for idx, job_key in enumerate(TOPOLOGY_SHUFFLE_JOB_KEYS):
             _run_job(job_key, append_start=(append_across or idx > 0))
             append_across = True
