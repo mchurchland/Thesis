@@ -4,7 +4,13 @@ from torch import Tensor
 # ---- repo helpers (reuse your utils/stats) ----
 from network_stats.stats import compute_IPC, compute_KR, compute_GR, compute_MC
 @torch.no_grad()
-def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tuple[Tensor, Tensor]:
+def run_reservoir_with_pre(
+    W: Tensor,
+    Win: Tensor,
+    u: Tensor,
+    leak: float,
+    bias: Tensor | None = None,
+) -> tuple[Tensor, Tensor]:
     """
     Basic ESN-style update loop with pre-activation tracking.
     See: https://github.com/cknd/pyESN/blob/master/pyESN.py for a similar state update.
@@ -14,8 +20,12 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
     z = torch.zeros(N, device=W.device)
     X = torch.zeros(T, N, device=W.device)
     Pre = torch.zeros(T, N, device=W.device)
+    if bias is None:
+        bias_vec = torch.zeros(N, device=W.device, dtype=W.dtype)
+    else:
+        bias_vec = bias.to(device=W.device, dtype=W.dtype).view(N)
     for t in range(T):
-        pre = W.T @ z + (Win @ u[t:t+1, :].T).squeeze()
+        pre = W.T @ z + (Win @ u[t:t+1, :].T).squeeze() + bias_vec
         h = torch.tanh(pre)
         z = (1 - leak) * z + leak * h
         X[t] = z
@@ -26,7 +36,8 @@ def run_reservoir_with_pre(W: Tensor, Win: Tensor, u: Tensor, leak: float) -> tu
 def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: int,
             PERTURB_STD: float, T_TRAIN: int, T_TEST: int,
             MC_MAX_DELAY: int, IPC_MAX_DELAY: int, IPC_ORDERS: list[int],
-            RIDGE_ALPHA: float, output_idx: Tensor | None = None) -> dict:
+            RIDGE_ALPHA: float, output_idx: Tensor | None = None,
+            bias: Tensor | None = None) -> dict:
     """
     End-to-end reservoir evaluation computing MC/IPC/KR/GR and controllability metrics.
     Wraps the ESN update plus metrics pipeline; see reservoirpy/pyESN for similar evaluation flows:
@@ -34,8 +45,8 @@ def run_one(W: Tensor, Win: Tensor, leak: float, device: torch.device,WASHOUT: i
     T_total = WASHOUT + T_TRAIN + T_TEST
     u = (torch.rand(T_total, 1, device=device) * 2.0 - 1.0) ## rescale to [-1, 1]
 
-    X, _ = run_reservoir_with_pre(W, Win, u, leak)
-    Xn, _  = run_reservoir_with_pre(W, Win, u + PERTURB_STD * torch.randn_like(u), leak)
+    X, _ = run_reservoir_with_pre(W, Win, u, leak, bias=bias)
+    Xn, _  = run_reservoir_with_pre(W, Win, u + PERTURB_STD * torch.randn_like(u), leak, bias=bias)
     if output_idx is not None:
         idx = torch.as_tensor(output_idx, device=device, dtype=torch.long)
         if idx.numel() == 0:

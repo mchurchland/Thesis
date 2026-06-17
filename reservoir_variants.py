@@ -70,12 +70,12 @@ DEFAULT_SIM_PARAMS = SimulationParams()
 
 @dataclass(frozen=True)
 class VariantContext:
-    """Inputs that stay constant while sweeping (rho, leak, input_scale)."""
+    """Inputs that stay constant while sweeping hyperparameters."""
 
     ce_W_bio: np.ndarray
     ce_ei: np.ndarray | None
     ws_k: int
-    col_params: Sequence[tuple[float, float, float]]
+    col_params: Sequence[tuple[float, ...]]
     device: torch.device
     seed: int
     sid: int
@@ -95,6 +95,7 @@ def evaluate_reservoir(
     device: torch.device,
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS,
     output_idx: np.ndarray | torch.Tensor | None = None,
+    bias: torch.Tensor | None = None,
 ):
     """Wrapper around run_one with shared defaults."""
     return run_one(
@@ -111,6 +112,7 @@ def evaluate_reservoir(
         sim_params.ipc_orders,
         sim_params.ridge_alpha,
         output_idx,
+        bias=bias,
     )
 
 
@@ -124,6 +126,34 @@ def _apply_input_subset(Win: torch.Tensor, input_idx: np.ndarray | None) -> torc
     mask = torch.zeros_like(Win)
     mask.index_fill_(0, idx, 1.0)
     return Win * mask
+
+
+def _unpack_col_param(param: Sequence[float]) -> tuple[float, float, float, float]:
+    if len(param) == 3:
+        target_sr, leak, in_scale = param
+        return float(target_sr), float(leak), float(in_scale), 0.0
+    if len(param) == 4:
+        target_sr, leak, in_scale, neuron_bias = param
+        return float(target_sr), float(leak), float(in_scale), float(neuron_bias)
+    raise ValueError(f"Expected 3 or 4 sweep parameters, got {len(param)}: {param}")
+
+
+def _make_neuron_bias(
+    n_nodes: int,
+    bias_range: float,
+    device: torch.device,
+    dtype: torch.dtype,
+    seed: int,
+) -> torch.Tensor | None:
+    if bias_range == 0.0:
+        return None
+    gen = torch.Generator(device=device)
+    gen.manual_seed(seed)
+    return torch.empty(n_nodes, device=device, dtype=dtype).uniform_(
+        -float(bias_range),
+        float(bias_range),
+        generator=gen,
+    )
 
 
 def _run_variant_row(
@@ -145,7 +175,8 @@ def _run_variant_row(
         raise ValueError("Non-CEL variants need ce_W_bio to set N/nnz.")
 
     Nloc = ce_for_conn.shape[0] if ce_for_conn is not None else ctx.ce_W_bio.shape[0]
-    for ci, (target_sr, leak, in_scale) in enumerate(ctx.col_params):
+    for ci, param in enumerate(ctx.col_params):
+        target_sr, leak, in_scale, neuron_bias = _unpack_col_param(param)
         assert ctx.ce_ei==None
         Wt, Win = build_reservoir( 
             feature_conn=feature_conn,
@@ -161,9 +192,16 @@ def _run_variant_row(
             alpha = ctx.alpha
         )
         Win = _apply_input_subset(Win, ctx.input_idx)
+        bias_vec = _make_neuron_bias(
+            Wt.shape[0],
+            neuron_bias,
+            ctx.device,
+            Wt.dtype,
+            seed_base + 17_000_003,
+        )
         w_np = Wt.detach().cpu().numpy().reshape(-1)
         kl_to_gaussian = _kl_empirical_to_fitted_gaussian(w_np)
-        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx)
+        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx, bias=bias_vec)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
         rows_local.append(
@@ -173,6 +211,7 @@ def _run_variant_row(
                 target_sr,
                 leak,
                 in_scale,
+                neuron_bias,
                 float(scores["MC"]),
                 float(scores["IPC"]),
                 float(scores["KR"]),
@@ -199,7 +238,7 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "kl_to_gaussian", "seed", "src"])
+            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "neuron_bias", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "kl_to_gaussian", "seed", "src"])
         w.writerows(rows)
 
 
@@ -220,6 +259,7 @@ VARIANT_LABELS = {
     "local_sign+sample" : "local_sign+sample",
     "local_sign+binary" : "local_sign+binary",
     "global_sign_pres" : "global_sign_pres",
+    "global_sign_pres_real_weight": "global_sign_pres_real_weight",
     "binary_base": "binary_base",
     "binary_base_topology_shuffle": "binary_base_topology_shuffle",
     "binary+conshuffle+wshuffle": "binary+conshuffle+wshuffle",
@@ -260,6 +300,7 @@ VARIANT_DESCRIPTIONS = {
     "weight_test_binary_to_cel": "Interpolate from sign-preserving binary weights to empirical C. elegans magnitudes.",
     "weight_test_binary_to_shuffled_cel": "Interpolate from sign-preserving binary weights to shuffled empirical C. elegans magnitudes.",
     "global_sign_pres" : " preserve global sign balance in the binary model but shuffle the signs so that they can be on different edges :-) smiley face for Jordi :-)",
+    "global_sign_pres_real_weight": "Preserve only the global sign balance while keeping real CE weight magnitudes.",
     "binary_base": "Unsigned CE binary base (0/1): topology and magnitudes fixed except binarization.",
     "binary_base_topology_shuffle": "Unsigned CE binary base with degree-preserving topology shuffle.",
     "binary+conshuffle+wshuffle": "Signed binary CE with degree-preserving topology shuffle plus weight/sign shuffle on nonzero edges.",
@@ -460,6 +501,16 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         return _run_variant_row(
             ctx,
             feature_conn="global_sign_pres",
+            mode_label=VARIANT_LABELS[key],
+            ce_override=None,
+            nnz_target=None,
+            seed_base=seed_base,
+        )
+    if key == "global_sign_pres_real_weight":
+        seed_base = _seed(ctx, offset=1)
+        return _run_variant_row(
+            ctx,
+            feature_conn="global_sign_pres_real_weight",
             mode_label=VARIANT_LABELS[key],
             ce_override=None,
             nnz_target=None,

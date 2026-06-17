@@ -77,6 +77,8 @@ SHORT_THESIS_NAMES = {
     "conn_shuf_only": "Connection shuffle",
     "local_sign+binary": "Sign-pres. pm1 wt.",
     "global_sign_pres": "Sign-pres. pm1 + wt. shuf.",
+    "global_sign_pres_real_w": "Sign-pres. real wt.",
+    "global_sign_pres_real_weight": "Sign-pres. real wt.",
     "binary+conshuffle+wshuffle": "pm1 sign-pres. + shuf.",
     "binary_base": "Binary wt.",
     "binary_base_topology_shuffle": "Binary wt. + shuf.",
@@ -434,6 +436,7 @@ def _read_combined_csv(path: str) -> pd.DataFrame:
             "rho_target",
             "leak",
             "input_scale",
+            "neuron_bias",
             "MC",
             "IPC",
             "KR",
@@ -1082,12 +1085,14 @@ def _save_3d_front_back(
     return [front_png]
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
-    needed = ["mode","shuffle_id","rho_target","leak","input_scale","MC","IPC","KR","GR","src"]
+    needed = ["mode","shuffle_id","rho_target","leak","input_scale","neuron_bias","MC","IPC","KR","GR","src"]
     df = df.copy()
     for c in needed:
         if c not in df.columns:
             if c in ("MC","IPC","KR","GR"):
                 df[c] = np.nan
+            elif c == "neuron_bias":
+                df[c] = 0.0
             elif c == "shuffle_id":
                 df[c] = -1
             elif c == "mode":
@@ -1134,7 +1139,7 @@ def _dispersion(a: np.ndarray) -> float:
     return s/(abs(m)+1e-12) ## allows us to calcualte variance accross different models which have different scales
 
 def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
-    keys = ["rho_target","leak","input_scale"]
+    keys = ["rho_target","leak","input_scale","neuron_bias"]
     metrics = [c for c in ("MC","IPC","KR","GR") if c in df.columns]
     if not metrics:
         return df.copy()
@@ -2197,10 +2202,10 @@ def plot_rho_cv_other_perf(
     """
     3D line plot at fixed spectral radius, one figure per mode:
       x = spectral radius (rho_target)
-      y = CV across non-rho hyperparameters (leak, input_scale) within each fixed rho
+      y = CV across non-rho hyperparameters (leak, input_scale, neuron_bias) within each fixed rho
       z = mean performance at that fixed rho
 
-    CV is computed per (mode, src, group_id, rho_target, metric) across leak/input_scale,
+    CV is computed per (mode, src, group_id, rho_target, metric) across leak/input_scale/neuron_bias,
     then averaged across groups for each (mode, rho_target, metric).
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -2208,7 +2213,7 @@ def plot_rho_cv_other_perf(
     metric_cols = [m for m in ("MC", "IPC", "KR", "GR") if m in combined.columns]
     if drop_kr_gr:
         metric_cols = [m for m in metric_cols if m not in ("KR", "GR")]
-    required_cols = ["mode", "src", "shuffle_id", "rho_target", "leak", "input_scale"] + metric_cols
+    required_cols = ["mode", "src", "shuffle_id", "rho_target", "leak", "input_scale", "neuron_bias"] + metric_cols
     if not metric_cols:
         print("[warn] plot_rho_cv_other_perf: no selected metric columns found.")
         return
@@ -2229,7 +2234,7 @@ def plot_rho_cv_other_perf(
             print(f"[info] available models: {preview}")
             return
 
-    for c in ("rho_target", "leak", "input_scale", *metric_cols):
+    for c in ("rho_target", "leak", "input_scale", "neuron_bias", *metric_cols):
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df[np.isfinite(df["rho_target"])].copy()
     if df.empty:
@@ -2246,7 +2251,7 @@ def plot_rho_cv_other_perf(
         print("[warn] plot_rho_cv_other_perf: no aggregated rows after deduplication.")
         return
 
-    keys = ["mode", "src", "group_id", "rho_target", "leak", "input_scale"]
+    keys = ["mode", "src", "group_id", "rho_target", "leak", "input_scale", "neuron_bias"]
     df_long = df_agg.melt(id_vars=keys, value_vars=metric_cols, var_name="metric", value_name="value")
 
     per_group_rho = (
@@ -2393,6 +2398,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
         mode_order = (
                 "global_sign_pres",
                 "real",
+                "global_sign_pres_real_w",
+                "global_sign_pres_real_weight",
                 "shuffle",
                 "conn_shuf_only",
                 "celW+connShuf",
@@ -2415,6 +2422,8 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
             "local_sign+flat",
             "local_sign+binary",
             "global_sign_pres",
+            "global_sign_pres_real_w",
+            "global_sign_pres_real_weight",
             "binary_base",
         ]
     extras = [m for m in present_modes if m not in mode_order]

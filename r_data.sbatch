@@ -32,6 +32,7 @@ REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
+NEURON_BIASES=(0.0 0.1)
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -49,7 +50,7 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
 fi
 
 # choose which variant this script runs
-JOB_KIND="all"   # or all /local_sign+binary/ local_sign+sample/ local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
+JOB_KIND="all"   # or all / global_sign_pres_real_weight / local_sign+binary / local_sign+sample / local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
@@ -65,6 +66,7 @@ conda run -n cel python inv_arc_test.py \
   --repeat-split "${REPEAT_SPLIT}" \
   --repeat-rank "${REPEAT_RANK}" \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
+  --neuron-biases "${NEURON_BIASES[@]}" \
   --ws-p 0.1 \
   --er-p 0.1 \
   --cuda ${SLURM_LOCALID} \

@@ -60,6 +60,7 @@ RANK=0
 TOTAL_REPEATS=250
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
+NEURON_BIASES=(0.0 0.1)
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -90,6 +91,7 @@ conda run -n cel python inv_arc_test.py \
   --repeat-split "${REPEAT_SPLIT}" \
   --repeat-rank "${REPEAT_RANK}" \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
+  --neuron-biases "${NEURON_BIASES[@]}" \
   --ws-p 0.1 \
   --er-p 0.1 \
   --cuda "${SLURM_LOCALID:-0}" \

@@ -44,11 +44,13 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Fill missing columns with defaults and order them (pandas-style align/assign)."""
     df = df.copy()
     df = df.drop(columns=["wt_mag_cv"], errors="ignore")
-    needed = ["mode","shuffle_id","rho_target","leak","input_scale","MC","IPC","KR","GR","src"]
+    needed = ["mode","shuffle_id","rho_target","leak","input_scale","neuron_bias","MC","IPC","KR","GR","src"]
     for c in needed:
         if c not in df.columns:
             if c in ("MC","IPC","KR","GR"):
                 df[c] = np.nan
+            elif c == "neuron_bias":
+                df[c] = 0.0
             elif c == "shuffle_id":
                 df[c] = -1
             elif c == "mode":
@@ -76,7 +78,7 @@ def _dispersion_v(a: np.ndarray) -> float:
 
 def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Average duplicate hyperparameter rows; thin wrapper around pandas groupby/mean."""
-    keys = ["rho_target","leak","input_scale"]
+    keys = ["rho_target","leak","input_scale","neuron_bias"]
     metrics = [c for c in ("MC","IPC","KR","GR") if c in df.columns]
     if not metrics:
         return df.copy()
@@ -114,7 +116,7 @@ def _assign_group_ids(df: pd.DataFrame) -> pd.DataFrame:
     # blocks of one full hyperparameter grid per repeat inside each src chunk.
     mask_no_sid = df["shuffle_id"] == -1
     if mask_no_sid.any():
-        hparam_cols = ["rho_target", "leak", "input_scale"]
+        hparam_cols = ["rho_target", "leak", "input_scale", "neuron_bias"]
         hparam_counts = {
             mode_name: sub[hparam_cols].drop_duplicates().shape[0]
             for mode_name, sub in df.loc[mask_no_sid].groupby("mode")
@@ -133,7 +135,7 @@ def _assign_group_ids(df: pd.DataFrame) -> pd.DataFrame:
 def _aggregate_over_hparams(df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
     """Deduplicate repeated hparams within (mode, src, group_id) by averaging metrics."""
     metrics = [m for m in metrics if m in df.columns]
-    keys = ["mode","src","group_id","rho_target","leak","input_scale"]
+    keys = ["mode","src","group_id","rho_target","leak","input_scale","neuron_bias"]
     if not metrics:
         return pd.DataFrame(columns=keys)
     return (df.groupby(keys, as_index=False)[metrics]
@@ -157,7 +159,7 @@ def _compute_dispersion_table(combined: pd.DataFrame,mode: str = "cv") -> pd.Dat
     if df_agg.empty:
         return pd.DataFrame(columns=["mode","src","group_id","metric","dispersion","n_hparams"])
 
-    keys = ["mode","src","group_id","rho_target","leak","input_scale"]
+    keys = ["mode","src","group_id","rho_target","leak","input_scale","neuron_bias"]
     df_long = df_agg.melt(id_vars=keys, value_vars=disp_metrics, var_name="metric", value_name="value")
     agg_fn = _dispersion_cv if mode == "cv" else _dispersion_v
     disp = (df_long.groupby(["mode","src","group_id","metric"])
@@ -183,7 +185,7 @@ def _compute_mean_table(combined: pd.DataFrame, metrics: list[str] | None = None
     if df_agg.empty:
         return pd.DataFrame(columns=["mode","src","group_id","metric","mean","n_hparams"])
 
-    keys = ["mode","src","group_id","rho_target","leak","input_scale"]
+    keys = ["mode","src","group_id","rho_target","leak","input_scale","neuron_bias"]
     df_long = df_agg.melt(id_vars=keys, value_vars=metrics, var_name="metric", value_name="value")
     mean_tbl = (df_long.groupby(["mode","src","group_id","metric"])
                         .agg(mean=("value", "mean"),

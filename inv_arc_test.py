@@ -50,6 +50,7 @@ ALL_JOB_KEYS = ( ## I need to change the names anyways lets do this inclass loca
     #"local_sign+sample", 
     "local_sign+binary", #x
     "global_sign_pres", #x
+    "global_sign_pres_real_weight", #x
     "binary_base", #x
     #"binary_base_topology_shuffle", #x
     #"binary+shuffle", #x
@@ -89,6 +90,7 @@ WEIGHT_TEST_JOB_KEYS = (
 SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
 SWEEP_LEAK = [0.6, 0.8, 1.0]
 SWEEP_U    = [0.1, 0.5, 1.0, 1.5]
+SWEEP_NEURON_BIAS = [0.0, 0.1]
 
 
 # =================== Core helpers ===================
@@ -98,9 +100,13 @@ def _build_col_params(
     sr_grid: list[float],
     leak_grid: list[float],
     u_grid: list[float],
-) -> list[tuple[float, float, float]]:
-    # Cartesian product of (spectral radius target, leak, input scale)
-    return [(sr, leak, u) for sr, leak, u in itertools.product(sr_grid, leak_grid, u_grid)]
+    neuron_bias_grid: list[float],
+) -> list[tuple[float, float, float, float]]:
+    # Cartesian product of (spectral radius target, leak, input scale, neuron bias range)
+    return [
+        (sr, leak, u, neuron_bias)
+        for sr, leak, u, neuron_bias in itertools.product(sr_grid, leak_grid, u_grid, neuron_bias_grid)
+    ]
     ##essentially just do all combinations of the three lists
 
 
@@ -183,7 +189,7 @@ def _build_ctx(
     WS_K: int,
     ce_W_bio: np.ndarray,
     ce_ei: np.ndarray | None,
-    col_params: list[tuple[float, float, float]],
+    col_params: list[tuple[float, float, float, float]],
     device: torch.device,
     seed: int,
     sid: int,
@@ -299,6 +305,16 @@ def parse_args():
         help="Alpha values for weight tests. Use [0, 1] values for binary-to-CEL interpolation tests.",
     )
     p.add_argument(
+        "--neuron-biases",
+        type=float,
+        nargs="+",
+        default=SWEEP_NEURON_BIAS,
+        help=(
+            "Per-neuron random bias uniform half-ranges to sweep. "
+            "Each trial samples b_i ~ Uniform(-value, value) inside tanh; 0.0 preserves old behavior."
+        ),
+    )
+    p.add_argument(
         "--random-node-subsets",
         action="store_true",
         help=(
@@ -391,7 +407,10 @@ def main():
     sr_grid   = SWEEP_SR if not args.rho_test else [0.5, 0.8, 0.95, 1.0, 1.05, 1.2, 1.5, 2.0, 4.0, 10.0]
     leak_grid = SWEEP_LEAK
     u_grid    = SWEEP_U 
-    col_params_full = _build_col_params(sr_grid, leak_grid, u_grid)
+    neuron_bias_grid = list(args.neuron_biases if isinstance(args.neuron_biases, (list, tuple)) else [args.neuron_biases])
+    if any(b < 0.0 for b in neuron_bias_grid):
+        raise ValueError("--neuron-biases values must be non-negative uniform half-ranges.")
+    col_params_full = _build_col_params(sr_grid, leak_grid, u_grid, neuron_bias_grid)
 
     # Partition the grid so each array task does a subset
     idxs = _split_indices(len(col_params_full), args.split, args.rank)
