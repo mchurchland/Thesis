@@ -97,8 +97,8 @@ conda run -n cel python inv_arc_test.py \
 conda run -n cel python inv_arc_test.py \
   --job "sign_test_og_cel" \
   --out-dir "cel_og_sep${OUTDIR}" \
-  --ce-adj Connectome/ce_adj_new.npy \
-  --ce-ei  Connectome/ce_ei_new.npy \
+  --ce-adj Connectome/ce_adj.npy \
+  --ce-ei  Connectome/ce_ei.npy \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
   --seed "${START_SEED}" \
   --sid "${SID_BASE}" \
