@@ -384,8 +384,8 @@ def write_validation_csv(path: Path, rows: list[tuple]) -> None:
                 "ipc_even",
                 "odd_share_pct",
                 "even_share_pct",
-                "ipc_odd_135",
-                "capture_pct_odd_135",
+                "ipc_12345",
+                "capture_pct_12345",
             ]
         )
         w.writerows(rows)
@@ -414,7 +414,7 @@ def _model_title(model: str, er_p: float) -> str:
 
 def _report_block_for_model(
     summary: dict[int, dict[str, float]],
-    odd135_stats: dict[str, float] | None = None,
+    first5_stats: dict[str, float] | None = None,
     odd_even_stats: dict[str, float] | None = None,
 ) -> list[str]:
     order3 = summary.get(3, {}).get("mean", np.nan)
@@ -438,18 +438,18 @@ def _report_block_for_model(
         if k in summary and np.isfinite(summary[k]["mean"]):
             first3 += summary[k]["mean"]
 
-    odd135 = 0.0
-    for k in (1, 3, 5):
+    first5 = 0.0
+    for k in (1, 2, 3, 4, 5):
         if k in summary and np.isfinite(summary[k]["mean"]):
-            odd135 += summary[k]["mean"]
+            first5 += summary[k]["mean"]
 
     first3_pct = np.nan
     if np.isfinite(total_ipc_mean) and total_ipc_mean > 0.0:
         first3_pct = 100.0 * first3 / total_ipc_mean
 
-    odd135_pct = np.nan
+    first5_pct = np.nan
     if np.isfinite(total_ipc_mean) and total_ipc_mean > 0.0:
-        odd135_pct = 100.0 * odd135 / total_ipc_mean
+        first5_pct = 100.0 * first5 / total_ipc_mean
 
     order1_pct = np.nan
     order2_pct = np.nan
@@ -488,7 +488,7 @@ def _report_block_for_model(
         f"Odd contribution stds: o1={o1_std:.6f}, o3={o3_std:.6f}, o5={o5_std:.6f}"
     )
 
-    if odd135_stats is not None:
+    if first5_stats is not None:
         if odd_even_stats is not None:
             lines.append(
                 f"Odd-order contribution: {odd_even_stats['odd_mean']:.6f} ± {odd_even_stats['odd_std']:.6f} (std)"
@@ -502,13 +502,13 @@ def _report_block_for_model(
                 f"{odd_even_stats['even_pct_std']:.2f}%"
             )
         lines.append(
-            f"Odd (1+3+5) contribution: {odd135_stats['mean']:.6f} ± {odd135_stats['std']:.6f} (std)"
+            f"Orders 1+2+3+4+5 contribution: {first5_stats['mean']:.6f} ± {first5_stats['std']:.6f} (std)"
         )
         lines.append(
-            f"IPC share in odd orders 1+3+5: {odd135_stats['pct_mean']:.2f}% ± {odd135_stats['pct_std']:.2f}% (std)"
+            f"IPC share in orders 1+2+3+4+5: {first5_stats['pct_mean']:.2f}% ± {first5_stats['pct_std']:.2f}% (std)"
         )
     else:
-        lines.append(f"IPC share in odd orders 1+3+5: {odd135_pct:.2f}%")
+        lines.append(f"IPC share in orders 1+2+3+4+5: {first5_pct:.2f}%")
 
     return lines
 
@@ -516,7 +516,7 @@ def _report_block_for_model(
 def write_report(
     path: Path,
     summaries_by_model: dict[str, dict[int, dict[str, float]]],
-    odd135_stats_by_model: dict[str, dict[str, float] | None],
+    first5_stats_by_model: dict[str, dict[str, float] | None],
     odd_even_stats_by_model: dict[str, dict[str, float] | None],
     models: list[str],
     er_p: float,
@@ -533,7 +533,7 @@ def write_report(
         lines.extend(
             _report_block_for_model(
                 summaries_by_model[model],
-                odd135_stats=odd135_stats_by_model.get(model),
+                first5_stats=first5_stats_by_model.get(model),
                 odd_even_stats=odd_even_stats_by_model.get(model),
             )
         )
@@ -550,30 +550,30 @@ def write_report(
 
     if validation_rows:
         totals = np.array([float(r[7]) for r in validation_rows], dtype=np.float64)
-        odds = np.array([float(r[12]) for r in validation_rows], dtype=np.float64)
+        first5 = np.array([float(r[12]) for r in validation_rows], dtype=np.float64)
         caps = np.array([float(r[13]) for r in validation_rows], dtype=np.float64)
-        valid = np.isfinite(totals) & np.isfinite(odds) & np.isfinite(caps)
+        valid = np.isfinite(totals) & np.isfinite(first5) & np.isfinite(caps)
         totals = totals[valid]
-        odds = odds[valid]
+        first5 = first5[valid]
         caps = caps[valid]
 
         lines.append("")
-        lines.append("[1,3,5 validation]")
+        lines.append("[1,2,3,4,5 validation]")
         if caps.size == 0:
             lines.append("No finite nonzero IPC totals after thresholding.")
         else:
             pearson = np.nan
             spearman = np.nan
             if len(totals) >= 2:
-                pearson = float(np.corrcoef(totals, odds)[0, 1])
-                spearman = float(np.corrcoef(_rankdata(totals), _rankdata(odds))[0, 1])
+                pearson = float(np.corrcoef(totals, first5)[0, 1])
+                spearman = float(np.corrcoef(_rankdata(totals), _rankdata(first5))[0, 1])
 
             lines.append(
                 f"capture% mean={float(np.mean(caps)):.2f}, std={float(np.std(caps)):.2f}, "
                 f"min={float(np.min(caps)):.2f}, p05={float(np.percentile(caps, 5)):.2f}"
             )
             lines.append(
-                f"agreement IPC(1..{max_order}) vs IPC(1,3,5): "
+                f"agreement IPC(1..{max_order}) vs IPC(1,2,3,4,5): "
                 f"pearson={pearson:.4f}, spearman={spearman:.4f}"
             )
 
@@ -699,7 +699,7 @@ def main() -> None:
                                     )
 
     summaries_by_model: dict[str, dict[int, dict[str, float]]] = {}
-    odd135_stats_by_model: dict[str, dict[str, float] | None] = {}
+    first5_stats_by_model: dict[str, dict[str, float] | None] = {}
     odd_even_stats_by_model: dict[str, dict[str, float] | None] = {}
     summary_rows: list[tuple] = []
     validation_rows: list[tuple] = []
@@ -739,8 +739,8 @@ def main() -> None:
                 runs[key] = {}
             runs[key][order] = val
 
-        odd135_vals: list[float] = []
-        odd135_pct_vals: list[float] = []
+        first5_vals: list[float] = []
+        first5_pct_vals: list[float] = []
         odd_vals: list[float] = []
         even_vals: list[float] = []
         odd_pct_vals: list[float] = []
@@ -749,17 +749,17 @@ def main() -> None:
             total = float(sum(run_orders.values()))
             odd = float(sum(v for k, v in run_orders.items() if k % 2 == 1))
             even = float(sum(v for k, v in run_orders.items() if k % 2 == 0))
-            odd135 = float(run_orders.get(1, 0.0) + run_orders.get(3, 0.0) + run_orders.get(5, 0.0))
+            first5 = float(sum(run_orders.get(k, 0.0) for k in (1, 2, 3, 4, 5)))
             odd_vals.append(odd)
             even_vals.append(even)
-            odd135_vals.append(odd135)
+            first5_vals.append(first5)
             odd_share = (100.0 * odd / total) if total > 0.0 else np.nan
             even_share = (100.0 * even / total) if total > 0.0 else np.nan
-            cap = (100.0 * odd135 / total) if total > 0.0 else np.nan
+            cap = (100.0 * first5 / total) if total > 0.0 else np.nan
             if total > 0.0:
                 odd_pct_vals.append(odd_share)
                 even_pct_vals.append(even_share)
-                odd135_pct_vals.append(cap)
+                first5_pct_vals.append(cap)
             seed_k, rho_k, leak_k, in_k, bias_k, threshold_k = run_key
             validation_rows.append(
                 (
@@ -775,20 +775,20 @@ def main() -> None:
                     even,
                     odd_share,
                     even_share,
-                    odd135,
+                    first5,
                     cap,
                 )
             )
 
-        odd135_stats = None
-        if odd135_vals:
-            odd135_stats = {
-                "mean": float(np.mean(np.array(odd135_vals, dtype=np.float64))),
-                "std": float(np.std(np.array(odd135_vals, dtype=np.float64))),
-                "pct_mean": float(np.mean(np.array(odd135_pct_vals, dtype=np.float64))) if odd135_pct_vals else np.nan,
-                "pct_std": float(np.std(np.array(odd135_pct_vals, dtype=np.float64))) if odd135_pct_vals else np.nan,
+        first5_stats = None
+        if first5_vals:
+            first5_stats = {
+                "mean": float(np.mean(np.array(first5_vals, dtype=np.float64))),
+                "std": float(np.std(np.array(first5_vals, dtype=np.float64))),
+                "pct_mean": float(np.mean(np.array(first5_pct_vals, dtype=np.float64))) if first5_pct_vals else np.nan,
+                "pct_std": float(np.std(np.array(first5_pct_vals, dtype=np.float64))) if first5_pct_vals else np.nan,
             }
-        odd135_stats_by_model[condition_label] = odd135_stats
+        first5_stats_by_model[condition_label] = first5_stats
 
         odd_even_stats = None
         if odd_vals or even_vals:
@@ -842,7 +842,7 @@ def main() -> None:
     write_report(
         report_txt,
         summaries_by_model,
-        odd135_stats_by_model,
+        first5_stats_by_model,
         odd_even_stats_by_model,
         models=report_models,
         er_p=args.er_p,
