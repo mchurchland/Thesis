@@ -252,7 +252,10 @@ def build_reservoir(
     DEVICE: torch.device | None = None,
     per_neg: float| None = None,
     alpha: float| None = None,
-) -> tuple[Tensor, Tensor]:
+    normalization_mode: str = "spectral_radius",
+    normalization_ref: np.ndarray | None = None,
+    return_info: bool = False,
+) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, dict[str, float | str]]:
     """
     Construct a reservoir with selectable topology/weights: CEL/degree-shuffle (Milo et al., 2002, Science 298:824-827),
     ER (Erdos & Renyi, 1959, Publ. Math. Debrecen 6:290-297), WS (Watts & Strogatz, 1998, Nature 393:440-442),
@@ -473,9 +476,14 @@ def build_reservoir(
 
 
     Wt = torch.from_numpy(W).to(DEVICE)
-    # --- scale by spectral radius (this is the requested change) ---
-    Wt = scale_to_sr(Wt, target_sr)
-    #rho_post = spectral_radius_power(Wt)
+    ref = normalization_ref if normalization_ref is not None else ce_W_bio
+    Wt, norm_info = normalize_reservoir_weights(
+        Wt,
+        target_sr=target_sr,
+        mode=normalization_mode,
+        reference_W=ref,
+        device=DEVICE,
+    )
 
 
     if drive_idx is not None and len(drive_idx) > 0:
@@ -486,6 +494,8 @@ def build_reservoir(
     else:
         Win = torch.randn(Wt.shape[0], 1, device=DEVICE, dtype=Wt.dtype) * input_scale
 
+    if return_info:
+        return Wt, Win, norm_info
     return Wt, Win
 
 @torch.no_grad()
@@ -505,6 +515,80 @@ def scale_to_sr(W: torch.Tensor, target_sr: float | None):
     if sr < 1e-9:
         return W
     return (target_sr / sr) * W
+
+
+@torch.no_grad()
+def frobenius_norm(W: torch.Tensor) -> float:
+    return float(torch.linalg.matrix_norm(W, ord="fro").item())
+
+
+@torch.no_grad()
+def normalize_reservoir_weights(
+    W: torch.Tensor,
+    target_sr: float | None,
+    mode: str,
+    reference_W: np.ndarray | torch.Tensor | None,
+    device: torch.device | None = None,
+) -> tuple[torch.Tensor, dict[str, float | str]]:
+    """
+    Normalize raw reservoir weights for sign-balance ablations.
+
+    Modes:
+      - spectral_radius: W * target_sr / rho(W), the existing RC comparison.
+      - original_radius: W * target_sr / rho(W_orig), so sign perturbations do not
+        get amplified just because they changed their own raw spectral radius.
+      - frobenius: W * ||W_orig||_F / ||W||_F, matching total matrix energy.
+    """
+    mode = str(mode)
+    if mode not in {"spectral_radius", "original_radius", "frobenius"}:
+        raise ValueError(
+            "normalization_mode must be one of: spectral_radius, original_radius, frobenius."
+        )
+
+    raw_rho = spectral_radius_power(W)
+    raw_fro = frobenius_norm(W)
+    ref_rho = float("nan")
+    ref_fro = float("nan")
+    scale = 1.0
+    ref_t = None
+
+    if reference_W is not None:
+        if isinstance(reference_W, torch.Tensor):
+            ref_t = reference_W.to(device=W.device, dtype=W.dtype)
+        else:
+            ref_t = torch.from_numpy(reference_W.astype(np.float32, copy=False)).to(
+                device if device is not None else W.device,
+                dtype=W.dtype,
+            )
+        ref_rho = spectral_radius_power(ref_t)
+        ref_fro = frobenius_norm(ref_t)
+
+    if mode == "spectral_radius":
+        if target_sr is not None and raw_rho >= 1e-9:
+            scale = float(target_sr) / raw_rho
+    else:
+        if ref_t is None:
+            raise ValueError(f"normalization_mode={mode!r} requires reference_W/ce_W_bio.")
+        if mode == "original_radius":
+            target = 1.0 if target_sr is None else float(target_sr)
+            if ref_rho >= 1e-9:
+                scale = target / ref_rho
+        elif mode == "frobenius":
+            if raw_fro >= 1e-12:
+                scale = ref_fro / raw_fro
+
+    W_scaled = W * scale
+    info = {
+        "normalization": mode,
+        "raw_rho": raw_rho,
+        "ref_rho": ref_rho,
+        "post_rho": spectral_radius_power(W_scaled),
+        "raw_fro": raw_fro,
+        "ref_fro": ref_fro,
+        "post_fro": frobenius_norm(W_scaled),
+        "scale_factor": float(scale),
+    }
+    return W_scaled, info
 
 def _match_edge_count(mask: np.ndarray, target_m: int, rng: np.random.Generator) -> np.ndarray:
     """

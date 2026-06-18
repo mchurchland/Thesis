@@ -87,6 +87,8 @@ class VariantContext:
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS
     input_idx: np.ndarray | None = None
     output_idx: np.ndarray | None = None
+    normalization_mode: str = "spectral_radius"
+    label_normalization: bool = False
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -178,7 +180,7 @@ def _run_variant_row(
     for ci, param in enumerate(ctx.col_params):
         target_sr, leak, in_scale, neuron_bias = _unpack_col_param(param)
         assert ctx.ce_ei==None
-        Wt, Win = build_reservoir( 
+        Wt, Win, norm_info = build_reservoir(
             feature_conn=feature_conn,
             target_sr=target_sr,
             N=Nloc,
@@ -189,7 +191,10 @@ def _run_variant_row(
             nnz_target=nnz_target,
             DEVICE=ctx.device,
             per_neg=ctx.per_neg,
-            alpha = ctx.alpha
+            alpha=ctx.alpha,
+            normalization_mode=ctx.normalization_mode,
+            normalization_ref=ctx.ce_W_bio,
+            return_info=True,
         )
         Win = _apply_input_subset(Win, ctx.input_idx)
         bias_vec = _make_neuron_bias(
@@ -204,9 +209,15 @@ def _run_variant_row(
         scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx, bias=bias_vec)
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
+        row_mode_label = (
+            f"{mode_label}__norm_{ctx.normalization_mode}"
+            if ctx.label_normalization
+            else mode_label
+        )
         rows_local.append(
             (
-                mode_label,
+                row_mode_label,
+                ctx.normalization_mode,
                 ctx.sid,
                 target_sr,
                 leak,
@@ -226,6 +237,13 @@ def _run_variant_row(
                 kl_to_gaussian,
                 seed_base,
                 ctx.src_tag,
+                float(norm_info["raw_rho"]),
+                float(norm_info["ref_rho"]),
+                float(norm_info["post_rho"]),
+                float(norm_info["raw_fro"]),
+                float(norm_info["ref_fro"]),
+                float(norm_info["post_fro"]),
+                float(norm_info["scale_factor"]),
             )
         )
     return rows_local
@@ -238,7 +256,31 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow(["mode", "shuffle_id", "rho_target", "leak", "input_scale", "neuron_bias", "MC", "IPC", "KR", "GR","wt_mean","cosine_similarity", "kl_to_gaussian", "seed", "src"])
+            w.writerow([
+                "mode",
+                "normalization",
+                "shuffle_id",
+                "rho_target",
+                "leak",
+                "input_scale",
+                "neuron_bias",
+                "MC",
+                "IPC",
+                "KR",
+                "GR",
+                "wt_mean",
+                "cosine_similarity",
+                "kl_to_gaussian",
+                "seed",
+                "src",
+                "raw_rho",
+                "ref_rho",
+                "post_rho",
+                "raw_fro",
+                "ref_fro",
+                "post_fro",
+                "scale_factor",
+            ])
         w.writerows(rows)
 
 

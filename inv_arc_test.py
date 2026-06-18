@@ -91,6 +91,7 @@ SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
 SWEEP_LEAK = [0.6, 0.8, 1.0]
 SWEEP_U    = [0.1, 0.5, 1.0, 1.5]
 SWEEP_NEURON_BIAS = [0.0, 0.1]
+NORMALIZATION_MODES = ("spectral_radius", "original_radius", "frobenius")
 
 
 # =================== Core helpers ===================
@@ -200,6 +201,8 @@ def _build_ctx(
     alpha: float | None = None,
     input_idx: np.ndarray | None = None,
     output_idx: np.ndarray | None = None,
+    normalization_mode: str = "spectral_radius",
+    label_normalization: bool = False,
 ) -> VariantContext:
     if job_key not in VARIANT_KEYS:
         if (not job_key.startswith("sign_test")) and (not job_key.startswith("weight_test")):
@@ -219,6 +222,8 @@ def _build_ctx(
         alpha=alpha,
         input_idx=input_idx,
         output_idx=output_idx,
+        normalization_mode=normalization_mode,
+        label_normalization=label_normalization,
     )
 
 
@@ -276,6 +281,13 @@ def parse_args():
     action="store_true",
     help="Run the extended rho sweep.",
     )
+    p.add_argument(
+        "--rho-values",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Explicit rho_target values. Overrides the default and --rho-test grids.",
+    )
 
     # Graph model params
     p.add_argument(
@@ -312,6 +324,16 @@ def parse_args():
         help=(
             "Per-neuron random bias uniform half-ranges to sweep. "
             "Each trial samples b_i ~ Uniform(-value, value) inside tanh; 0.0 preserves old behavior."
+        ),
+    )
+    p.add_argument(
+        "--normalization-modes",
+        choices=NORMALIZATION_MODES,
+        nargs="+",
+        default=("spectral_radius",),
+        help=(
+            "Weight normalization(s) to run: spectral_radius uses target rho/rho(W); "
+            "original_radius uses target rho/rho(W_orig); frobenius matches ||W_orig||_F."
         ),
     )
     p.add_argument(
@@ -400,11 +422,18 @@ def main():
     args = parse_args()
     sign_flip_fracs = list(args.sign_flip_frac if isinstance(args.sign_flip_frac, (list, tuple)) else [args.sign_flip_frac])
     alphas = list(args.alphas if isinstance(args.alphas, (list, tuple)) else [args.alphas])
+    normalization_modes = list(args.normalization_modes)
     for frac in sign_flip_fracs:
         if not (0.0 <= frac <= 1.0):
             raise ValueError("--sign-flip-frac values must be between 0 and 1 inclusive for sign_test.")
     # Build parameter grid and optionally slice for array jobs
-    sr_grid   = SWEEP_SR if not args.rho_test else [0.5, 0.8, 0.95, 1.0, 1.05, 1.2, 1.5, 2.0, 4.0, 10.0]
+    sr_grid = (
+        list(args.rho_values)
+        if args.rho_values is not None
+        else (SWEEP_SR if not args.rho_test else [0.5, 0.8, 0.95, 1.0, 1.05, 1.2, 1.5, 2.0, 4.0, 10.0])
+    )
+    if any(sr <= 0.0 for sr in sr_grid):
+        raise ValueError("--rho-values must be positive.")
     leak_grid = SWEEP_LEAK
     u_grid    = SWEEP_U 
     neuron_bias_grid = list(args.neuron_biases if isinstance(args.neuron_biases, (list, tuple)) else [args.neuron_biases])
@@ -484,26 +513,35 @@ def main():
                 )
 
 
-        for rep_pos, rep_idx in enumerate(repeat_ids):
-            append_base = append_start or rep_pos > 0
-            seed_base = args.seed + rep_idx * args.repeat_seed_stride
-            set_seed(seed_base)
-            sid_base = _sid_base(rep_idx)
-            input_idx = output_idx = None
-            if args.random_node_subsets:
-                # Depends only on the global repeat seed, not on job_key or host.
-                # Separate architecture jobs get the same draw when launched with
-                # the same seed/repeat partitioning/subset offset.
-                input_idx, output_idx = _draw_node_subsets(
-                    ce_W_bio.shape[0],
-                    k_in,
-                    k_out,
-                    seed_base + args.subset_seed_offset,
-                )
+        label_normalization = len(normalization_modes) > 1
+        wrote_any = False
 
-            if job_key == "shuffle_weights":
-                    ctx = _build_ctx(
-                        job_key,
+        for normalization_mode in normalization_modes:
+            for rep_idx in repeat_ids:
+                append_base = append_start or wrote_any
+                seed_base = args.seed + rep_idx * args.repeat_seed_stride
+                set_seed(seed_base)
+                sid_base = _sid_base(rep_idx)
+                input_idx = output_idx = None
+                if args.random_node_subsets:
+                    # Depends only on the global repeat seed, not on job_key or host.
+                    # Separate architecture jobs get the same draw when launched with
+                    # the same seed/repeat partitioning/subset offset.
+                    input_idx, output_idx = _draw_node_subsets(
+                        ce_W_bio.shape[0],
+                        k_in,
+                        k_out,
+                        seed_base + args.subset_seed_offset,
+                    )
+
+                def make_ctx(
+                    ctx_job_key: str,
+                    *,
+                    per_neg: float | None = None,
+                    alpha: float | None = None,
+                ) -> VariantContext:
+                    return _build_ctx(
+                        ctx_job_key,
                         WS_K,
                         ce_W_bio,
                         None,
@@ -514,178 +552,88 @@ def main():
                         er_p=args.er_p,
                         ws_p=args.ws_p,
                         src_tag=args.src_tag,
-                        input_idx=input_idx,
-                        output_idx=output_idx,
-                    )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
-                    continue
-
-            if job_key == "conn_shuf":
-                    ctx = _build_ctx(
-                        job_key,
-                        WS_K,
-                        ce_W_bio,
-                        None,
-                        col_params,
-                        device,
-                        seed=seed_base,
-                        sid=sid_base,
-                        er_p=args.er_p,
-                        ws_p=args.ws_p,
-                        src_tag=args.src_tag,
-                        input_idx=input_idx,
-                        output_idx=output_idx,
-                    )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
-                    continue
-
-            if job_key == "local_sign":
-                    ctx = _build_ctx(
-                        job_key=job_key,
-                        WS_K=WS_K,
-                        ce_W_bio=ce_W_bio,
-                        ce_ei=None,
-                        col_params=col_params,
-                        device=device,
-                        seed=seed_base,
-                        sid=sid_base,
-                        er_p=args.er_p,
-                        ws_p=args.ws_p,
-                        src_tag=args.src_tag,
-                        per_neg=None,
-                        input_idx=input_idx,
-                        output_idx=output_idx,
-                    )
-                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
-                    continue
-            if job_key in WEIGHT_TEST_JOB_KEYS:
-                for alpha_idx, alpha in enumerate(alphas):
-                    alpha_job_key = job_key + str(alpha)
-                    ctx = _build_ctx(
-                        alpha_job_key,
-                        WS_K,
-                        ce_W_bio,
-                        None,
-                        col_params,
-                        device,
-                        seed=seed_base,
-                        sid=sid_base,
-                        er_p=args.er_p,
-                        ws_p=args.ws_p,
-                        src_tag=args.src_tag,
+                        per_neg=per_neg,
                         alpha=alpha,
                         input_idx=input_idx,
                         output_idx=output_idx,
+                        normalization_mode=normalization_mode,
+                        label_normalization=label_normalization,
                     )
-                    _run_and_save(
-                        alpha_job_key,
-                        ctx,
-                        out_dir,
-                        csv_name,
-                        append=(append_base or alpha_idx > 0),
+
+                if job_key in ("shuffle_weights", "conn_shuf", "local_sign"):
+                    ctx = make_ctx(job_key)
+                    _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                    wrote_any = True
+                    continue
+
+                if job_key in WEIGHT_TEST_JOB_KEYS:
+                    for alpha_idx, alpha in enumerate(alphas):
+                        alpha_job_key = job_key + str(alpha)
+                        ctx = make_ctx(alpha_job_key, alpha=alpha)
+                        _run_and_save(
+                            alpha_job_key,
+                            ctx,
+                            out_dir,
+                            csv_name,
+                            append=(append_base or alpha_idx > 0),
+                        )
+                    wrote_any = True
+                    continue
+
+                if job_key == "sign_test_cel":
+                    for frac_idx, frac in enumerate(sign_flip_fracs):
+                        frac_job_key = job_key + str(frac)
+                        ctx = make_ctx(frac_job_key, per_neg=frac)
+                        _run_and_save(
+                            frac_job_key,
+                            ctx,
+                            out_dir,
+                            csv_name,
+                            append=(append_base or frac_idx > 0),
+                        )
+                    wrote_any = True
+                    continue
+
+                if job_key == "sign_test_og_cel":
+                    frac = (
+                        len(np.where(ce_W_bio < 0)[0])
+                        / (len(np.where(ce_W_bio > 0)[0]) + len(np.where(ce_W_bio < 0)[0]))
                     )
-                continue
-            if job_key == "sign_test_cel":
-                for frac_idx, frac in enumerate(sign_flip_fracs):
-                    ctx = _build_ctx(
-                        job_key + str(frac),
-                        WS_K,
-                        ce_W_bio,
-                        None,
-                        col_params,
-                        device,
-                        seed=seed_base,
-                        sid=sid_base,
-                        er_p=args.er_p,
-                        ws_p=args.ws_p,
-                        src_tag=args.src_tag,
-                        per_neg=frac,
-                        input_idx=input_idx,
-                        output_idx=output_idx,
-                    )
-                    _run_and_save(
-                        job_key + str(frac),
-                        ctx,
-                        out_dir,
-                        csv_name,
-                        append=(append_base or frac_idx > 0),
-                    )
-                continue
-            if job_key == "sign_test_og_cel":
-                frac = (len(np.where(ce_W_bio<0)[0])/ (len(np.where(ce_W_bio> 0)[0]) + len(np.where(ce_W_bio<0)[0])) ) 
-                # Build a local list for this run; do not mutate sign_flip_fracs in-place.
-                fracs_local = [frac]
-                for base_frac in sign_flip_fracs:
-                    if not np.isclose(base_frac, frac):
-                        fracs_local.append(base_frac)
-                for frac_idx, frac in enumerate(fracs_local):
-                    ctx = _build_ctx(
-                        job_key + str(frac),
-                        WS_K,
-                        ce_W_bio,
-                        None,
-                        col_params,
-                        device,
-                        seed=seed_base,
-                        sid=sid_base,
-                        er_p=args.er_p,
-                        ws_p=args.ws_p,
-                        src_tag=args.src_tag,
-                        per_neg=frac,
-                        input_idx=input_idx,
-                        output_idx=output_idx,
-                    )
-                    _run_and_save(
-                        job_key + str(frac),
-                        ctx,
-                        out_dir,
-                        csv_name,
-                        append=(append_base or frac_idx > 0),
-                    )
-                continue
-            if job_key == "sign_test_er":
-                for frac_idx, frac in enumerate(sign_flip_fracs):
-                    ctx = _build_ctx(
-                        job_key + str(frac),
-                        WS_K,
-                        ce_W_bio,
-                        None,
-                        col_params,
-                        device,
-                        seed=seed_base,
-                        sid=sid_base,
-                        er_p=args.er_p,
-                        ws_p=args.ws_p,
-                        src_tag=args.src_tag,
-                        per_neg=frac,
-                        input_idx=input_idx,
-                        output_idx=output_idx,
-                    )
-                    _run_and_save(
-                        job_key + str(frac),
-                        ctx,
-                        out_dir,
-                        csv_name,
-                        append=(append_base or frac_idx > 0),
-                    )
-                continue
-            ctx = _build_ctx(
-                job_key,
-                WS_K,
-                ce_W_bio,
-                None,
-                col_params,
-                device,
-                seed=seed_base,
-                sid=sid_base,
-                er_p=args.er_p,
-                ws_p=args.ws_p,
-                src_tag=args.src_tag,
-                per_neg=None,
-                input_idx=input_idx,
-                output_idx=output_idx,
-            )
-            _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                    # Build a local list for this run; do not mutate sign_flip_fracs in-place.
+                    fracs_local = [frac]
+                    for base_frac in sign_flip_fracs:
+                        if not np.isclose(base_frac, frac):
+                            fracs_local.append(base_frac)
+                    for frac_idx, frac in enumerate(fracs_local):
+                        frac_job_key = job_key + str(frac)
+                        ctx = make_ctx(frac_job_key, per_neg=frac)
+                        _run_and_save(
+                            frac_job_key,
+                            ctx,
+                            out_dir,
+                            csv_name,
+                            append=(append_base or frac_idx > 0),
+                        )
+                    wrote_any = True
+                    continue
+
+                if job_key == "sign_test_er":
+                    for frac_idx, frac in enumerate(sign_flip_fracs):
+                        frac_job_key = job_key + str(frac)
+                        ctx = make_ctx(frac_job_key, per_neg=frac)
+                        _run_and_save(
+                            frac_job_key,
+                            ctx,
+                            out_dir,
+                            csv_name,
+                            append=(append_base or frac_idx > 0),
+                        )
+                    wrote_any = True
+                    continue
+
+                ctx = make_ctx(job_key)
+                _run_and_save(job_key, ctx, out_dir, csv_name, append=append_base)
+                wrote_any = True
 
     if args.job == "all":
         out_csv = os.path.join(out_dir, csv_name)
