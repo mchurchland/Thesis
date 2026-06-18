@@ -13,6 +13,8 @@
 set -euo pipefail
 
 mkdir -p logs
+export MPLCONFIGDIR="${TMPDIR:-/tmp}/matplotlib-${SLURM_JOB_ID:-ipc_order}"
+mkdir -p "${MPLCONFIGDIR}"
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
@@ -26,6 +28,8 @@ N_SEEDS=20
 SEED_START=0
 MAX_DELAY=50
 MAX_ORDER=10
+NEURON_BIASES=(0.0)
+CAPACITY_THRESHOLDS=(0.0)
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
@@ -38,4 +42,6 @@ conda run -n cel python Parameter_justification/ipc_order_sweep_ce.py \
   --seed-start "${SEED_START}" \
   --max-delay "${MAX_DELAY}" \
   --max-order "${MAX_ORDER}" \
+  --neuron-biases "${NEURON_BIASES[@]}" \
+  --capacity-thresholds "${CAPACITY_THRESHOLDS[@]}" \
   --cuda "${CUDA_IDX}"

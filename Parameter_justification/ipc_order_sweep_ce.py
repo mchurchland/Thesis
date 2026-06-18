@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -18,6 +19,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch import Tensor
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from inv_arc_test import ALL_JOB_KEYS, _pick_device
 from network_stats.run_one import run_reservoir_with_pre
@@ -69,6 +74,26 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-delay", type=int, default=50)
     p.add_argument("--max-order", type=int, default=10)
     p.add_argument("--ridge-alpha", type=float, default=1e-4)
+    p.add_argument(
+        "--capacity-thresholds",
+        type=float,
+        nargs="+",
+        default=[0.0],
+        help=(
+            "Squared-correlation thresholds for retaining IPC terms. "
+            "Default 0.0 preserves the old behavior."
+        ),
+    )
+    p.add_argument(
+        "--neuron-biases",
+        type=float,
+        nargs="+",
+        default=[0.0],
+        help=(
+            "Per-neuron random bias uniform half-ranges. "
+            "Each trial seed samples b_i ~ Uniform(-value, value)."
+        ),
+    )
     p.add_argument("--cuda", type=int, default=None, help="CUDA index. Omit for auto.")
     return p.parse_args()
 
@@ -147,6 +172,10 @@ def _build_model_reservoir(
         "local_sign+sample",
         "local_sign+binary",
         "global_sign_pres",
+        "global_sign_pres_real_weight",
+        "binary_base",
+        "binary_base_topology_shuffle",
+        "binary+conshuffle+wshuffle",
         "binary+shuffle",
     ):
         feature_conn = model
@@ -167,6 +196,24 @@ def _build_model_reservoir(
     )
 
 
+def _make_neuron_bias(
+    n_nodes: int,
+    bias_range: float,
+    device: torch.device,
+    dtype: torch.dtype,
+    seed: int,
+) -> torch.Tensor | None:
+    if bias_range == 0.0:
+        return None
+    gen = torch.Generator(device=device)
+    gen.manual_seed(seed)
+    return torch.empty(n_nodes, device=device, dtype=dtype).uniform_(
+        -float(bias_range),
+        float(bias_range),
+        generator=gen,
+    )
+
+
 def ipc_contrib_by_order(
     Xtr: Tensor,
     Xte: Tensor,
@@ -176,30 +223,70 @@ def ipc_contrib_by_order(
     max_order: int,
     alpha: float,
     device: torch.device,
+    capacity_threshold: float = 0.0,
 ) -> np.ndarray:
-    # Reuse your existing compute_IPC implementation for IPC(<=k).
-    cumulative = np.zeros(max_order, dtype=np.float64)
-    for k in range(1, max_order + 1):
-        cumulative[k - 1] = stats_mod.compute_IPC(
-            Xtr=Xtr,
-            Xte=Xte,
-            utr=utr,
-            ute=ute,
-            max_delay=max_delay,
-            alpha=alpha,
-            device=device,
-            orders=list(range(1, k + 1)),
-        )
-
-    contrib = np.zeros_like(cumulative)
-    prev = 0.0
-    for i, cur in enumerate(cumulative):
-        contrib[i] = max(0.0, cur - prev)
-        prev = cur
-    return contrib
+    scores = ipc_scores_by_order_delay(
+        Xtr=Xtr,
+        Xte=Xte,
+        utr=utr,
+        ute=ute,
+        max_delay=max_delay,
+        max_order=max_order,
+        alpha=alpha,
+        device=device,
+    )
+    return ipc_contrib_from_scores(scores, capacity_threshold)
 
 
-def run_once(
+def ipc_scores_by_order_delay(
+    Xtr: Tensor,
+    Xte: Tensor,
+    utr: Tensor,
+    ute: Tensor,
+    max_delay: int,
+    max_order: int,
+    alpha: float,
+    device: torch.device,
+) -> np.ndarray:
+    """Return corr^2 scores with shape [order, delay] before thresholding."""
+    scores = np.zeros((max_order, max_delay), dtype=np.float64)
+    orders = list(range(1, max_order + 1))
+
+    for d in range(1, max_delay + 1):
+        base_tr = utr[:-d]
+        base_te = ute[:-d]
+        Xtr_d = Xtr[d:]
+        Xte_d = Xte[d:]
+
+        ytr_cols = []
+        yte_cols = []
+        for k in orders:
+            ytr_k = stats_mod.legendre_P(base_tr, k)
+            yte_k = stats_mod.legendre_P(base_te, k)
+            if ytr_k.dim() == 1:
+                ytr_k = ytr_k.unsqueeze(1)
+            if yte_k.dim() == 1:
+                yte_k = yte_k.unsqueeze(1)
+            ytr_cols.append(ytr_k)
+            yte_cols.append(yte_k)
+
+        Ytr = torch.cat(ytr_cols, dim=1).to(device)
+        Yte = torch.cat(yte_cols, dim=1).to(device)
+        Yhat = stats_mod.ridge_fit_predict(Xtr_d, Ytr, Xte_d, alpha, DEVICE=device)
+
+        for j in range(Ytr.shape[1]):
+            scores[j, d - 1] = stats_mod.corr2_score(Yte[:, j], Yhat[:, j])
+
+    return scores
+
+
+def ipc_contrib_from_scores(scores: np.ndarray, capacity_threshold: float = 0.0) -> np.ndarray:
+    scores = np.asarray(scores, dtype=np.float64)
+    kept = np.where(scores >= float(capacity_threshold), scores, 0.0)
+    return kept.sum(axis=1)
+
+
+def run_ipc_scores_once(
     Wt: Tensor,
     Win: Tensor,
     leak: float,
@@ -210,17 +297,26 @@ def run_once(
     max_order: int,
     ridge_alpha: float,
     device: torch.device,
+    neuron_bias: float,
+    bias_seed: int,
 ) -> np.ndarray:
     t_total = washout + t_train + t_test
     u = (torch.rand(t_total, 1, device=device) * 2.0 - 1.0) ## rescale to [-1, 1]
 
-    X, _ = run_reservoir_with_pre(Wt, Win, u, leak)
+    bias_vec = _make_neuron_bias(
+        Wt.shape[0],
+        neuron_bias,
+        device,
+        Wt.dtype,
+        seed=bias_seed,
+    )
+    X, _ = run_reservoir_with_pre(Wt, Win, u, leak, bias=bias_vec)
     Xtr = X[washout:washout + t_train]
     Xte = X[washout + t_train:]
     utr = u[washout:washout + t_train]
     ute = u[washout + t_train:]
 
-    return ipc_contrib_by_order(
+    return ipc_scores_by_order_delay(
         Xtr=Xtr,
         Xte=Xte,
         utr=utr,
@@ -235,7 +331,20 @@ def run_once(
 def write_raw_csv(path: Path, rows: list[tuple]) -> None:
     with path.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["model", "seed", "rho_target", "leak", "input_scale", "order", "ipc_contrib"])
+        w.writerow(
+            [
+                "model",
+                "seed",
+                "rho_target",
+                "leak",
+                "input_scale",
+                "neuron_bias",
+                "capacity_threshold",
+                "order",
+                "parity",
+                "ipc_contrib",
+            ]
+        )
         w.writerows(rows)
 
 
@@ -245,7 +354,10 @@ def write_summary_csv(path: Path, stats_rows: list[tuple]) -> None:
         w.writerow(
             [
                 "model",
+                "neuron_bias",
+                "capacity_threshold",
                 "order",
+                "parity",
                 "mean_ipc_contrib",
                 "std_ipc_contrib",
                 "median_ipc_contrib",
@@ -265,7 +377,13 @@ def write_validation_csv(path: Path, rows: list[tuple]) -> None:
                 "rho_target",
                 "leak",
                 "input_scale",
+                "neuron_bias",
+                "capacity_threshold",
                 "ipc_total",
+                "ipc_odd",
+                "ipc_even",
+                "odd_share_pct",
+                "even_share_pct",
                 "ipc_odd_135",
                 "capture_pct_odd_135",
             ]
@@ -281,6 +399,10 @@ def _rankdata(x: np.ndarray) -> np.ndarray:
 
 
 def _model_title(model: str, er_p: float) -> str:
+    if "|bias=" in model and "|thr=" in model:
+        base, rest = model.split("|bias=", 1)
+        bias, threshold = rest.split("|thr=", 1)
+        return f"{_model_title(base, er_p)} | bias={bias} | threshold={threshold}"
     if model in ("cel", "real"):
         return "C. elegans"
     if model in ("er", "er_randN"):
@@ -293,6 +415,7 @@ def _model_title(model: str, er_p: float) -> str:
 def _report_block_for_model(
     summary: dict[int, dict[str, float]],
     odd135_stats: dict[str, float] | None = None,
+    odd_even_stats: dict[str, float] | None = None,
 ) -> list[str]:
     order3 = summary.get(3, {}).get("mean", np.nan)
     order4 = summary.get(4, {}).get("mean", np.nan)
@@ -366,6 +489,18 @@ def _report_block_for_model(
     )
 
     if odd135_stats is not None:
+        if odd_even_stats is not None:
+            lines.append(
+                f"Odd-order contribution: {odd_even_stats['odd_mean']:.6f} ± {odd_even_stats['odd_std']:.6f} (std)"
+            )
+            lines.append(
+                f"Even-order contribution: {odd_even_stats['even_mean']:.6f} ± {odd_even_stats['even_std']:.6f} (std)"
+            )
+            lines.append(
+                f"Odd/even share: odd={odd_even_stats['odd_pct_mean']:.2f}% ± "
+                f"{odd_even_stats['odd_pct_std']:.2f}%, even={odd_even_stats['even_pct_mean']:.2f}% ± "
+                f"{odd_even_stats['even_pct_std']:.2f}%"
+            )
         lines.append(
             f"Odd (1+3+5) contribution: {odd135_stats['mean']:.6f} ± {odd135_stats['std']:.6f} (std)"
         )
@@ -382,6 +517,7 @@ def write_report(
     path: Path,
     summaries_by_model: dict[str, dict[int, dict[str, float]]],
     odd135_stats_by_model: dict[str, dict[str, float] | None],
+    odd_even_stats_by_model: dict[str, dict[str, float] | None],
     models: list[str],
     er_p: float,
     validation_rows: list[tuple],
@@ -398,6 +534,7 @@ def write_report(
             _report_block_for_model(
                 summaries_by_model[model],
                 odd135_stats=odd135_stats_by_model.get(model),
+                odd_even_stats=odd_even_stats_by_model.get(model),
             )
         )
 
@@ -412,46 +549,52 @@ def write_report(
             lines.append(f"ER / CE order-3 mean ratio: {er_o3 / ce_o3:.6f}")
 
     if validation_rows:
-        totals = np.array([float(r[5]) for r in validation_rows], dtype=np.float64)
-        odds = np.array([float(r[6]) for r in validation_rows], dtype=np.float64)
-        caps = np.array([float(r[7]) for r in validation_rows], dtype=np.float64)
+        totals = np.array([float(r[7]) for r in validation_rows], dtype=np.float64)
+        odds = np.array([float(r[12]) for r in validation_rows], dtype=np.float64)
+        caps = np.array([float(r[13]) for r in validation_rows], dtype=np.float64)
         valid = np.isfinite(totals) & np.isfinite(odds) & np.isfinite(caps)
         totals = totals[valid]
         odds = odds[valid]
         caps = caps[valid]
 
-        pearson = np.nan
-        spearman = np.nan
-        if len(totals) >= 2:
-            pearson = float(np.corrcoef(totals, odds)[0, 1])
-            spearman = float(np.corrcoef(_rankdata(totals), _rankdata(odds))[0, 1])
-
         lines.append("")
         lines.append("[1,3,5 validation]")
-        lines.append(
-            f"capture% mean={float(np.mean(caps)):.2f}, std={float(np.std(caps)):.2f}, "
-            f"min={float(np.min(caps)):.2f}, p05={float(np.percentile(caps, 5)):.2f}"
-        )
-        lines.append(
-            f"agreement IPC(1..{max_order}) vs IPC(1,3,5): "
-            f"pearson={pearson:.4f}, spearman={spearman:.4f}"
-        )
+        if caps.size == 0:
+            lines.append("No finite nonzero IPC totals after thresholding.")
+        else:
+            pearson = np.nan
+            spearman = np.nan
+            if len(totals) >= 2:
+                pearson = float(np.corrcoef(totals, odds)[0, 1])
+                spearman = float(np.corrcoef(_rankdata(totals), _rankdata(odds))[0, 1])
+
+            lines.append(
+                f"capture% mean={float(np.mean(caps)):.2f}, std={float(np.std(caps)):.2f}, "
+                f"min={float(np.min(caps)):.2f}, p05={float(np.percentile(caps, 5)):.2f}"
+            )
+            lines.append(
+                f"agreement IPC(1..{max_order}) vs IPC(1,3,5): "
+                f"pearson={pearson:.4f}, spearman={spearman:.4f}"
+            )
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_plot(path: Path, stats_rows: list[tuple], er_p: float) -> None:
-    fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=150)
+    fig, ax = plt.subplots(figsize=(9.0, 5.2), dpi=150)
     color_map = {"cel": "#1f77b4", "er": "#ff7f0e"}
-    models = sorted({str(r[0]) for r in stats_rows})
-    for idx, model in enumerate(models):
-        rows = [r for r in stats_rows if str(r[0]) == model]
-        rows = sorted(rows, key=lambda x: int(x[1]))
-        orders = np.array([int(r[1]) for r in rows], dtype=np.int32)
-        means = np.array([float(r[2]) for r in rows], dtype=np.float64)
-        stds = np.array([float(r[3]) for r in rows], dtype=np.float64)
+    keys = sorted({(str(r[0]), float(r[1]), float(r[2])) for r in stats_rows})
+    for idx, (model, neuron_bias, threshold) in enumerate(keys):
+        rows = [
+            r for r in stats_rows
+            if str(r[0]) == model and np.isclose(float(r[1]), neuron_bias) and np.isclose(float(r[2]), threshold)
+        ]
+        rows = sorted(rows, key=lambda x: int(x[3]))
+        orders = np.array([int(r[3]) for r in rows], dtype=np.int32)
+        means = np.array([float(r[5]) for r in rows], dtype=np.float64)
+        stds = np.array([float(r[6]) for r in rows], dtype=np.float64)
         color = color_map.get(model, f"C{idx}")
-        label = _model_title(model, er_p)
+        label = f"{_model_title(model, er_p)} | bias={neuron_bias:g} | thr={threshold:g}"
         ax.plot(orders, means, marker="o", linewidth=2.0, color=color, label=f"{label} mean")
         ax.fill_between(
             orders,
@@ -465,11 +608,11 @@ def write_plot(path: Path, stats_rows: list[tuple], er_p: float) -> None:
     ax.axvline(3, color="#d62728", linestyle="--", linewidth=1.5, label="Order 3 cutoff")
     ax.set_xlabel("Legendre polynomial order")
     ax.set_ylabel("IPC contribution")
-    all_orders = sorted({int(r[1]) for r in stats_rows})
-    ax.set_title("IPC contribution vs polynomial order (CE vs ER)")
+    all_orders = sorted({int(r[3]) for r in stats_rows})
+    ax.set_title("IPC contribution vs polynomial order")
     ax.set_xticks(all_orders)
     ax.grid(alpha=0.25)
-    ax.legend(frameon=False)
+    ax.legend(frameon=False, fontsize=8, ncol=1)
     fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
@@ -492,6 +635,12 @@ def main() -> None:
     if ce_W_bio is None:
         raise FileNotFoundError(f"Could not load CE adjacency from: {args.ce_adj}")
     nnz_target_ce = int((np.abs(ce_W_bio) > 0).sum())
+    neuron_biases = [float(b) for b in args.neuron_biases]
+    if any(b < 0.0 for b in neuron_biases):
+        raise ValueError("--neuron-biases values must be non-negative.")
+    capacity_thresholds = [float(t) for t in args.capacity_thresholds]
+    if any(t < 0.0 for t in capacity_thresholds):
+        raise ValueError("--capacity-thresholds values must be non-negative.")
 
     raw_rows: list[tuple] = []
     for seed in seeds:
@@ -512,65 +661,124 @@ def main() -> None:
                             nnz_target_ce=nnz_target_ce,
                         )
 
-                        contrib = run_once(
-                            Wt=Wt,
-                            Win=Win,
-                            leak=leak,
-                            washout=args.washout,
-                            t_train=args.t_train,
-                            t_test=args.t_test,
-                            max_delay=args.max_delay,
-                            max_order=args.max_order,
-                            ridge_alpha=args.ridge_alpha,
-                            device=device,
-                        )
-
-                        for order in range(1, args.max_order + 1):
-                            raw_rows.append(
-                                (
-                                    model,
-                                    seed,
-                                    rho,
-                                    leak,
-                                    input_scale,
-                                    order,
-                                    float(contrib[order - 1]),
-                                )
+                        for neuron_bias in neuron_biases:
+                            scores = run_ipc_scores_once(
+                                Wt=Wt,
+                                Win=Win,
+                                leak=leak,
+                                washout=args.washout,
+                                t_train=args.t_train,
+                                t_test=args.t_test,
+                                max_delay=args.max_delay,
+                                max_order=args.max_order,
+                                ridge_alpha=args.ridge_alpha,
+                                device=device,
+                                neuron_bias=neuron_bias,
+                                bias_seed=seed + 17_000_003,
                             )
+                            for capacity_threshold in capacity_thresholds:
+                                contrib = ipc_contrib_from_scores(
+                                    scores,
+                                    capacity_threshold=capacity_threshold,
+                                )
+
+                                for order in range(1, args.max_order + 1):
+                                    raw_rows.append(
+                                        (
+                                            model,
+                                            seed,
+                                            rho,
+                                            leak,
+                                            input_scale,
+                                            neuron_bias,
+                                            capacity_threshold,
+                                            order,
+                                            "odd" if order % 2 else "even",
+                                            float(contrib[order - 1]),
+                                        )
+                                    )
 
     summaries_by_model: dict[str, dict[int, dict[str, float]]] = {}
     odd135_stats_by_model: dict[str, dict[str, float] | None] = {}
+    odd_even_stats_by_model: dict[str, dict[str, float] | None] = {}
     summary_rows: list[tuple] = []
     validation_rows: list[tuple] = []
 
-    for model in models:
-        rows_m = [r for r in raw_rows if str(r[0]) == model]
+    condition_keys = sorted(
+        {(str(r[0]), float(r[5]), float(r[6])) for r in raw_rows},
+        key=lambda x: (x[0], x[1], x[2]),
+    )
+
+    for model, neuron_bias, capacity_threshold in condition_keys:
+        condition_label = f"{model}|bias={neuron_bias:g}|thr={capacity_threshold:g}"
+        rows_m = [
+            r for r in raw_rows
+            if str(r[0]) == model
+            and np.isclose(float(r[5]), neuron_bias)
+            and np.isclose(float(r[6]), capacity_threshold)
+        ]
         by_order: dict[int, list[float]] = {k: [] for k in range(1, args.max_order + 1)}
         for row in rows_m:
-            order = int(row[5])
-            val = float(row[6])
+            order = int(row[7])
+            val = float(row[9])
             by_order[order].append(val)
 
-        runs: dict[tuple[int, float, float, float], dict[int, float]] = {}
+        runs: dict[tuple[int, float, float, float, float, float], dict[int, float]] = {}
         for row in rows_m:
-            key = (int(row[1]), float(row[2]), float(row[3]), float(row[4]))
-            order = int(row[5])
-            val = float(row[6])
+            key = (
+                int(row[1]),
+                float(row[2]),
+                float(row[3]),
+                float(row[4]),
+                float(row[5]),
+                float(row[6]),
+            )
+            order = int(row[7])
+            val = float(row[9])
             if key not in runs:
                 runs[key] = {}
             runs[key][order] = val
 
         odd135_vals: list[float] = []
         odd135_pct_vals: list[float] = []
+        odd_vals: list[float] = []
+        even_vals: list[float] = []
+        odd_pct_vals: list[float] = []
+        even_pct_vals: list[float] = []
         for run_key, run_orders in runs.items():
             total = float(sum(run_orders.values()))
-            odd = float(run_orders.get(1, 0.0) + run_orders.get(3, 0.0) + run_orders.get(5, 0.0))
-            odd135_vals.append(odd)
-            cap = (100.0 * odd / total) if total > 0.0 else np.nan
+            odd = float(sum(v for k, v in run_orders.items() if k % 2 == 1))
+            even = float(sum(v for k, v in run_orders.items() if k % 2 == 0))
+            odd135 = float(run_orders.get(1, 0.0) + run_orders.get(3, 0.0) + run_orders.get(5, 0.0))
+            odd_vals.append(odd)
+            even_vals.append(even)
+            odd135_vals.append(odd135)
+            odd_share = (100.0 * odd / total) if total > 0.0 else np.nan
+            even_share = (100.0 * even / total) if total > 0.0 else np.nan
+            cap = (100.0 * odd135 / total) if total > 0.0 else np.nan
             if total > 0.0:
+                odd_pct_vals.append(odd_share)
+                even_pct_vals.append(even_share)
                 odd135_pct_vals.append(cap)
-            seed_k, rho_k, leak_k, in_k = run_key
-            validation_rows.append((model, seed_k, rho_k, leak_k, in_k, total, odd, cap))
+            seed_k, rho_k, leak_k, in_k, bias_k, threshold_k = run_key
+            validation_rows.append(
+                (
+                    model,
+                    seed_k,
+                    rho_k,
+                    leak_k,
+                    in_k,
+                    bias_k,
+                    threshold_k,
+                    total,
+                    odd,
+                    even,
+                    odd_share,
+                    even_share,
+                    odd135,
+                    cap,
+                )
+            )
 
         odd135_stats = None
         if odd135_vals:
@@ -580,7 +788,21 @@ def main() -> None:
                 "pct_mean": float(np.mean(np.array(odd135_pct_vals, dtype=np.float64))) if odd135_pct_vals else np.nan,
                 "pct_std": float(np.std(np.array(odd135_pct_vals, dtype=np.float64))) if odd135_pct_vals else np.nan,
             }
-        odd135_stats_by_model[model] = odd135_stats
+        odd135_stats_by_model[condition_label] = odd135_stats
+
+        odd_even_stats = None
+        if odd_vals or even_vals:
+            odd_even_stats = {
+                "odd_mean": float(np.mean(np.array(odd_vals, dtype=np.float64))) if odd_vals else np.nan,
+                "odd_std": float(np.std(np.array(odd_vals, dtype=np.float64))) if odd_vals else np.nan,
+                "even_mean": float(np.mean(np.array(even_vals, dtype=np.float64))) if even_vals else np.nan,
+                "even_std": float(np.std(np.array(even_vals, dtype=np.float64))) if even_vals else np.nan,
+                "odd_pct_mean": float(np.mean(np.array(odd_pct_vals, dtype=np.float64))) if odd_pct_vals else np.nan,
+                "odd_pct_std": float(np.std(np.array(odd_pct_vals, dtype=np.float64))) if odd_pct_vals else np.nan,
+                "even_pct_mean": float(np.mean(np.array(even_pct_vals, dtype=np.float64))) if even_pct_vals else np.nan,
+                "even_pct_std": float(np.std(np.array(even_pct_vals, dtype=np.float64))) if even_pct_vals else np.nan,
+            }
+        odd_even_stats_by_model[condition_label] = odd_even_stats
 
         order3_mean = float(np.mean(by_order[3])) if 3 in by_order and by_order[3] else np.nan
         summary: dict[int, dict[str, float]] = {}
@@ -591,12 +813,26 @@ def main() -> None:
             med_v = float(np.median(vals)) if vals.size else np.nan
             ratio = float(mean_v / order3_mean) if np.isfinite(order3_mean) and order3_mean > 0 else np.nan
             summary[order] = {"mean": mean_v, "std": std_v, "median": med_v, "ratio_to_order3": ratio}
-            summary_rows.append((model, order, mean_v, std_v, med_v, ratio))
-        summaries_by_model[model] = summary
+            summary_rows.append(
+                (
+                    model,
+                    neuron_bias,
+                    capacity_threshold,
+                    order,
+                    "odd" if order % 2 else "even",
+                    mean_v,
+                    std_v,
+                    med_v,
+                    ratio,
+                )
+            )
+        summaries_by_model[condition_label] = summary
+
+    report_models = list(summaries_by_model.keys())
 
     raw_csv = out_dir / "ipc_by_order_raw.csv"
     summary_csv = out_dir / "ipc_by_order_summary.csv"
-    validation_csv = out_dir / "ipc_odd135_validation.csv"
+    validation_csv = out_dir / "ipc_odd_even_validation.csv"
     report_txt = out_dir / "ipc_order_degradation_report.txt"
     plot_png = out_dir / "ipc_by_order_contrib.png"
 
@@ -607,7 +843,8 @@ def main() -> None:
         report_txt,
         summaries_by_model,
         odd135_stats_by_model,
-        models=models,
+        odd_even_stats_by_model,
+        models=report_models,
         er_p=args.er_p,
         validation_rows=validation_rows,
         max_order=args.max_order,

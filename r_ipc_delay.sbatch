@@ -13,6 +13,8 @@
 set -euo pipefail
 
 mkdir -p logs
+export MPLCONFIGDIR="${TMPDIR:-/tmp}/matplotlib-${SLURM_JOB_ID:-ipc_delay}"
+mkdir -p "${MPLCONFIGDIR}"
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}

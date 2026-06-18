@@ -220,6 +220,16 @@ def parse_args():
         action="store_true",
         help="Plot weight-test modes as 2D interpolation fraction vs mean CV and mean metric value; do not use KL.",
     )
+    ap.add_argument(
+        "--sign-norm-ablation",
+        action="store_true",
+        help="Plot the sign-balance normalization ablation and exit before default histogram plots.",
+    )
+    ap.add_argument(
+        "--sign-norm-prefix",
+        default="sign_test_og_cel",
+        help="Mode prefix used to identify sign-normalization ablation rows.",
+    )
     return ap.parse_args()
 
 
@@ -235,6 +245,11 @@ def _safe_path(path: str) -> str:
         if not os.path.exists(cand):
             return cand
         k += 1
+
+
+def _replace_path(path: str) -> str:
+    """Use a stable output path, replacing an older plot/table if it exists."""
+    return path
 
 
 def _mode_numeric_value(mode: str) -> float:
@@ -441,6 +456,13 @@ def _read_combined_csv(path: str) -> pd.DataFrame:
             "IPC",
             "KR",
             "GR",
+            "raw_rho",
+            "ref_rho",
+            "post_rho",
+            "raw_fro",
+            "ref_fro",
+            "post_fro",
+            "scale_factor",
         ]
         for col in numeric_cols:
             if col in df.columns:
@@ -1148,6 +1170,409 @@ def _unique_hparam_rows(df: pd.DataFrame) -> pd.DataFrame:
               .sort_values(keys)
               .reset_index(drop=True))
 
+
+def _sign_norm_label(norm_name: str) -> str:
+    labels = {
+        "spectral_radius": r"$W / \rho(W)$",
+        "original_radius": r"$W / \rho(W_{\mathrm{orig}})$",
+        "frobenius": "Frobenius matched",
+    }
+    return labels.get(str(norm_name), str(norm_name))
+
+
+def _parse_sign_fraction_from_mode(mode: str, prefix: str) -> float:
+    mode_base = str(mode).split("__norm_", 1)[0]
+    prefix = str(prefix or "").strip()
+    if prefix:
+        m = re.search(
+            rf"{re.escape(prefix)}([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)",
+            mode_base,
+        )
+        if m:
+            return float(m.group(1))
+        return np.nan
+    return _mode_numeric_value(mode_base)
+
+
+def _infer_normalization_from_mode(mode: str) -> str:
+    m = re.search(r"__norm_([A-Za-z0-9_+-]+)$", str(mode))
+    if m:
+        return m.group(1)
+    return "spectral_radius"
+
+
+def _prepare_sign_norm_ablation_df(combined: pd.DataFrame, prefix: str) -> pd.DataFrame:
+    df = combined.copy()
+    if "normalization" not in df.columns:
+        df["normalization"] = ""
+    df["normalization"] = df["normalization"].astype(str).str.strip()
+    inferred_norm = df["mode"].astype(str).map(_infer_normalization_from_mode)
+    df.loc[df["normalization"].isin(["", "nan", "None"]), "normalization"] = inferred_norm
+
+    mode_base = df["mode"].astype(str).str.split("__norm_", n=1).str[0]
+    if prefix:
+        df = df[mode_base.str.startswith(str(prefix))].copy()
+    if df.empty:
+        return df
+
+    df["sign_frac"] = df["mode"].map(lambda m: _parse_sign_fraction_from_mode(m, prefix))
+    df = df[np.isfinite(df["sign_frac"])].copy()
+    for col in (
+        "rho_target",
+        "leak",
+        "input_scale",
+        "neuron_bias",
+        "MC",
+        "IPC",
+        "KR",
+        "GR",
+        "raw_rho",
+        "ref_rho",
+        "post_rho",
+        "raw_fro",
+        "ref_fro",
+        "post_fro",
+        "scale_factor",
+    ):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def _summarize_group_values(
+    per_group: pd.DataFrame,
+    value_col: str,
+    group_cols: list[str],
+) -> pd.DataFrame:
+    if per_group.empty:
+        return pd.DataFrame(columns=group_cols + ["mean", "std", "sem", "n_groups"])
+    summary = (
+        per_group.groupby(group_cols, as_index=False)[value_col]
+        .agg(mean="mean", std="std", n_groups="count")
+        .sort_values(group_cols)
+        .reset_index(drop=True)
+    )
+    summary["sem"] = summary["std"] / np.sqrt(summary["n_groups"].clip(lower=1))
+    summary["std"] = summary["std"].fillna(0.0)
+    summary["sem"] = summary["sem"].fillna(0.0)
+    return summary
+
+
+def _save_sign_norm_metric_grid(
+    summary: pd.DataFrame,
+    out_path: str,
+    *,
+    value_label: str,
+    title: str,
+    metric_order: list[str],
+    norm_order: list[str],
+):
+    if summary.empty:
+        print(f"[warn] {title}: no summary rows to plot.")
+        return
+    metrics = [m for m in metric_order if m in set(summary["metric"])]
+    if not metrics:
+        print(f"[warn] {title}: no requested metrics present.")
+        return
+
+    summary = summary[summary["normalization"].astype(str).isin(norm_order)].copy()
+    if summary.empty:
+        print(f"[warn] {title}: no rows for requested normalization modes.")
+        return
+
+    colors = {
+        "spectral_radius": "#1f77b4",
+        "original_radius": "#d95f02",
+        "frobenius": "#2ca02c",
+    }
+    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5), dpi=300, squeeze=False)
+    axes_flat = axes.ravel()
+    handles = []
+    labels = []
+
+    for ax_idx, metric in enumerate(metrics[:4]):
+        ax = axes_flat[ax_idx]
+        plotted = False
+        for norm_name in norm_order:
+            sub = summary[
+                (summary["metric"] == metric)
+                & (summary["normalization"].astype(str) == norm_name)
+            ].sort_values("sign_frac")
+            if sub.empty:
+                continue
+            xs = sub["sign_frac"].to_numpy(float)
+            ys = sub["mean"].to_numpy(float)
+            sem = sub["sem"].to_numpy(float)
+            line = ax.errorbar(
+                xs,
+                ys,
+                yerr=sem,
+                marker="o",
+                linewidth=2.0,
+                markersize=4.5,
+                capsize=2.5,
+                color=colors.get(norm_name),
+                label=_sign_norm_label(norm_name),
+            )
+            if ax_idx == 0:
+                handles.append(line)
+                labels.append(_sign_norm_label(norm_name))
+            plotted = True
+        if not plotted:
+            ax.set_axis_off()
+            continue
+        ax.set_title(metric)
+        ax.set_xlabel("negative edge fraction")
+        ax.set_ylabel(value_label)
+        ax.set_xlim(-0.02, 1.02)
+        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
+        ax.grid(True, alpha=0.22)
+        ax.margins(y=0.08)
+
+    for j in range(len(metrics), len(axes_flat)):
+        axes_flat[j].set_axis_off()
+
+    fig.suptitle(title, y=0.985, fontsize=16)
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.945),
+            ncol=min(2, len(handles)),
+            frameon=False,
+        )
+    fig.align_ylabels(axes_flat)
+    fig.tight_layout(rect=[0.02, 0.03, 1.0, 0.89])
+    out_path = _replace_path(out_path)
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"[saved] {out_path}")
+
+
+def _save_sign_norm_scaling_grid(
+    summary: pd.DataFrame,
+    out_path: str,
+    *,
+    norm_order: list[str],
+):
+    if summary.empty:
+        print("[warn] sign normalization scaling: no summary rows to plot.")
+        return
+    diag_cols = [
+        ("post_rho", "post spectral radius"),
+        ("post_fro", "post Frobenius norm"),
+        ("raw_rho", "raw spectral radius"),
+        ("scale_factor", "scale factor"),
+    ]
+    summary = summary[summary["normalization"].astype(str).isin(norm_order)].copy()
+    if summary.empty:
+        print("[warn] sign normalization scaling: no rows for requested normalization modes.")
+        return
+
+    colors = {
+        "spectral_radius": "#1f77b4",
+        "original_radius": "#d95f02",
+        "frobenius": "#2ca02c",
+    }
+    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5), dpi=300, squeeze=False)
+    axes_flat = axes.ravel()
+    handles = []
+    labels = []
+
+    for ax_idx, (col, label) in enumerate(diag_cols):
+        ax = axes_flat[ax_idx]
+        if col not in summary.columns:
+            ax.set_axis_off()
+            continue
+        plotted = False
+        for norm_name in norm_order:
+            sub = summary[summary["normalization"].astype(str) == norm_name].sort_values("sign_frac")
+            if sub.empty:
+                continue
+            xs = sub["sign_frac"].to_numpy(float)
+            ys = sub[col].to_numpy(float)
+            sem_col = f"{col}_sem"
+            yerr = sub[sem_col].to_numpy(float) if sem_col in sub.columns else None
+            line = ax.errorbar(
+                xs,
+                ys,
+                yerr=yerr,
+                marker="o",
+                linewidth=2.0,
+                markersize=4.5,
+                capsize=2.5,
+                color=colors.get(norm_name),
+                label=_sign_norm_label(norm_name),
+            )
+            if ax_idx == 0:
+                handles.append(line)
+                labels.append(_sign_norm_label(norm_name))
+            plotted = True
+        if not plotted:
+            ax.set_axis_off()
+            continue
+        ax.set_title(label)
+        ax.set_xlabel("negative edge fraction")
+        ax.set_ylabel(label)
+        ax.set_xlim(-0.02, 1.02)
+        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
+        ax.grid(True, alpha=0.22)
+        ax.margins(y=0.08)
+
+    fig.suptitle("Sign-balance normalization scaling diagnostics", y=0.985, fontsize=16)
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.945),
+            ncol=min(2, len(handles)),
+            frameon=False,
+        )
+    fig.align_ylabels(axes_flat)
+    fig.tight_layout(rect=[0.02, 0.03, 1.0, 0.89])
+    out_path = _replace_path(out_path)
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"[saved] {out_path}")
+
+
+def plot_sign_norm_ablation(combined: pd.DataFrame, out_dir: str, prefix: str = "sign_test_og_cel"):
+    os.makedirs(out_dir, exist_ok=True)
+    df = _prepare_sign_norm_ablation_df(combined, prefix)
+    if df.empty:
+        available = sorted(combined["mode"].astype(str).dropna().unique().tolist())
+        preview = ", ".join(available[:16]) + (" ..." if len(available) > 16 else "")
+        print(f"[warn] sign_norm_ablation: no rows matched prefix={prefix!r}.")
+        print(f"[info] available modes: {preview}")
+        return
+
+    metrics = [m for m in ("MC", "IPC", "KR", "GR") if m in df.columns]
+    if not metrics:
+        print("[warn] sign_norm_ablation: no MC/IPC/KR/GR columns found.")
+        return
+
+    plot_norms = ("spectral_radius", "original_radius")
+    norm_order = [
+        n for n in plot_norms
+        if n in set(df["normalization"].astype(str))
+    ]
+    if not norm_order:
+        available = sorted(df["normalization"].astype(str).unique())
+        print(
+            "[warn] sign_norm_ablation: none of the requested plotted normalization modes "
+            f"are present. Available: {available}"
+        )
+        return
+    df = df[df["normalization"].astype(str).isin(norm_order)].copy()
+
+    df = _assign_group_ids(df)
+    df["unit_id"] = df["src"].astype(str) + ":" + df["group_id"].astype(str)
+
+    metric_long = df.melt(
+        id_vars=["normalization", "sign_frac", "unit_id"],
+        value_vars=metrics,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+    per_group_perf = (
+        metric_long.groupby(["normalization", "sign_frac", "unit_id", "metric"], as_index=False)["value"]
+        .mean()
+    )
+    perf_summary = _summarize_group_values(
+        per_group_perf,
+        "value",
+        ["normalization", "sign_frac", "metric"],
+    )
+    perf_csv = _replace_path(os.path.join(out_dir, "sign_norm_ablation_mean_performance.csv"))
+    perf_summary.to_csv(perf_csv, index=False)
+    print(f"[saved] {perf_csv} (rows={len(perf_summary)})")
+
+    hparam_keys = [
+        "normalization",
+        "sign_frac",
+        "unit_id",
+        "rho_target",
+        "leak",
+        "input_scale",
+        "neuron_bias",
+    ]
+    hparam_agg = (
+        df.groupby(hparam_keys, as_index=False)[metrics]
+        .mean()
+        .sort_values(hparam_keys)
+        .reset_index(drop=True)
+    )
+    hparam_long = hparam_agg.melt(
+        id_vars=["normalization", "sign_frac", "unit_id"],
+        value_vars=metrics,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+    per_group_cv = (
+        hparam_long.groupby(["normalization", "sign_frac", "unit_id", "metric"], as_index=False)["value"]
+        .agg(cv=lambda x: _dispersion(x.to_numpy()))
+    )
+    cv_summary = _summarize_group_values(
+        per_group_cv,
+        "cv",
+        ["normalization", "sign_frac", "metric"],
+    )
+    cv_csv = _replace_path(os.path.join(out_dir, "sign_norm_ablation_cv.csv"))
+    cv_summary.to_csv(cv_csv, index=False)
+    print(f"[saved] {cv_csv} (rows={len(cv_summary)})")
+
+    diag_cols = [
+        c for c in ("raw_rho", "ref_rho", "post_rho", "raw_fro", "ref_fro", "post_fro", "scale_factor")
+        if c in df.columns
+    ]
+    scaling_summary = pd.DataFrame()
+    if diag_cols:
+        per_group_diag = (
+            df.groupby(["normalization", "sign_frac", "unit_id"], as_index=False)[diag_cols]
+            .mean()
+        )
+        parts = []
+        for col in diag_cols:
+            sub = (
+                per_group_diag.groupby(["normalization", "sign_frac"], as_index=False)[col]
+                .agg(**{col: "mean", f"{col}_std": "std", f"{col}_n": "count"})
+            )
+            sub[f"{col}_sem"] = sub[f"{col}_std"] / np.sqrt(sub[f"{col}_n"].clip(lower=1))
+            parts.append(sub)
+        scaling_summary = parts[0]
+        for sub in parts[1:]:
+            scaling_summary = scaling_summary.merge(sub, on=["normalization", "sign_frac"], how="outer")
+        scaling_summary = scaling_summary.sort_values(["normalization", "sign_frac"]).reset_index(drop=True)
+        fill_zero = {c: 0.0 for c in scaling_summary.columns if c.endswith(("_std", "_sem"))}
+        scaling_summary = scaling_summary.fillna(fill_zero)
+        scaling_csv = _replace_path(os.path.join(out_dir, "sign_norm_ablation_scaling.csv"))
+        scaling_summary.to_csv(scaling_csv, index=False)
+        print(f"[saved] {scaling_csv} (rows={len(scaling_summary)})")
+
+    _save_sign_norm_metric_grid(
+        perf_summary,
+        os.path.join(out_dir, "sign_norm_ablation_mean_performance.png"),
+        value_label="mean performance",
+        title="Sign-balance normalization ablation: mean performance",
+        metric_order=metrics,
+        norm_order=norm_order,
+    )
+    _save_sign_norm_metric_grid(
+        cv_summary,
+        os.path.join(out_dir, "sign_norm_ablation_cv.png"),
+        value_label="CV across hyperparameters",
+        title="Sign-balance normalization ablation: hyperparameter CV",
+        metric_order=metrics,
+        norm_order=norm_order,
+    )
+    if not scaling_summary.empty:
+        _save_sign_norm_scaling_grid(
+            scaling_summary,
+            os.path.join(out_dir, "sign_norm_ablation_scaling.png"),
+            norm_order=norm_order,
+        )
 
 
 
@@ -2776,6 +3201,10 @@ def main():
         raise ValueError(
             f"Mode filter removed all rows from combined input. Requested modes: {ANALYSIS_MODE_FILTER}"
         )
+
+    if args.sign_norm_ablation:
+        plot_sign_norm_ablation(combined, args.out_dir, prefix=args.sign_norm_prefix)
+        return
 
     # Save a copy (non-destructive; versioned if exists)
     out_comb = _safe_path(os.path.join(args.out_dir, "combined.ALL.csv"))

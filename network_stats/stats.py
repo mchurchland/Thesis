@@ -11,6 +11,7 @@ def compute_IPC(
     alpha: float,
     device: torch.device,
     orders: list[int] = [1, 3, 5],
+    capacity_threshold: float = 0.0,
 ) -> float:
     """
     Information Processing Capacity (approx.): sum of for Legendre targets
@@ -19,6 +20,7 @@ def compute_IPC(
     This version batches all Legendre orders for a fixed delay d, so that
     we do ONE Cholesky factorization per delay and solve for all targets
     in one go.
+    Terms with corr^2 below capacity_threshold are omitted.
 
     See: Dambre et al., 2012, Sci. Rep. 2:514; batching pattern similar to scikit-learn Ridge
     multi-target solves (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/linear_model/_ridge.py).
@@ -57,7 +59,9 @@ def compute_IPC(
         # Yhat: [T_test - d, max_order]
 
         for j in range(Ytr.shape[1]):
-            total += corr2_score(Yte[:, j], Yhat[:, j])
+            score = corr2_score(Yte[:, j], Yhat[:, j])
+            if score >= capacity_threshold:
+                total += score
 
     return float(total)
 
