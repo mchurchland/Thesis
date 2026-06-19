@@ -37,6 +37,7 @@ CE_ADJ="${CE_ADJ:-Connectome/ce_adj_removed.npy}"
 CE_EI="${CE_EI:-}"
 UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
 CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_removed.npy}"
+NEW_CEL_XLS="${NEW_CEL_XLS:-new_cel.xls}"
 OUT_PREFIX="${OUT_PREFIX:-shuf_sep_pm1_fix_new_cel_${UNKNOWN_SIGN_POLICY}}"
 
 RANDOM_NODE_SUBSETS=0
@@ -53,6 +54,30 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
     SUBSET_ARGS+=(--subset-seed-offset "${SUBSET_SEED_OFFSET}")
   fi
 fi
+
+ensure_unknown_sign_weights() {
+  if [[ "${UNKNOWN_SIGN_POLICY}" != "random_unknown_4to1" ]]; then
+    return
+  fi
+  if [[ -f "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
+    return
+  fi
+  if [[ ! -f "${NEW_CEL_XLS}" ]]; then
+    echo "[error] Missing ${CE_UNKNOWN_SIGN_WEIGHTS} and cannot regenerate it because ${NEW_CEL_XLS} is missing." >&2
+    exit 1
+  fi
+
+  local tmp_prefix="${TMPDIR:-/tmp}/ce_unknown_${SLURM_JOB_ID:-manual}_${SLURM_ARRAY_TASK_ID:-0}"
+  echo "[info] ${CE_UNKNOWN_SIGN_WEIGHTS} not found; regenerating task-local unknown-sign weights from ${NEW_CEL_XLS}"
+  conda run -n cel python util/read_xls.py \
+    --xls "${NEW_CEL_XLS}" \
+    --new-cel \
+    --out "${tmp_prefix}"
+  CE_UNKNOWN_SIGN_WEIGHTS="${tmp_prefix}_unknown_sign_weights.npy"
+  echo "[info] using generated unknown-sign weights: ${CE_UNKNOWN_SIGN_WEIGHTS}"
+}
+
+ensure_unknown_sign_weights
 
 UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
 if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" ]]; then

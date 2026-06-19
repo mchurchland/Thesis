@@ -26,6 +26,7 @@ CE_ADJ="${CE_ADJ:-Connectome/ce_adj_removed.npy}"
 CE_EI=""
 UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
 CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_removed.npy}"
+NEW_CEL_XLS="${NEW_CEL_XLS:-new_cel.xls}"
 BASE_OUT_DIR="${BASE_OUT_DIR:-ipc_methodology_new_connectome_${UNKNOWN_SIGN_POLICY}}"
 
 # Representative model/hyperparameter set. This is intentionally not the full
@@ -54,6 +55,20 @@ CUDA_IDX="${SLURM_LOCALID:-0}"
 
 UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
 if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" ]]; then
+  if [[ ! -f "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
+    if [[ ! -f "${NEW_CEL_XLS}" ]]; then
+      echo "[error] Missing ${CE_UNKNOWN_SIGN_WEIGHTS} and cannot regenerate it because ${NEW_CEL_XLS} is missing." >&2
+      exit 1
+    fi
+    tmp_prefix="${TMPDIR:-/tmp}/ce_unknown_${SLURM_JOB_ID:-manual}"
+    echo "[info] ${CE_UNKNOWN_SIGN_WEIGHTS} not found; regenerating task-local unknown-sign weights from ${NEW_CEL_XLS}"
+    conda run -n cel python util/read_xls.py \
+      --xls "${NEW_CEL_XLS}" \
+      --new-cel \
+      --out "${tmp_prefix}"
+    CE_UNKNOWN_SIGN_WEIGHTS="${tmp_prefix}_unknown_sign_weights.npy"
+    echo "[info] using generated unknown-sign weights: ${CE_UNKNOWN_SIGN_WEIGHTS}"
+  fi
   UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
 fi
 
