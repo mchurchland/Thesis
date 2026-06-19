@@ -62,7 +62,7 @@ class SimulationParams:
     t_test: int = int(500)
     mc_max_delay: int = 30
     ipc_max_delay: int = 30
-    ipc_orders: list[int] = field(default_factory=lambda: [1, 3, 5])
+    ipc_orders: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
     ridge_alpha: float = 1e-4
 
 DEFAULT_SIM_PARAMS = SimulationParams()
