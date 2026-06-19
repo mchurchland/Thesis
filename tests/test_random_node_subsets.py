@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import torch
 
+import reservoir_variants as reservoir_variants_module
 from inv_arc_test import _draw_node_subsets
 from reservoir_variants import _apply_input_subset, _weight_test_feature_conn
 from util.util import (
@@ -171,6 +172,64 @@ def test_weight_test_dynamic_keys_resolve_to_expected_feature_connections():
         _weight_test_feature_conn("weight_test_binary_to_shuffled_cel0.5")
         == "weight_test_binary_to_shuffled_cel"
     )
+
+
+@pytest.mark.parametrize(
+    ("variant", "shuffle_attr"),
+    [
+        ("binary_base_topology_shuffle", "_conn_shuffle_ce"),
+        ("binary+shuffle", "_conn_shuffle_ce"),
+        ("binary+conshuffle+wshuffle", "_conn_and_w_shuffle_ce"),
+    ],
+)
+def test_topology_shuffle_variants_precompute_shuffle_once_per_run(
+    monkeypatch,
+    variant,
+    shuffle_attr,
+):
+    W = np.array(
+        [
+            [0.0, 2.0, -3.0, 0.0],
+            [0.0, 0.0, 4.0, 0.0],
+            [5.0, 0.0, 0.0, -6.0],
+            [0.0, 7.0, 0.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    calls = {"shuffle": 0, "eval": 0}
+
+    def fake_shuffle(Wbio, rng):
+        calls["shuffle"] += 1
+        return Wbio.astype(np.float32, copy=True)
+
+    def fake_evaluate_reservoir(*args, **kwargs):
+        calls["eval"] += 1
+        return {"MC": 1.0, "IPC": 2.0, "KR": 3.0, "GR": 4.0}
+
+    monkeypatch.setattr(reservoir_variants_module, shuffle_attr, fake_shuffle)
+    monkeypatch.setattr(
+        reservoir_variants_module,
+        "evaluate_reservoir",
+        fake_evaluate_reservoir,
+    )
+
+    ctx = reservoir_variants_module.VariantContext(
+        ce_W_bio=W,
+        ce_ei=None,
+        ws_k=10,
+        col_params=[
+            (1.0, 0.6, 0.1, 0.0),
+            (1.0, 0.8, 0.5, 0.1),
+        ],
+        device=torch.device("cpu"),
+        seed=123,
+        sid=0,
+    )
+
+    rows = reservoir_variants_module.run_variant(variant, ctx)
+
+    assert len(rows) == 2
+    assert calls == {"shuffle": 1, "eval": 2}
 
 
 def test_run_one_passes_only_output_subset_to_metrics(monkeypatch):

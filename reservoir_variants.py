@@ -10,7 +10,8 @@ from scipy.stats import entropy, halfnorm
 
 from network_stats.run_one import run_one
 from util.util import build_reservoir, _cel_to_bin, \
-    _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel,scale_to_sr
+    _count_edges,_shuffle_ce_weights,_conn_and_w_shuffle_ce,_conn_shuffle_ce,_sample_from_cel,scale_to_sr, \
+    _signed_binary_from_cel
 from sklearn.metrics.pairwise import cosine_similarity
 
 def _kl_empirical_to_fitted_gaussian(
@@ -570,21 +571,29 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
     if key == "binary_base_topology_shuffle":
         seed_base = _seed(ctx, offset=1)
+        ce_override = _conn_shuffle_ce(
+            _cel_to_bin(ctx.ce_W_bio),
+            np.random.default_rng(seed_base),
+        )
         return _run_variant_row(
             ctx,
-            feature_conn="binary_base_topology_shuffle",
+            feature_conn="cel",
             mode_label=VARIANT_LABELS[key],
-            ce_override=None,
+            ce_override=ce_override,
             nnz_target=None,
             seed_base=seed_base,
         )
     if key == "binary+conshuffle+wshuffle":
         seed_base = _seed(ctx, offset=1)
+        ce_override = _conn_and_w_shuffle_ce(
+            _signed_binary_from_cel(ctx.ce_W_bio),
+            np.random.default_rng(seed_base),
+        )
         return _run_variant_row(
             ctx,
-            feature_conn="binary+conshuffle+wshuffle",
+            feature_conn="cel",
             mode_label=VARIANT_LABELS[key],
-            ce_override=None,
+            ce_override=ce_override,
             nnz_target=None,
             seed_base=seed_base,
         )
@@ -631,11 +640,15 @@ def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
         )
     if key == "binary+shuffle":
         seed_base = _seed(ctx, offset=1)
+        ce_override = _conn_shuffle_ce(
+            _signed_binary_from_cel(ctx.ce_W_bio),
+            np.random.default_rng(seed_base),
+        )
         return _run_variant_row(
             ctx,
-            feature_conn="binary+shuffle",
+            feature_conn="cel",
             mode_label=VARIANT_LABELS[key],
-            ce_override=None,
+            ce_override=ce_override,
             nnz_target=None,
             seed_base=seed_base,
         )
