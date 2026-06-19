@@ -33,6 +33,11 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 NEURON_BIASES=(0.0 0.1)
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj_removed.npy}"
+CE_EI="${CE_EI:-}"
+UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_removed.npy}"
+OUT_PREFIX="${OUT_PREFIX:-shuf_sep_pm1_fix_new_cel_${UNKNOWN_SIGN_POLICY}}"
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -49,14 +54,19 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
   fi
 fi
 
+UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
+if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" ]]; then
+  UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
+fi
+
 # choose which variant this script runs
 JOB_KIND="all_topology_shuffle" 
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "shuf_sep_pm1_fix_new_cel_${OUTDIR}" \
-  --ce-adj Connectome/ce_adj_new.npy \
-  --ce-ei  Connectome/ce_ei_new.npy \
+  --out-dir "${OUT_PREFIX}_${OUTDIR}" \
+  --ce-adj "${CE_ADJ}" \
+  --ce-ei  "${CE_EI}" \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
   --seed "${START_SEED}" \
   --sid "${SID_BASE}" \
@@ -67,6 +77,7 @@ conda run -n cel python inv_arc_test.py \
   --repeat-rank "${REPEAT_RANK}" \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --neuron-biases "${NEURON_BIASES[@]}" \
+  "${UNKNOWN_SIGN_ARGS[@]}" \
   --ws-p 0.1 \
   --er-p 0.1 \
   --cuda ${SLURM_LOCALID} \

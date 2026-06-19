@@ -33,8 +33,10 @@ from util.util import (
     _conn_shuffle_ce,
     _sample_from_cel,
     _shuffle_ce_weights,
+    assign_random_unknown_signs,
     build_reservoir,
     load_connectome,
+    load_unknown_sign_weights,
     set_seed,
 )
 
@@ -45,6 +47,29 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--ce-adj", default="Connectome/ce_adj.npy", help="Path to CE adjacency npy.")
     p.add_argument("--ce-ei", default="Connectome/ce_ei.npy", help="Path to CE EI labels npy.")
+    p.add_argument(
+        "--ce-unknown-sign-weights",
+        default=None,
+        help="Optional .npy matrix with magnitudes for new-connectome complex/no-pred edges.",
+    )
+    p.add_argument(
+        "--unknown-sign-policy",
+        choices=("drop", "random_unknown_4to1"),
+        default="drop",
+        help="Use random_unknown_4to1 to add complex/no-pred edges once per seed.",
+    )
+    p.add_argument(
+        "--unknown-sign-inhibitory-frac",
+        type=float,
+        default=0.2,
+        help="Fraction of complex/no-pred edges assigned negative signs under random_unknown_4to1.",
+    )
+    p.add_argument(
+        "--unknown-sign-seed-offset",
+        type=int,
+        default=23_000_000,
+        help="Offset added to each seed before randomizing complex/no-pred signs.",
+    )
     p.add_argument("--out-dir", default="ipc_order_sweep_ce", help="Directory for outputs.")
     p.add_argument(
         "--models",
@@ -634,7 +659,21 @@ def main() -> None:
     ce_W_bio, _, _ = load_connectome(args.ce_adj, args.ce_ei)
     if ce_W_bio is None:
         raise FileNotFoundError(f"Could not load CE adjacency from: {args.ce_adj}")
-    nnz_target_ce = int((np.abs(ce_W_bio) > 0).sum())
+    if not (0.0 <= args.unknown_sign_inhibitory_frac <= 1.0):
+        raise ValueError("--unknown-sign-inhibitory-frac must be between 0 and 1.")
+    ce_unknown_sign_weights = None
+    if args.unknown_sign_policy == "random_unknown_4to1":
+        ce_unknown_sign_weights = load_unknown_sign_weights(
+            args.ce_adj,
+            args.ce_unknown_sign_weights,
+            n_nodes=ce_W_bio.shape[0],
+        )
+        if ce_unknown_sign_weights is None:
+            raise FileNotFoundError(
+                "random_unknown_4to1 requires an unknown-sign weight matrix. "
+                "Regenerate the new connectome with util/read_xls.py or pass "
+                "--ce-unknown-sign-weights explicitly."
+            )
     neuron_biases = [float(b) for b in args.neuron_biases]
     if any(b < 0.0 for b in neuron_biases):
         raise ValueError("--neuron-biases values must be non-negative.")
@@ -645,13 +684,22 @@ def main() -> None:
     raw_rows: list[tuple] = []
     for seed in seeds:
         set_seed(seed)
+        ce_W_trial = ce_W_bio
+        if args.unknown_sign_policy == "random_unknown_4to1":
+            ce_W_trial = assign_random_unknown_signs(
+                ce_W_bio,
+                ce_unknown_sign_weights,
+                np.random.default_rng(seed + args.unknown_sign_seed_offset),
+                inhibitory_fraction=args.unknown_sign_inhibitory_frac,
+            )
+        nnz_target_ce = int((np.abs(ce_W_trial) > 0).sum())
         for rho in args.rho:
             for leak in args.leak:
                 for input_scale in args.input_scale:
                     for model in models:
                         Wt, Win = _build_model_reservoir(
                             model=model,
-                            ce_W_bio=ce_W_bio,
+                            ce_W_bio=ce_W_trial,
                             seed=seed,
                             target_sr=rho,
                             input_scale=input_scale,

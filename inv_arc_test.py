@@ -30,7 +30,7 @@ import torch
 from reservoir_variants import VARIANT_KEYS, VariantContext, run_variant, save_rows
 
 # ---- repo helpers (reuse your utils/stats) ----
-from util.util import load_connectome
+from util.util import assign_random_unknown_signs, load_connectome, load_unknown_sign_weights
 
 # =================== Defaults (match your diagnostics) ===================
 
@@ -258,6 +258,36 @@ def parse_args():
         default=None,
         help="Path to C. elegans E/I matrix (n x n).",
     )
+    p.add_argument(
+        "--ce-unknown-sign-weights",
+        default=None,
+        help=(
+            "Optional .npy matrix with magnitudes for new-connectome complex/no-pred edges. "
+            "If omitted, inferred from --ce-adj when --unknown-sign-policy=random_unknown_4to1."
+        ),
+    )
+    p.add_argument(
+        "--unknown-sign-policy",
+        choices=("drop", "random_unknown_4to1"),
+        default="drop",
+        help=(
+            "How to handle new-connectome complex/no-pred signs. 'drop' keeps the signed "
+            "adjacency as loaded; 'random_unknown_4to1' adds those edges back once per "
+            "repeat with a 4:1 excitatory:inhibitory sign ratio."
+        ),
+    )
+    p.add_argument(
+        "--unknown-sign-inhibitory-frac",
+        type=float,
+        default=0.2,
+        help="Fraction of complex/no-pred edges assigned negative signs under random_unknown_4to1.",
+    )
+    p.add_argument(
+        "--unknown-sign-seed-offset",
+        type=int,
+        default=23_000_000,
+        help="Offset added to each repeat seed before randomizing complex/no-pred signs.",
+    )
 
     # IO / provenance
     p.add_argument("--csv-name", default=None, help="Optional CSV file name override.")
@@ -458,6 +488,30 @@ def main():
         raise ValueError(
             "You must pass both --ce-adj and --ce-ei, or --ce-path to load_connectome()."
         )
+    if ce_W_bio is None:
+        raise FileNotFoundError(f"Could not load CE adjacency from: {args.ce_adj}")
+    if not (0.0 <= args.unknown_sign_inhibitory_frac <= 1.0):
+        raise ValueError("--unknown-sign-inhibitory-frac must be between 0 and 1.")
+
+    ce_unknown_sign_weights = None
+    if args.unknown_sign_policy == "random_unknown_4to1":
+        ce_unknown_sign_weights = load_unknown_sign_weights(
+            args.ce_adj,
+            args.ce_unknown_sign_weights,
+            n_nodes=ce_W_bio.shape[0],
+        )
+        if ce_unknown_sign_weights is None:
+            raise FileNotFoundError(
+                "random_unknown_4to1 requires an unknown-sign weight matrix. "
+                "Regenerate the new connectome with util/read_xls.py or pass "
+                "--ce-unknown-sign-weights explicitly."
+            )
+        n_unknown = int(np.count_nonzero(ce_unknown_sign_weights))
+        print(
+            "[INFO] random_unknown_4to1 enabled: "
+            f"{n_unknown} complex/no-pred edges will be signed once per repeat "
+            f"with inhibitory_fraction={args.unknown_sign_inhibitory_frac:g}."
+        )
 
     k_in = k_out = None
     if args.random_node_subsets:
@@ -521,6 +575,14 @@ def main():
                 append_base = append_start or wrote_any
                 seed_base = args.seed + rep_idx * args.repeat_seed_stride
                 set_seed(seed_base)
+                ce_W_trial = ce_W_bio
+                if args.unknown_sign_policy == "random_unknown_4to1":
+                    ce_W_trial = assign_random_unknown_signs(
+                        ce_W_bio,
+                        ce_unknown_sign_weights,
+                        np.random.default_rng(seed_base + args.unknown_sign_seed_offset),
+                        inhibitory_fraction=args.unknown_sign_inhibitory_frac,
+                    )
                 sid_base = _sid_base(rep_idx)
                 input_idx = output_idx = None
                 if args.random_node_subsets:
@@ -528,7 +590,7 @@ def main():
                     # Separate architecture jobs get the same draw when launched with
                     # the same seed/repeat partitioning/subset offset.
                     input_idx, output_idx = _draw_node_subsets(
-                        ce_W_bio.shape[0],
+                        ce_W_trial.shape[0],
                         k_in,
                         k_out,
                         seed_base + args.subset_seed_offset,
@@ -543,7 +605,7 @@ def main():
                     return _build_ctx(
                         ctx_job_key,
                         WS_K,
-                        ce_W_bio,
+                        ce_W_trial,
                         None,
                         col_params,
                         device,
@@ -596,8 +658,8 @@ def main():
 
                 if job_key == "sign_test_og_cel":
                     frac = (
-                        len(np.where(ce_W_bio < 0)[0])
-                        / (len(np.where(ce_W_bio > 0)[0]) + len(np.where(ce_W_bio < 0)[0]))
+                        len(np.where(ce_W_trial < 0)[0])
+                        / (len(np.where(ce_W_trial > 0)[0]) + len(np.where(ce_W_trial < 0)[0]))
                     )
                     # Build a local list for this run; do not mutate sign_flip_fracs in-place.
                     fracs_local = [frac]

@@ -19,7 +19,12 @@ import torch
 from inv_arc_test import _pick_device
 from network_stats.run_one import run_reservoir_with_pre
 from network_stats.stats import compute_MC
-from util.util import load_connectome, set_seed
+from util.util import (
+    assign_random_unknown_signs,
+    load_connectome,
+    load_unknown_sign_weights,
+    set_seed,
+)
 
 # Reuse existing sweep helpers to keep model construction and seed/model behavior aligned.
 from Parameter_justification.ipc_order_sweep_ce import (
@@ -34,6 +39,14 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="MC delay sensitivity across reservoir models.")
     p.add_argument("--ce-adj", default="Connectome/ce_adj.npy")
     p.add_argument("--ce-ei", default="Connectome/ce_ei.npy")
+    p.add_argument("--ce-unknown-sign-weights", default=None)
+    p.add_argument(
+        "--unknown-sign-policy",
+        choices=("drop", "random_unknown_4to1"),
+        default="drop",
+    )
+    p.add_argument("--unknown-sign-inhibitory-frac", type=float, default=0.2)
+    p.add_argument("--unknown-sign-seed-offset", type=int, default=23_000_000)
     p.add_argument("--out-dir", default="mc_delay_sensitivity")
 
     p.add_argument("--models", nargs="+", default=["all"], help="Model list or 'all'.")
@@ -93,19 +106,42 @@ def main() -> None:
     ce_W_bio, _, _ = load_connectome(args.ce_adj, args.ce_ei)
     if ce_W_bio is None:
         raise FileNotFoundError(f"Could not load CE adjacency from: {args.ce_adj}")
-    nnz_target_ce = int((np.abs(ce_W_bio) > 0).sum())
+    if not (0.0 <= args.unknown_sign_inhibitory_frac <= 1.0):
+        raise ValueError("--unknown-sign-inhibitory-frac must be between 0 and 1.")
+    ce_unknown_sign_weights = None
+    if args.unknown_sign_policy == "random_unknown_4to1":
+        ce_unknown_sign_weights = load_unknown_sign_weights(
+            args.ce_adj,
+            args.ce_unknown_sign_weights,
+            n_nodes=ce_W_bio.shape[0],
+        )
+        if ce_unknown_sign_weights is None:
+            raise FileNotFoundError(
+                "random_unknown_4to1 requires an unknown-sign weight matrix. "
+                "Regenerate the new connectome with util/read_xls.py or pass "
+                "--ce-unknown-sign-weights explicitly."
+            )
 
     raw_rows: list[tuple] = []
     # (model, seed, rho, leak, input_scale, d_max, mc_total)
     for seed in seeds:
         set_seed(seed)
+        ce_W_trial = ce_W_bio
+        if args.unknown_sign_policy == "random_unknown_4to1":
+            ce_W_trial = assign_random_unknown_signs(
+                ce_W_bio,
+                ce_unknown_sign_weights,
+                np.random.default_rng(seed + args.unknown_sign_seed_offset),
+                inhibitory_fraction=args.unknown_sign_inhibitory_frac,
+            )
+        nnz_target_ce = int((np.abs(ce_W_trial) > 0).sum())
         for rho in args.rho:
             for leak in args.leak:
                 for input_scale in args.input_scale:
                     for model in models:
                         Wt, Win = _build_model_reservoir(
                             model=model,
-                            ce_W_bio=ce_W_bio,
+                            ce_W_bio=ce_W_trial,
                             seed=seed,
                             target_sr=rho,
                             input_scale=input_scale,

@@ -23,6 +23,24 @@ def _connectome_node_path_candidates(adj_path: str) -> list[Path]:
     ]
 
 
+def _connectome_unknown_sign_path_candidates(adj_path: str) -> list[Path]:
+    adj = Path(adj_path)
+    stem = adj.stem
+    stems: list[str] = []
+
+    if "_adj" in stem:
+        stems.append(stem.replace("_adj", "_unknown_sign_weights", 1))
+    if stem.startswith("ce_adj_"):
+        suffix = stem[len("ce_adj_"):]
+        stems.append(f"ce_{suffix}_unknown_sign_weights")
+    if stem.endswith("_adj"):
+        stems.append(f"{stem[:-4]}_unknown_sign_weights")
+    stems.append(f"{stem}_unknown_sign_weights")
+
+    unique_stems = list(dict.fromkeys(stems))
+    return [adj.with_name(f"{unknown_stem}.npy") for unknown_stem in unique_stems]
+
+
 def _load_connectome_names(adj_path: str, n_nodes: int) -> np.ndarray | None:
     for path in _connectome_node_path_candidates(adj_path):
         if not path.is_file():
@@ -35,6 +53,78 @@ def _load_connectome_names(adj_path: str, n_nodes: int) -> np.ndarray | None:
         if len(names) == n_nodes:
             return names
     return None
+
+
+def load_unknown_sign_weights(
+    adj_path: str | None,
+    unknown_path: str | None = None,
+    *,
+    n_nodes: int | None = None,
+) -> np.ndarray | None:
+    """Load magnitudes for new-connectome complex/no-pred edges, if present."""
+    candidates: list[Path] = []
+    if unknown_path:
+        candidates.append(Path(unknown_path))
+    elif adj_path is not None:
+        candidates.extend(_connectome_unknown_sign_path_candidates(adj_path))
+
+    for path in candidates:
+        if not path.is_file():
+            continue
+        W = np.load(path).astype(np.float32, copy=False)
+        if W.ndim != 2 or W.shape[0] != W.shape[1]:
+            raise ValueError("Unknown-sign weight matrix must be a square 2D array.")
+        if n_nodes is not None and W.shape != (n_nodes, n_nodes):
+            raise ValueError(
+                "Unknown-sign weight matrix shape must match adjacency: "
+                f"got {W.shape}, expected {(n_nodes, n_nodes)}."
+            )
+        if not np.isfinite(W).all():
+            W = np.where(np.isfinite(W), W, 0.0).astype(np.float32, copy=False)
+        W = np.abs(W).astype(np.float32, copy=False)
+        np.fill_diagonal(W, 0.0)
+        return W
+    return None
+
+
+def assign_random_unknown_signs(
+    W_known: np.ndarray,
+    W_unknown_magnitudes: np.ndarray | None,
+    rng: np.random.Generator,
+    *,
+    inhibitory_fraction: float = 0.2,
+) -> np.ndarray:
+    """
+    Add complex/no-pred edges back with random signs once per trial.
+
+    inhibitory_fraction=0.2 gives the requested 4:1 excitatory:inhibitory
+    edge-level ratio among the formerly unknown-sign edges.
+    """
+    W = W_known.copy().astype(np.float32)
+    if W_unknown_magnitudes is None:
+        return W
+    if W_unknown_magnitudes.shape != W.shape:
+        raise ValueError(
+            "Unknown-sign weight matrix shape must match known adjacency: "
+            f"{W_unknown_magnitudes.shape} vs {W.shape}."
+        )
+    if not (0.0 <= inhibitory_fraction <= 1.0):
+        raise ValueError("inhibitory_fraction must be between 0 and 1.")
+
+    mags = np.abs(W_unknown_magnitudes).astype(np.float32, copy=False)
+    nz = np.nonzero(mags)
+    n_unknown = len(nz[0])
+    if n_unknown == 0:
+        return W
+
+    n_inhibitory = int(round(inhibitory_fraction * n_unknown))
+    order = rng.permutation(n_unknown)
+    signs = np.ones(n_unknown, dtype=np.float32)
+    signs[order[:n_inhibitory]] = -1.0
+    W[nz] += signs * mags[nz]
+    np.fill_diagonal(W, 0.0)
+    return W.astype(np.float32, copy=False)
+
 
 def _count_edges(A: np.ndarray) -> int:
     M = np.abs(A) > 0

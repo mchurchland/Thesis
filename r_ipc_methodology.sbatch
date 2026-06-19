@@ -20,11 +20,13 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
 # Focused IPC methodology check for the new connectome and bias experiment.
-# ce_adj_new.npy has no matching EI file in this repo; passing an empty EI path
+# ce_adj_removed.npy has no matching EI file in this repo; passing an empty EI path
 # lets load_connectome use the adjacency without trying to load old-size EI labels.
-CE_ADJ="Connectome/ce_adj_new.npy"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj_removed.npy}"
 CE_EI=""
-BASE_OUT_DIR="ipc_methodology_new_connectome"
+UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_removed.npy}"
+BASE_OUT_DIR="${BASE_OUT_DIR:-ipc_methodology_new_connectome_${UNKNOWN_SIGN_POLICY}}"
 
 # Representative model/hyperparameter set. This is intentionally not the full
 # architecture sweep.
@@ -50,6 +52,11 @@ RIDGE_ALPHA=1e-4
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
+UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
+if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" ]]; then
+  UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
+fi
+
 for setting in "${SERIES_SETTINGS[@]}"; do
   IFS=: read -r SERIES_LABEL T_TRAIN T_TEST <<< "${setting}"
   OUT_DIR="${BASE_OUT_DIR}/${SERIES_LABEL}"
@@ -66,6 +73,7 @@ for setting in "${SERIES_SETTINGS[@]}"; do
     --input-scale "${INPUT_SCALES[@]}" \
     --neuron-biases "${NEURON_BIASES[@]}" \
     --capacity-thresholds "${CAPACITY_THRESHOLDS[@]}" \
+    "${UNKNOWN_SIGN_ARGS[@]}" \
     --washout "${WASHOUT}" \
     --t-train "${T_TRAIN}" \
     --t-test "${T_TEST}" \

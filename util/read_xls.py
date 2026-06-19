@@ -3,7 +3,6 @@
 # Parse CElegansNeuronTables.xls and produce:
 #   ce_adj.npy        (float32 NxN adjacency with signed synapse counts)
 #   ce_nodes.txt      (node names, one per line, same order as matrix)
-#   ce_ei.npy         (length N, +1=exc, -1=inh, 0=unknown inferred from outgoing edges)
 #
 # Sheets expected:
 #   - "Connectome"         with columns: Origin, Target, Number of Connections, Neurotransmitter
@@ -13,7 +12,6 @@
 # - Edge sign rule: GABA → negative; ACh/Glutamate → positive; others default to 0 (changeable).
 # - Duplicate edges are summed.
 # - Muscles can be included or dropped via flag.
-# - Dale label per neuron is inferred from the sign of its outgoing weights; near-zero → 0.
 #
 # Usage:
 #   python build_ce_connectome.py --xls CElegansNeuronTables.xls --out ce \
@@ -23,7 +21,6 @@
 # Requirements:
 #   pip/conda: pandas numpy xlrd (for .xls)  OR openpyxl (for .xlsx with engine="openpyxl")
 # ------------------------------------------------------------
-import warnings
 import argparse
 import numpy as np
 import pandas as pd
@@ -137,23 +134,48 @@ def process_neuron_to_muscle(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
         add_edge(acc, src, dst, sign * weight)
     return acc
 
-def new_cel_sign_to_edge_sign(sign_value) -> int:
-    """Map new_cel.xls Sign values to edge signs."""
+def _new_cel_sign_token(sign_value) -> str:
     if pd.isna(sign_value):
-        return 0
-    s = str(sign_value).strip().lower()
+        return ""
+    return str(sign_value).strip().lower()
+
+def new_cel_sign_is_unknown(sign_value) -> bool:
+    """Return True for new_cel.xls Sign values with no usable prediction."""
+    s = _new_cel_sign_token(sign_value)
+    return s in {
+        "",
+        "complex",
+        "no pred",
+        "no_pred",
+        "nopred",
+        "no prediction",
+        "unknown",
+        "unk",
+        "0",
+        "zero",
+    }
+
+def new_cel_sign_to_edge_sign(sign_value) -> int:
+    """Map new_cel.xls Sign values to known edge signs; unknown/complex -> 0."""
+    s = _new_cel_sign_token(sign_value)
     if s in {"+", "plus", "pos", "positive"}:
         return +1
     if s in {"-", "minus", "neg", "negative"}:
         return -1
-    if s in {"complex", "no pred", "no_pred", "nopred", "0", "zero"}:
+    if new_cel_sign_is_unknown(sign_value):
         return 0
     raise ValueError(f"Unknown new_cel Sign value: {sign_value!r}")
 
-def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
+def process_new_cel(
+    df: pd.DataFrame,
+    *,
+    return_unknown: bool = False,
+) -> Dict[str, Dict[str, float]] | Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, float]]]:
     """
     Expect new_cel.xls Table Export columns: Source, Target, Edge Weight, Sign.
-    Sign values complex/no pred are kept as zero-weight edges.
+    Sign values complex/no pred are kept as zero-weight edges in the signed
+    adjacency. If return_unknown=True, also return an edge map containing their
+    unsigned magnitudes for runtime random sign assignment.
     """
     cols = {c.lower().strip(): c for c in df.columns}
     source = cols.get("source")
@@ -165,6 +187,7 @@ def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
         raise ValueError("new_cel sheet must have columns: Source, Target, Edge Weight, Sign")
 
     acc: Dict[str, Dict[str, float]] = {}
+    unknown_acc: Dict[str, Dict[str, float]] = {}
     for _, row in df.iterrows():
         src = str(row[source]).strip()
         dst = str(row[target]).strip()
@@ -176,7 +199,11 @@ def process_new_cel(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
         if weight < -30:
             weight = -30
         sign = new_cel_sign_to_edge_sign(row[sign_col])
+        if sign == 0:
+            add_edge(unknown_acc, src, dst, abs(weight))
         add_edge(acc, src, dst, sign * weight)
+    if return_unknown:
+        return acc, unknown_acc
     return acc
 
 def merge_edge_maps(a: Dict[str, Dict[str, float]], b: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, float]]:
@@ -211,34 +238,6 @@ def build_matrix(edge_map: Dict[str, Dict[str, float]], include_nodes: Optional[
             W[i, j] += float(w)
     return W, names
 
-def infer_ei_labels(W_ce: np.ndarray, names: List[str], zero_tol: float = 1e-6) -> np.ndarray:
-    """
-    +1 if sum(outgoing weights) > 0, -1 if < 0, else 0.
-    """
-
-    W = W_ce.copy().astype(np.float32)
-    W_ind_normal =np.sign(W) ## handel naan
-    ei_label = W_ind_normal @ np.ones(W_ind_normal.shape[0])
-    ei_mixed = np.where(ei_label == 0)[0]
-    for idx in ei_mixed:
-        if not np.any(W[idx]):
-            continue
-        else:
-            r_sum = W[idx].sum()
-            if r_sum==0:
-                warnings.warn("When generating EI from count you had a row that had an equal number of\
-                               positive and negative weights whos sum was 0,\
-                               we set this EI value to 0 but this could change topology of the network\
-                               you may want to rewrite this code if this behavior is not suitable for you")
-                #this dosent happen in the celegan connectome and is just here defensivly
-                #row_sum[idx] = 0 ##gross but lets just assume if both sum is the same and pos_neg count is same its non
-                continue ## does the same thing as the line above
-            else:
-                ei_label[idx] = r_sum
-
-    return np.sign(ei_label).astype(np.float32)
-
-
 # ------------- main  -------------
 
 def main():
@@ -255,7 +254,7 @@ def main():
     print("Processing sheets…")
     if args.new_cel:
         conn_df = read_sheet(args.xls, "Table Export", engine=args.engine)
-        combined = process_new_cel(conn_df)
+        combined, unknown_combined = process_new_cel(conn_df, return_unknown=True)
         print(len(set(conn_df["Source"].to_numpy()).union(set(conn_df["Target"].to_numpy()))))
     else:
         conn_df = read_sheet(args.xls, "Connectome", engine=args.engine)
@@ -271,31 +270,39 @@ def main():
             combined = merge_edge_maps(conn_map, ntm_map)
         else:
             combined = conn_map
+        unknown_combined = None
 
     # Build adjacency and names
     print("Building adjacency…")
     W, names = build_matrix(combined)
+    W_unknown = None
+    if unknown_combined is not None:
+        W_unknown, _ = build_matrix(unknown_combined, include_nodes=names)
     num_gt, num_lt = (W>0).sum(),(W<0).sum()
     p_neg  = num_lt/(num_gt+num_lt)
     print(f"P(swap) = {2*p_neg*(1-p_neg)}")
     print(f"E(swap) = {2*p_neg*(1-p_neg)*(num_gt+num_lt)}")
-    # Infer EI labels from outgoing sign
-    print("Inferring Dale (E/I) labels…")
-    ei = infer_ei_labels(W, names)
 
     # Save natural matrix
     np.save(f"{args.out}_adj.npy", W.astype(np.float32))
-    #np.save(f"{args.out}_ei.npy", ei.astype(np.float32))
+    if W_unknown is not None:
+        np.save(f"{args.out}_unknown_sign_weights.npy", np.abs(W_unknown).astype(np.float32))
     with open(f"{args.out}_nodes.txt", "w") as f:
         for n in names:
             f.write(n + "\n")
-    print(f"Saved: {args.out}_adj.npy  {args.out}_ei.npy  {args.out}_nodes.txt")
+    saved = f"Saved: {args.out}_adj.npy  {args.out}_nodes.txt"
+    if W_unknown is not None:
+        saved += f"  {args.out}_unknown_sign_weights.npy"
+    print(saved)
 
     # Save SR=target-scaled version
 
 
     nnz = int((np.abs(W) > 0).sum())
+    unknown_nnz = int((np.abs(W_unknown) > 0).sum()) if W_unknown is not None else 0
     print(f"Nodes: {W.shape[0]} | Edges: {nnz}")
+    if W_unknown is not None:
+        print(f"Unknown/complex sign edges available for random assignment: {unknown_nnz}")
     print("Done.")
 
 if __name__ == "__main__":

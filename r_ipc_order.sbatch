@@ -21,6 +21,8 @@ export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
 CE_ADJ="Connectome/ce_adj.npy"
 CE_EI="Connectome/ce_ei.npy"
+UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-drop}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-}"
 OUT_DIR="ipc_order_sweep_ce_all"
 
 # Sweep settings
@@ -33,6 +35,11 @@ CAPACITY_THRESHOLDS=(0.0)
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
+UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
+if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" && -n "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
+  UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
+fi
+
 conda run -n cel python Parameter_justification/ipc_order_sweep_ce.py \
   --ce-adj "${CE_ADJ}" \
   --ce-ei "${CE_EI}" \
@@ -44,4 +51,5 @@ conda run -n cel python Parameter_justification/ipc_order_sweep_ce.py \
   --max-order "${MAX_ORDER}" \
   --neuron-biases "${NEURON_BIASES[@]}" \
   --capacity-thresholds "${CAPACITY_THRESHOLDS[@]}" \
+  "${UNKNOWN_SIGN_ARGS[@]}" \
   --cuda "${CUDA_IDX}"
