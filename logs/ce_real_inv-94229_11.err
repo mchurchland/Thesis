@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 719, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 504, in main
+    raise FileNotFoundError(
+FileNotFoundError: random_unknown_4to1 requires an unknown-sign weight matrix. Regenerate the new connectome with util/read_xls.py or pass --ce-unknown-sign-weights explicitly.
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job sign_test_er --out-dir godpeasebegoodformematched_er_4to1_sign_test/chunk_11 --ce-adj Connectome/ce_adj_removed.npy --ce-ei  --src-tag chunk_11 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 50 --repeat-split 20 --repeat-rank 11 --repeat-seed-stride 100000 --neuron-biases 0.0 0.1 --unknown-sign-policy random_unknown_4to1 --ce-unknown-sign-weights Connectome/ce_unknown_sign_weights_removed.npy --ws-p 0.1 --er-p 0.1 --cuda 0 --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0` failed. (See above for error)
