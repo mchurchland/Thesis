@@ -363,6 +363,7 @@ def build_reservoir(
     #quit()
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
+    model_normalization_ref = normalization_ref
 
     # ---------- base adjacency/weights ----------
     if feature_conn == "cel":
@@ -441,6 +442,10 @@ def build_reservoir(
             mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)  ##might be able to do this withour removing edges look into this
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
         W = _cel_to_bin(W)
+        # The fixed-radius control must use this ER realization, not the CE
+        # matrix that supplied N and the target edge count.  Capture the
+        # unsigned ER matrix before assigning the requested sign balance.
+        model_normalization_ref = W.copy()
         W=apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
     
     elif feature_conn == 'local_sign':
@@ -566,7 +571,7 @@ def build_reservoir(
 
 
     Wt = torch.from_numpy(W).to(DEVICE)
-    ref = normalization_ref if normalization_ref is not None else ce_W_bio
+    ref = model_normalization_ref if model_normalization_ref is not None else ce_W_bio
     Wt, norm_info = normalize_reservoir_weights(
         Wt,
         target_sr=target_sr,
