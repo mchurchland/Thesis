@@ -3217,7 +3217,7 @@ def main():
     #disp.to_csv(out_disp, index=False)
 
     # Plots
-    #plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
+    plot_frac_cv_meanline(disp, combined, args.out_dir, bins=args.frac_cv_bins)
     #plot_weight_gauss_mean_cv(disp, combined, args.out_dir,show=False)
     #if args.weight_gauss_cv_only:
     #    plot_weight_gauss_cv_metric_2d(disp, combined, args.out_dir, show=False)
