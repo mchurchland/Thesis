@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/inv_arc_test.py", line 719, in <module>
+    main()
+  File "/home/milesc/Thesis/inv_arc_test.py", line 492, in main
+    raise FileNotFoundError(f"Could not load CE adjacency from: {args.ce_adj}")
+FileNotFoundError: Could not load CE adjacency from: Connectome/ce_adj.npy
+
+ERROR conda.cli.main_run:execute(49): `conda run python inv_arc_test.py --job sign_test_og_cel --out-dir sign_norm_ablation/chunk_14 --csv-name sign_norm_ablation.csv --ce-adj Connectome/ce_adj.npy --ce-ei Connectome/ce_ei.npy --src-tag chunk_14 --seed 12345 --sid 0 --split 1 --rank 0 --n-repeats 50 --repeat-split 20 --repeat-rank 14 --repeat-seed-stride 100000 --rho-values 1.0 --neuron-biases 0.0 --normalization-modes spectral_radius original_radius frobenius --ws-p 0.1 --er-p 0.1 --cuda 0 --sign-flip-frac 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0` failed. (See above for error)
