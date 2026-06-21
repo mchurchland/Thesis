@@ -25,7 +25,7 @@ mkdir -p "${OUTROOT}"
 # Keep the full leak/input grid per task; repeat runs are partitioned by array index.
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=50
+TOTAL_REPEATS=100
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
