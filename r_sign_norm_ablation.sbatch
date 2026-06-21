@@ -31,11 +31,11 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 
-# Keep the bias-present condition and rho_target fixed to 1 for the requested formulas.
-NEURON_BIASES=(0.1)
-RHO_VALUES=(1.0)
+# Reuse the original spectral-radius grid and average target-specific summaries.
+NEURON_BIASES=(0 0.1)
+RHO_VALUES=(0.6 0.8 0.95 1.05)
 NORMALIZATION_MODES=(spectral_radius original_radius)
-SIGN_FLIP_FRACS=(0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
+SIGN_FLIP_FRACS=(0.0  0.2  0.4  0.6  0.8  1.0)
 
 CE_ADJ_REMOVED="${CE_ADJ_REMOVED:-Connectome/ce_adj_removed.npy}"
 CE_ADJ_UNREMOVED="${CE_ADJ_UNREMOVED:-Connectome/ce_adj_unk41.npy}"

@@ -241,9 +241,6 @@ def _run_variant_row(
                 float(norm_info["raw_rho"]),
                 float(norm_info["ref_rho"]),
                 float(norm_info["post_rho"]),
-                float(norm_info["raw_fro"]),
-                float(norm_info["ref_fro"]),
-                float(norm_info["post_fro"]),
                 float(norm_info["scale_factor"]),
             )
         )
@@ -277,9 +274,6 @@ def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
                 "raw_rho",
                 "ref_rho",
                 "post_rho",
-                "raw_fro",
-                "ref_fro",
-                "post_fro",
                 "scale_factor",
             ])
         w.writerows(rows)

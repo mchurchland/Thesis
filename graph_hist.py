@@ -33,6 +33,7 @@ if not os.environ.get("MPLBACKEND"):
         mpl.use("Agg")
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 from util.graph_utils import (
     _compute_dispersion_table,
@@ -459,9 +460,6 @@ def _read_combined_csv(path: str) -> pd.DataFrame:
             "raw_rho",
             "ref_rho",
             "post_rho",
-            "raw_fro",
-            "ref_fro",
-            "post_fro",
             "scale_factor",
         ]
         for col in numeric_cols:
@@ -1175,7 +1173,6 @@ def _sign_norm_label(norm_name: str) -> str:
     labels = {
         "spectral_radius": r"$W / \rho(W)$",
         "original_radius": r"$W / \rho(W_{\mathrm{orig}})$",
-        "frobenius": "Frobenius matched",
     }
     return labels.get(str(norm_name), str(norm_name))
 
@@ -1229,9 +1226,6 @@ def _prepare_sign_norm_ablation_df(combined: pd.DataFrame, prefix: str) -> pd.Da
         "raw_rho",
         "ref_rho",
         "post_rho",
-        "raw_fro",
-        "ref_fro",
-        "post_fro",
         "scale_factor",
     ):
         if col in df.columns:
@@ -1283,7 +1277,6 @@ def _save_sign_norm_metric_grid(
     colors = {
         "spectral_radius": "#1f77b4",
         "original_radius": "#d95f02",
-        "frobenius": "#2ca02c",
     }
     fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5), dpi=300, squeeze=False)
     axes_flat = axes.ravel()
@@ -1361,7 +1354,7 @@ def _save_sign_norm_scaling_grid(
         return
     diag_cols = [
         ("post_rho", "post spectral radius"),
-        ("post_fro", "post Frobenius norm"),
+        ("ref_rho", "reference spectral radius"),
         ("raw_rho", "raw spectral radius"),
         ("scale_factor", "scale factor"),
     ]
@@ -1373,7 +1366,6 @@ def _save_sign_norm_scaling_grid(
     colors = {
         "spectral_radius": "#1f77b4",
         "original_radius": "#d95f02",
-        "frobenius": "#2ca02c",
     }
     fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.5), dpi=300, squeeze=False)
     axes_flat = axes.ravel()
@@ -1432,6 +1424,178 @@ def _save_sign_norm_scaling_grid(
         )
     fig.align_ylabels(axes_flat)
     fig.tight_layout(rect=[0.02, 0.03, 1.0, 0.89])
+    out_path = _replace_path(out_path)
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"[saved] {out_path}")
+
+
+def _save_sign_norm_combined_grid(
+    performance: pd.DataFrame,
+    cv: pd.DataFrame,
+    scaling: pd.DataFrame,
+    out_path: str,
+    *,
+    metric_order: list[str],
+    norm_order: list[str],
+):
+    """Save performance, CV, and radius diagnostics as one compact figure."""
+    norm_colors = {
+        "spectral_radius": "#1f77b4",
+        "original_radius": "#d95f02",
+    }
+    norm_styles = {
+        "spectral_radius": "-",
+        "original_radius": "--",
+    }
+    norm_markers = {
+        "spectral_radius": "o",
+        "original_radius": "s",
+    }
+    metric_colors = {
+        "MC": "#1f77b4",
+        "IPC": "#d95f02",
+        "KR": "#2ca02c",
+        "GR": "#9467bd",
+    }
+    metrics = [metric for metric in metric_order if metric in set(performance["metric"])]
+    if not metrics:
+        print("[warn] combined sign normalization figure: no metrics to plot.")
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(13.0, 8.2), dpi=300, squeeze=False)
+    performance_ax, cv_ax, rho_ax, scale_ax = axes.ravel()
+
+    def draw_combined_metrics(summary: pd.DataFrame, ax: plt.Axes, ylabel: str):
+        for metric in metrics:
+            for norm_name in norm_order:
+                sub = summary[
+                    (summary["metric"] == metric)
+                    & (summary["normalization"].astype(str) == norm_name)
+                ].sort_values("sign_frac")
+                if sub.empty:
+                    continue
+                xs = sub["sign_frac"].to_numpy(float)
+                ys = sub["mean"].to_numpy(float)
+                sem = sub["sem"].to_numpy(float)
+                ax.plot(
+                    xs,
+                    ys,
+                    color=metric_colors[metric],
+                    linestyle=norm_styles[norm_name],
+                    marker=norm_markers[norm_name],
+                    linewidth=1.8,
+                    markersize=3.6,
+                )
+                ax.fill_between(
+                    xs,
+                    ys - sem,
+                    ys + sem,
+                    color=metric_colors[metric],
+                    alpha=0.06,
+                    linewidth=0,
+                )
+        ax.set_ylabel(ylabel)
+        ax.grid(True, alpha=0.22)
+        ax.margins(y=0.08)
+
+    draw_combined_metrics(performance, performance_ax, "Mean performance (log scale)")
+    performance_ax.set_title("Mean performance")
+    if (performance["mean"] > 0).all():
+        performance_ax.set_yscale("log")
+        performance_ax.yaxis.set_major_formatter(mpl.ticker.ScalarFormatter())
+
+    draw_combined_metrics(cv, cv_ax, "Mean within-target CV")
+    cv_ax.set_title("Within-target hyperparameter CV")
+
+    if scaling.empty:
+        rho_ax.set_axis_off()
+        scale_ax.set_axis_off()
+    else:
+        first_norm = norm_order[0]
+        base = scaling[
+            scaling["normalization"].astype(str) == first_norm
+        ].sort_values("sign_frac")
+        for value_col, label, color, linestyle in (
+            ("raw_rho", r"$\rho(W)$", "#666666", "-."),
+            ("ref_rho", r"$\rho(W_{\mathrm{orig}})$", "#111111", ":"),
+        ):
+            if value_col in base.columns and not base.empty:
+                rho_ax.plot(
+                    base["sign_frac"].to_numpy(float),
+                    base[value_col].to_numpy(float),
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=1.8,
+                    label=label,
+                )
+        for norm_name in norm_order:
+            sub = scaling[
+                scaling["normalization"].astype(str) == norm_name
+            ].sort_values("sign_frac")
+            if sub.empty:
+                continue
+            rho_ax.plot(
+                sub["sign_frac"].to_numpy(float),
+                sub["post_rho"].to_numpy(float),
+                color=norm_colors[norm_name],
+                linestyle=norm_styles[norm_name],
+                marker=norm_markers[norm_name],
+                linewidth=1.8,
+                markersize=3.6,
+                label=rf"post $\rho$: {_sign_norm_label(norm_name)}",
+            )
+            scale_ax.plot(
+                sub["sign_frac"].to_numpy(float),
+                sub["scale_factor"].to_numpy(float),
+                color=norm_colors[norm_name],
+                linestyle=norm_styles[norm_name],
+                marker=norm_markers[norm_name],
+                linewidth=1.8,
+                markersize=3.6,
+                label=_sign_norm_label(norm_name),
+            )
+        rho_ax.set_title("Spectral-radius diagnostics")
+        rho_ax.set_ylabel("Spectral radius")
+        rho_ax.legend(frameon=False, fontsize=8, ncol=2)
+        scale_ax.set_title("Normalization scale factor")
+        scale_ax.set_ylabel("Scale factor")
+
+    for ax in axes.ravel():
+        if not ax.axison:
+            continue
+        ax.set_xlim(-0.02, 1.02)
+        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
+        ax.set_xlabel("Negative edge fraction")
+        ax.grid(True, alpha=0.22)
+
+    fig.suptitle("Sign-balance normalization ablation", y=0.985, fontsize=17)
+    metric_handles = [
+        Line2D([0], [0], color=metric_colors[metric], linewidth=2.2, label=metric)
+        for metric in metrics
+    ]
+    norm_handles = [
+        Line2D(
+            [0],
+            [0],
+            color="#333333",
+            linestyle=norm_styles[norm_name],
+            marker=norm_markers[norm_name],
+            linewidth=1.8,
+            markersize=4,
+            label=_sign_norm_label(norm_name),
+        )
+        for norm_name in norm_order
+    ]
+    fig.legend(
+        metric_handles + norm_handles,
+        [handle.get_label() for handle in metric_handles + norm_handles],
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.948),
+        ncol=len(metric_handles + norm_handles),
+        frameon=False,
+    )
+    fig.tight_layout(rect=[0.02, 0.025, 1.0, 0.90])
     out_path = _replace_path(out_path)
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
@@ -1505,26 +1669,40 @@ def plot_sign_norm_ablation(combined: pd.DataFrame, out_dir: str, prefix: str = 
         .reset_index(drop=True)
     )
     hparam_long = hparam_agg.melt(
-        id_vars=["normalization", "sign_frac", "unit_id"],
+        id_vars=["normalization", "sign_frac", "unit_id", "rho_target"],
         value_vars=metrics,
         var_name="metric",
         value_name="value",
     ).dropna(subset=["value"])
-    per_group_cv = (
-        hparam_long.groupby(["normalization", "sign_frac", "unit_id", "metric"], as_index=False)["value"]
+    per_target_cv = (
+        hparam_long.groupby(
+            ["normalization", "sign_frac", "unit_id", "rho_target", "metric"],
+            as_index=False,
+        )["value"]
         .agg(cv=lambda x: _dispersion(x.to_numpy()))
+    )
+    # Keep target radius out of the CV itself: calculate invariance across the
+    # remaining hyperparameters at each target, then average targets per repeat.
+    per_group_cv = (
+        per_target_cv.groupby(
+            ["normalization", "sign_frac", "unit_id", "metric"],
+            as_index=False,
+        )["cv"]
+        .mean()
     )
     cv_summary = _summarize_group_values(
         per_group_cv,
         "cv",
         ["normalization", "sign_frac", "metric"],
     )
+    cv_summary["n_rho_targets"] = int(df["rho_target"].nunique())
+    cv_summary["cv_definition"] = "mean_within_target_cv"
     cv_csv = _replace_path(os.path.join(out_dir, "sign_norm_ablation_cv.csv"))
     cv_summary.to_csv(cv_csv, index=False)
     print(f"[saved] {cv_csv} (rows={len(cv_summary)})")
 
     diag_cols = [
-        c for c in ("raw_rho", "ref_rho", "post_rho", "raw_fro", "ref_fro", "post_fro", "scale_factor")
+        c for c in ("raw_rho", "ref_rho", "post_rho", "scale_factor")
         if c in df.columns
     ]
     scaling_summary = pd.DataFrame()
@@ -1551,28 +1729,14 @@ def plot_sign_norm_ablation(combined: pd.DataFrame, out_dir: str, prefix: str = 
         scaling_summary.to_csv(scaling_csv, index=False)
         print(f"[saved] {scaling_csv} (rows={len(scaling_summary)})")
 
-    _save_sign_norm_metric_grid(
+    _save_sign_norm_combined_grid(
         perf_summary,
-        os.path.join(out_dir, "sign_norm_ablation_mean_performance.png"),
-        value_label="mean performance",
-        title="Sign-balance normalization ablation: mean performance",
-        metric_order=metrics,
-        norm_order=norm_order,
-    )
-    _save_sign_norm_metric_grid(
         cv_summary,
-        os.path.join(out_dir, "sign_norm_ablation_cv.png"),
-        value_label="CV across hyperparameters",
-        title="Sign-balance normalization ablation: hyperparameter CV",
+        scaling_summary,
+        os.path.join(out_dir, "sign_norm_ablation_combined.png"),
         metric_order=metrics,
         norm_order=norm_order,
     )
-    if not scaling_summary.empty:
-        _save_sign_norm_scaling_grid(
-            scaling_summary,
-            os.path.join(out_dir, "sign_norm_ablation_scaling.png"),
-            norm_order=norm_order,
-        )
 
 
 

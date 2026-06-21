@@ -442,10 +442,23 @@ def build_reservoir(
             mask = _match_edge_count(mask.astype(bool), nnz_target, rng).astype(np.float32)  ##might be able to do this withour removing edges look into this
         W = mask * rng.normal(0.0, 1.0, size=mask.shape).astype(np.float32)
         W = _cel_to_bin(W)
-        # The fixed-radius control must use this ER realization, not the CE
-        # matrix that supplied N and the target edge count.  Capture the
-        # unsigned ER matrix before assigning the requested sign balance.
-        model_normalization_ref = W.copy()
+        # Use this ER realization signed at the reference CE negative-edge
+        # fraction. Clone the RNG state so the reference and sweep point use
+        # the same sign permutation; at the CE fraction they are identical.
+        reference_source = normalization_ref if normalization_ref is not None else ce_W_bio
+        if reference_source is None or np.count_nonzero(reference_source) == 0:
+            raise ValueError("sign_test_er requires a nonempty CE matrix for its reference sign fraction.")
+        reference_negative_fraction = (
+            float(np.count_nonzero(reference_source < 0))
+            / float(np.count_nonzero(reference_source))
+        )
+        reference_rng = np.random.default_rng()
+        reference_rng.bit_generator.state = rng.bit_generator.state
+        model_normalization_ref = apply_percent_negative(
+            W.copy(),
+            per_neg=reference_negative_fraction,
+            rng=reference_rng,
+        )
         W=apply_percent_negative(W = W,per_neg = per_neg,rng = rng)
     
     elif feature_conn == 'local_sign':
@@ -613,11 +626,6 @@ def scale_to_sr(W: torch.Tensor, target_sr: float | None):
 
 
 @torch.no_grad()
-def frobenius_norm(W: torch.Tensor) -> float:
-    return float(torch.linalg.matrix_norm(W, ord="fro").item())
-
-
-@torch.no_grad()
 def normalize_reservoir_weights(
     W: torch.Tensor,
     target_sr: float | None,
@@ -632,18 +640,15 @@ def normalize_reservoir_weights(
       - spectral_radius: W * target_sr / rho(W), the existing RC comparison.
       - original_radius: W * target_sr / rho(W_orig), so sign perturbations do not
         get amplified just because they changed their own raw spectral radius.
-      - frobenius: W * ||W_orig||_F / ||W||_F, matching total matrix energy.
     """
     mode = str(mode)
-    if mode not in {"spectral_radius", "original_radius", "frobenius"}:
+    if mode not in {"spectral_radius", "original_radius"}:
         raise ValueError(
-            "normalization_mode must be one of: spectral_radius, original_radius, frobenius."
+            "normalization_mode must be one of: spectral_radius, original_radius."
         )
 
     raw_rho = spectral_radius_power(W)
-    raw_fro = frobenius_norm(W)
     ref_rho = float("nan")
-    ref_fro = float("nan")
     scale = 1.0
     ref_t = None
 
@@ -656,7 +661,6 @@ def normalize_reservoir_weights(
                 dtype=W.dtype,
             )
         ref_rho = spectral_radius_power(ref_t)
-        ref_fro = frobenius_norm(ref_t)
 
     if mode == "spectral_radius":
         if target_sr is not None and raw_rho >= 1e-9:
@@ -664,13 +668,9 @@ def normalize_reservoir_weights(
     else:
         if ref_t is None:
             raise ValueError(f"normalization_mode={mode!r} requires reference_W/ce_W_bio.")
-        if mode == "original_radius":
-            target = 1.0 if target_sr is None else float(target_sr)
-            if ref_rho >= 1e-9:
-                scale = target / ref_rho
-        elif mode == "frobenius":
-            if raw_fro >= 1e-12:
-                scale = ref_fro / raw_fro
+        target = 1.0 if target_sr is None else float(target_sr)
+        if ref_rho >= 1e-9:
+            scale = target / ref_rho
 
     W_scaled = W * scale
     info = {
@@ -678,9 +678,6 @@ def normalize_reservoir_weights(
         "raw_rho": raw_rho,
         "ref_rho": ref_rho,
         "post_rho": spectral_radius_power(W_scaled),
-        "raw_fro": raw_fro,
-        "ref_fro": ref_fro,
-        "post_fro": frobenius_norm(W_scaled),
         "scale_factor": float(scale),
     }
     return W_scaled, info

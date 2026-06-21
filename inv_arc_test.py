@@ -91,7 +91,7 @@ SWEEP_SR   = [0.6, 0.8, 0.95, 1.05]
 SWEEP_LEAK = [0.6, 0.8, 1.0]
 SWEEP_U    = [0.1, 0.5, 1.0, 1.5]
 SWEEP_NEURON_BIAS = [0.0, 0.1]
-NORMALIZATION_MODES = ("spectral_radius", "original_radius", "frobenius")
+NORMALIZATION_MODES = ("spectral_radius", "original_radius")
 
 
 # =================== Core helpers ===================
@@ -363,7 +363,7 @@ def parse_args():
         default=("spectral_radius",),
         help=(
             "Weight normalization(s) to run: spectral_radius uses target rho/rho(W); "
-            "original_radius uses target rho/rho(W_orig); frobenius matches ||W_orig||_F."
+            "original_radius uses target rho/rho(W_orig)."
         ),
     )
     p.add_argument(
