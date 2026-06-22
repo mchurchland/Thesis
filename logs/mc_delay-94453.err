@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/milesc/Thesis/Parameter_justification/mc_delay_sensitivity.py", line 19, in <module>
+    from inv_arc_test import _pick_device
+ModuleNotFoundError: No module named 'inv_arc_test'
+
+ERROR conda.cli.main_run:execute(49): `conda run python Parameter_justification/mc_delay_sensitivity.py --ce-adj Connectome/ce_adj_unk41.npy --ce-ei  --out-dir mc_delay_sensitivity_new_cel_4to1 --models all --n-seeds 20 --seed-start 0 --d-max-list 30 50 80 --unknown-sign-policy random_unknown_4to1 --ce-unknown-sign-weights Connectome/ce_unknown_sign_weights_unk41.npy --cuda 0` failed. (See above for error)

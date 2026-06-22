@@ -1,0 +1,325 @@
+IPC order-degradation report (model comparison)
+
+[binary_base | bias=0 | threshold=0]
+IPC share in first 3 orders: 83.26%
+Odd contributions: o1=3.335854, o3=1.602042, o5=0.562993
+Odd contribution stds: o1=0.439854, o3=0.406308, o5=0.325381
+Odd-order contribution: 5.774891 ± 1.047416 (std)
+Even-order contribution: 0.205957 ± 0.015099 (std)
+Odd/even share: odd=96.45% ± 0.69%, even=3.55% ± 0.69%
+Orders 1+2+3+4+5 contribution: 5.583735 ± 0.962910 (std)
+IPC share in orders 1+2+3+4+5: 93.43% ± 1.52% (std)
+
+[binary_base | bias=0 | threshold=0.001]
+IPC share in first 3 orders: 84.79%
+Odd contributions: o1=3.321874, o3=1.586777, o5=0.547224
+Odd contribution stds: o1=0.440367, o3=0.406248, o5=0.325151
+Odd-order contribution: 5.697699 ± 1.046128 (std)
+Even-order contribution: 0.120610 ± 0.015783 (std)
+Odd/even share: odd=97.86% ± 0.49%, even=2.14% ± 0.49%
+Orders 1+2+3+4+5 contribution: 5.505007 ± 0.962296 (std)
+IPC share in orders 1+2+3+4+5: 94.73% ± 1.62% (std)
+
+[binary_base | bias=0 | threshold=0.005]
+IPC share in first 3 orders: 87.15%
+Odd contributions: o1=3.293381, o3=1.563260, o5=0.523670
+Odd contribution stds: o1=0.440323, o3=0.403012, o5=0.326566
+Odd-order contribution: 5.569873 ± 1.044368 (std)
+Even-order contribution: 0.003796 ± 0.005657 (std)
+Odd/even share: odd=99.93% ± 0.09%, even=0.07% ± 0.09%
+Orders 1+2+3+4+5 contribution: 5.382214 ± 0.958977 (std)
+IPC share in orders 1+2+3+4+5: 96.76% ± 1.93% (std)
+
+[binary_base | bias=0 | threshold=0.01]
+IPC share in first 3 orders: 87.32%
+Odd contributions: o1=3.280016, o3=1.555139, o5=0.517573
+Odd contribution stds: o1=0.442201, o3=0.401346, o5=0.326715
+Odd-order contribution: 5.537425 ± 1.045920 (std)
+Even-order contribution: 0.000000 ± 0.000000 (std)
+Odd/even share: odd=100.00% ± 0.00%, even=0.00% ± 0.00%
+Orders 1+2+3+4+5 contribution: 5.352728 ± 0.958622 (std)
+IPC share in orders 1+2+3+4+5: 96.87% ± 1.98% (std)
+
+[binary_base | bias=0.1 | threshold=0]
+IPC share in first 3 orders: 82.36%
+Odd contributions: o1=2.986645, o3=1.413240, o5=0.503351
+Odd contribution stds: o1=0.475153, o3=0.335345, o5=0.256002
+Odd-order contribution: 5.113572 ± 0.802607 (std)
+Even-order contribution: 1.587613 ± 0.482802 (std)
+Odd/even share: odd=76.59% ± 4.93%, even=23.41% ± 4.93%
+Orders 1+2+3+4+5 contribution: 6.302822 ± 1.034527 (std)
+IPC share in orders 1+2+3+4+5: 94.04% ± 1.35% (std)
+
+[binary_base | bias=0.1 | threshold=0.001]
+IPC share in first 3 orders: 83.71%
+Odd contributions: o1=2.972650, o3=1.397980, o5=0.487183
+Odd contribution stds: o1=0.475045, o3=0.335909, o5=0.256300
+Odd-order contribution: 5.034664 ± 0.802192 (std)
+Even-order contribution: 1.505690 ± 0.484095 (std)
+Odd/even share: odd=77.30% ± 5.12%, even=22.70% ± 5.12%
+Orders 1+2+3+4+5 contribution: 6.226260 ± 1.034993 (std)
+IPC share in orders 1+2+3+4+5: 95.22% ± 1.39% (std)
+
+[binary_base | bias=0.1 | threshold=0.005]
+IPC share in first 3 orders: 85.81%
+Odd contributions: o1=2.945457, o3=1.372075, o5=0.462942
+Odd contribution stds: o1=0.474226, o3=0.331261, o5=0.253690
+Odd-order contribution: 4.907851 ± 0.799187 (std)
+Even-order contribution: 1.380278 ± 0.490075 (std)
+Odd/even share: odd=78.45% ± 5.49%, even=21.55% ± 5.49%
+Orders 1+2+3+4+5 contribution: 6.097844 ± 1.031225 (std)
+IPC share in orders 1+2+3+4+5: 97.07% ± 1.53% (std)
+
+[binary_base | bias=0.1 | threshold=0.01]
+IPC share in first 3 orders: 86.11%
+Odd contributions: o1=2.930168, o3=1.363571, o5=0.457456
+Odd contribution stds: o1=0.477719, o3=0.331141, o5=0.253941
+Odd-order contribution: 4.873008 ± 0.800282 (std)
+Even-order contribution: 1.355057 ± 0.490065 (std)
+Odd/even share: odd=78.66% ± 5.60%, even=21.34% ± 5.60%
+Orders 1+2+3+4+5 contribution: 6.054113 ± 1.032258 (std)
+IPC share in orders 1+2+3+4+5: 97.30% ± 1.58% (std)
+
+[ER (p=0.1) | bias=0 | threshold=0]
+IPC share in first 3 orders: 89.01%
+Odd contributions: o1=9.922913, o3=4.488531, o5=1.293487
+Odd contribution stds: o1=0.575432, o3=0.315897, o5=0.244515
+Odd-order contribution: 16.033768 ± 0.716341 (std)
+Even-order contribution: 0.211445 ± 0.010983 (std)
+Odd/even share: odd=98.70% ± 0.09%, even=1.30% ± 0.09%
+Orders 1+2+3+4+5 contribution: 15.793799 ± 0.671981 (std)
+IPC share in orders 1+2+3+4+5: 97.23% ± 0.69% (std)
+
+[ER (p=0.1) | bias=0 | threshold=0.001]
+IPC share in first 3 orders: 89.62%
+Odd contributions: o1=9.910096, o3=4.472670, o5=1.278185
+Odd contribution stds: o1=0.577232, o3=0.315606, o5=0.245250
+Odd-order contribution: 15.957352 ± 0.718838 (std)
+Even-order contribution: 0.127303 ± 0.011590 (std)
+Odd/even share: odd=99.21% ± 0.09%, even=0.79% ± 0.09%
+Orders 1+2+3+4+5 contribution: 15.716722 ± 0.671962 (std)
+IPC share in orders 1+2+3+4+5: 97.72% ± 0.71% (std)
+
+[ER (p=0.1) | bias=0 | threshold=0.005]
+IPC share in first 3 orders: 90.47%
+Odd contributions: o1=9.887884, o3=4.443870, o5=1.255513
+Odd contribution stds: o1=0.571497, o3=0.314724, o5=0.243057
+Odd-order contribution: 15.838188 ± 0.701204 (std)
+Even-order contribution: 0.005592 ± 0.004245 (std)
+Odd/even share: odd=99.96% ± 0.03%, even=0.04% ± 0.03%
+Orders 1+2+3+4+5 contribution: 15.590452 ± 0.661363 (std)
+IPC share in orders 1+2+3+4+5: 98.41% ± 0.68% (std)
+
+[ER (p=0.1) | bias=0 | threshold=0.01]
+IPC share in first 3 orders: 90.59%
+Odd contributions: o1=9.880225, o3=4.438294, o5=1.247366
+Odd contribution stds: o1=0.570106, o3=0.316265, o5=0.243928
+Odd-order contribution: 15.805473 ± 0.697409 (std)
+Even-order contribution: 0.000000 ± 0.000000 (std)
+Odd/even share: odd=100.00% ± 0.00%, even=0.00% ± 0.00%
+Orders 1+2+3+4+5 contribution: 15.565885 ± 0.658616 (std)
+IPC share in orders 1+2+3+4+5: 98.49% ± 0.69% (std)
+
+[ER (p=0.1) | bias=0.1 | threshold=0]
+IPC share in first 3 orders: 88.26%
+Odd contributions: o1=9.480609, o3=4.213096, o5=1.105707
+Odd contribution stds: o1=0.458330, o3=0.291749, o5=0.243789
+Odd-order contribution: 15.082941 ± 0.711382 (std)
+Even-order contribution: 4.306591 ± 0.461359 (std)
+Odd/even share: odd=77.83% ± 1.60%, even=22.17% ± 1.60%
+Orders 1+2+3+4+5 contribution: 18.889343 ± 0.921163 (std)
+IPC share in orders 1+2+3+4+5: 97.44% ± 0.72% (std)
+
+[ER (p=0.1) | bias=0.1 | threshold=0.001]
+IPC share in first 3 orders: 88.76%
+Odd contributions: o1=9.468119, o3=4.199006, o5=1.090597
+Odd contribution stds: o1=0.458261, o3=0.292341, o5=0.243607
+Odd-order contribution: 15.007833 ± 0.714093 (std)
+Even-order contribution: 4.226641 ± 0.462076 (std)
+Odd/even share: odd=78.07% ± 1.62%, even=21.93% ± 1.62%
+Orders 1+2+3+4+5 contribution: 18.818240 ± 0.921152 (std)
+IPC share in orders 1+2+3+4+5: 97.86% ± 0.75% (std)
+
+[ER (p=0.1) | bias=0.1 | threshold=0.005]
+IPC share in first 3 orders: 89.51%
+Odd contributions: o1=9.448621, o3=4.177281, o5=1.060122
+Odd contribution stds: o1=0.459894, o3=0.292984, o5=0.245476
+Odd-order contribution: 14.891386 ± 0.705899 (std)
+Even-order contribution: 4.111314 ± 0.455101 (std)
+Odd/even share: odd=78.41% ± 1.63%, even=21.59% ± 1.63%
+Orders 1+2+3+4+5 contribution: 18.703121 ± 0.922694 (std)
+IPC share in orders 1+2+3+4+5: 98.45% ± 0.74% (std)
+
+[ER (p=0.1) | bias=0.1 | threshold=0.01]
+IPC share in first 3 orders: 89.64%
+Odd contributions: o1=9.443003, o3=4.169320, o5=1.053571
+Odd contribution stds: o1=0.460565, o3=0.294809, o5=0.245887
+Odd-order contribution: 14.859603 ± 0.701530 (std)
+Even-order contribution: 4.088220 ± 0.454708 (std)
+Odd/even share: odd=78.47% ± 1.63%, even=21.53% ± 1.63%
+Orders 1+2+3+4+5 contribution: 18.668358 ± 0.925021 (std)
+IPC share in orders 1+2+3+4+5: 98.55% ± 0.72% (std)
+
+[global_sign_pres_real_weight | bias=0 | threshold=0]
+IPC share in first 3 orders: 85.19%
+Odd contributions: o1=4.612023, o3=2.098318, o5=0.713727
+Odd contribution stds: o1=0.596050, o3=0.490207, o5=0.316252
+Odd-order contribution: 7.723789 ± 1.183556 (std)
+Even-order contribution: 0.205559 ± 0.011881 (std)
+Odd/even share: odd=97.34% ± 0.47%, even=2.66% ± 0.47%
+Orders 1+2+3+4+5 contribution: 7.508509 ± 1.081839 (std)
+IPC share in orders 1+2+3+4+5: 94.75% ± 1.39% (std)
+
+[global_sign_pres_real_weight | bias=0 | threshold=0.001]
+IPC share in first 3 orders: 86.40%
+Odd contributions: o1=4.598293, o3=2.082802, o5=0.698078
+Odd contribution stds: o1=0.595641, o3=0.489456, o5=0.315906
+Odd-order contribution: 7.645750 ± 1.182223 (std)
+Even-order contribution: 0.118781 ± 0.011928 (std)
+Odd/even share: odd=98.43% ± 0.32%, even=1.57% ± 0.32%
+Orders 1+2+3+4+5 contribution: 7.428869 ± 1.080921 (std)
+IPC share in orders 1+2+3+4+5: 95.76% ± 1.49% (std)
+
+[global_sign_pres_real_weight | bias=0 | threshold=0.005]
+IPC share in first 3 orders: 88.13%
+Odd contributions: o1=4.573340, o3=2.057015, o5=0.672148
+Odd contribution stds: o1=0.596184, o3=0.490614, o5=0.316444
+Odd-order contribution: 7.521711 ± 1.184585 (std)
+Even-order contribution: 0.003448 ± 0.003847 (std)
+Odd/even share: odd=99.95% ± 0.05%, even=0.05% ± 0.05%
+Orders 1+2+3+4+5 contribution: 7.304513 ± 1.087655 (std)
+IPC share in orders 1+2+3+4+5: 97.19% ± 1.54% (std)
+
+[global_sign_pres_real_weight | bias=0 | threshold=0.01]
+IPC share in first 3 orders: 88.32%
+Odd contributions: o1=4.561312, o3=2.049727, o5=0.664214
+Odd contribution stds: o1=0.594153, o3=0.492413, o5=0.316930
+Odd-order contribution: 7.485432 ± 1.188731 (std)
+Even-order contribution: 0.000000 ± 0.000000 (std)
+Odd/even share: odd=100.00% ± 0.00%, even=0.00% ± 0.00%
+Orders 1+2+3+4+5 contribution: 7.275254 ± 1.090728 (std)
+IPC share in orders 1+2+3+4+5: 97.32% ± 1.55% (std)
+
+[global_sign_pres_real_weight | bias=0.1 | threshold=0]
+IPC share in first 3 orders: 85.35%
+Odd contributions: o1=4.597577, o3=1.978184, o5=0.550606
+Odd contribution stds: o1=0.763100, o3=0.492768, o5=0.311841
+Odd-order contribution: 7.389576 ± 1.166099 (std)
+Even-order contribution: 2.284135 ± 0.559098 (std)
+Odd/even share: odd=76.51% ± 4.14%, even=23.49% ± 4.14%
+Orders 1+2+3+4+5 contribution: 9.193673 ± 1.366274 (std)
+IPC share in orders 1+2+3+4+5: 95.16% ± 1.60% (std)
+
+[global_sign_pres_real_weight | bias=0.1 | threshold=0.001]
+IPC share in first 3 orders: 86.31%
+Odd contributions: o1=4.582999, o3=1.962674, o5=0.535950
+Odd contribution stds: o1=0.763069, o3=0.493005, o5=0.312902
+Odd-order contribution: 7.311341 ± 1.166032 (std)
+Even-order contribution: 2.202625 ± 0.557513 (std)
+Odd/even share: odd=76.99% ± 4.23%, even=23.01% ± 4.23%
+Orders 1+2+3+4+5 contribution: 9.117883 ± 1.365864 (std)
+IPC share in orders 1+2+3+4+5: 95.98% ± 1.68% (std)
+
+[global_sign_pres_real_weight | bias=0.1 | threshold=0.005]
+IPC share in first 3 orders: 87.79%
+Odd contributions: o1=4.559777, o3=1.940565, o5=0.510732
+Odd contribution stds: o1=0.762708, o3=0.492367, o5=0.311289
+Odd-order contribution: 7.190433 ± 1.173654 (std)
+Even-order contribution: 2.085185 ± 0.561959 (std)
+Odd/even share: odd=77.69% ± 4.42%, even=22.31% ± 4.42%
+Orders 1+2+3+4+5 contribution: 9.000530 ± 1.370037 (std)
+IPC share in orders 1+2+3+4+5: 97.23% ± 1.82% (std)
+
+[global_sign_pres_real_weight | bias=0.1 | threshold=0.01]
+IPC share in first 3 orders: 88.01%
+Odd contributions: o1=4.552203, o3=1.934215, o5=0.503411
+Odd contribution stds: o1=0.761453, o3=0.494723, o5=0.312707
+Odd-order contribution: 7.160803 ± 1.171005 (std)
+Even-order contribution: 2.069932 ± 0.562154 (std)
+Odd/even share: odd=77.76% ± 4.43%, even=22.24% ± 4.43%
+Orders 1+2+3+4+5 contribution: 8.969506 ± 1.369735 (std)
+IPC share in orders 1+2+3+4+5: 97.37% ± 1.86% (std)
+
+[C. elegans | bias=0 | threshold=0]
+IPC share in first 3 orders: 84.87%
+Odd contributions: o1=4.504782, o3=1.969110, o5=0.688028
+Odd contribution stds: o1=0.675324, o3=0.539563, o5=0.260431
+Odd-order contribution: 7.478513 ± 1.306137 (std)
+Even-order contribution: 0.197935 ± 0.014242 (std)
+Odd/even share: odd=97.32% ± 0.63%, even=2.68% ± 0.63%
+Orders 1+2+3+4+5 contribution: 7.242359 ± 1.235013 (std)
+IPC share in orders 1+2+3+4+5: 94.36% ± 1.82% (std)
+
+[C. elegans | bias=0 | threshold=0.001]
+IPC share in first 3 orders: 86.12%
+Odd contributions: o1=4.490605, o3=1.953364, o5=0.671231
+Odd contribution stds: o1=0.675019, o3=0.540394, o5=0.261331
+Odd-order contribution: 7.399539 ± 1.307610 (std)
+Even-order contribution: 0.109986 ± 0.014259 (std)
+Odd/even share: odd=98.46% ± 0.47%, even=1.54% ± 0.47%
+Orders 1+2+3+4+5 contribution: 7.161229 ± 1.235369 (std)
+IPC share in orders 1+2+3+4+5: 95.41% ± 1.87% (std)
+
+[C. elegans | bias=0 | threshold=0.005]
+IPC share in first 3 orders: 87.88%
+Odd contributions: o1=4.469201, o3=1.928578, o5=0.645272
+Odd contribution stds: o1=0.673385, o3=0.542119, o5=0.261131
+Odd-order contribution: 7.278828 ± 1.309801 (std)
+Even-order contribution: 0.002337 ± 0.003508 (std)
+Odd/even share: odd=99.97% ± 0.05%, even=0.03% ± 0.05%
+Orders 1+2+3+4+5 contribution: 7.044221 ± 1.238752 (std)
+IPC share in orders 1+2+3+4+5: 96.86% ± 1.95% (std)
+
+[C. elegans | bias=0 | threshold=0.01]
+IPC share in first 3 orders: 88.05%
+Odd contributions: o1=4.464309, o3=1.922421, o5=0.641648
+Odd contribution stds: o1=0.673181, o3=0.544175, o5=0.261324
+Odd-order contribution: 7.253772 ± 1.313659 (std)
+Even-order contribution: 0.000000 ± 0.000000 (std)
+Odd/even share: odd=100.00% ± 0.00%, even=0.00% ± 0.00%
+Orders 1+2+3+4+5 contribution: 7.028378 ± 1.240093 (std)
+IPC share in orders 1+2+3+4+5: 97.03% ± 2.02% (std)
+
+[C. elegans | bias=0.1 | threshold=0]
+IPC share in first 3 orders: 84.03%
+Odd contributions: o1=4.035601, o3=1.727665, o5=0.522748
+Odd contribution stds: o1=0.586101, o3=0.584997, o5=0.322759
+Odd-order contribution: 6.517104 ± 0.960942 (std)
+Even-order contribution: 1.934586 ± 0.500460 (std)
+Odd/even share: odd=77.37% ± 3.37%, even=22.63% ± 3.37%
+Orders 1+2+3+4+5 contribution: 8.017697 ± 1.242205 (std)
+IPC share in orders 1+2+3+4+5: 95.00% ± 2.09% (std)
+
+[C. elegans | bias=0.1 | threshold=0.001]
+IPC share in first 3 orders: 85.15%
+Odd contributions: o1=4.021135, o3=1.712248, o5=0.505697
+Odd contribution stds: o1=0.586202, o3=0.585727, o5=0.321753
+Odd-order contribution: 6.436949 ± 0.962101 (std)
+Even-order contribution: 1.851061 ± 0.500471 (std)
+Odd/even share: odd=77.96% ± 3.49%, even=22.04% ± 3.49%
+Orders 1+2+3+4+5 contribution: 7.939170 ± 1.243018 (std)
+IPC share in orders 1+2+3+4+5: 95.96% ± 2.20% (std)
+
+[C. elegans | bias=0.1 | threshold=0.005]
+IPC share in first 3 orders: 86.76%
+Odd contributions: o1=3.998374, o3=1.688728, o5=0.482352
+Odd contribution stds: o1=0.588300, o3=0.588105, o5=0.320357
+Odd-order contribution: 6.321413 ± 0.965380 (std)
+Even-order contribution: 1.734193 ± 0.507027 (std)
+Odd/even share: odd=78.81% ± 3.75%, even=21.19% ± 3.75%
+Orders 1+2+3+4+5 contribution: 7.823732 ± 1.244559 (std)
+IPC share in orders 1+2+3+4+5: 97.36% ± 2.42% (std)
+
+[C. elegans | bias=0.1 | threshold=0.01]
+IPC share in first 3 orders: 87.02%
+Odd contributions: o1=3.993082, o3=1.681102, o5=0.477390
+Odd contribution stds: o1=0.587506, o3=0.590209, o5=0.321992
+Odd-order contribution: 6.297119 ± 0.966459 (std)
+Even-order contribution: 1.713668 ± 0.505751 (std)
+Odd/even share: odd=78.95% ± 3.82%, even=21.05% ± 3.82%
+Orders 1+2+3+4+5 contribution: 7.795271 ± 1.244542 (std)
+IPC share in orders 1+2+3+4+5: 97.56% ± 2.47% (std)
+
+[1,2,3,4,5 validation]
+capture% mean=96.56, std=2.11, min=89.60, p05=92.71
+agreement IPC(1..10) vs IPC(1,2,3,4,5): pearson=0.9992, spearman=0.9979
