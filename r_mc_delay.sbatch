@@ -12,6 +12,10 @@
 
 set -euo pipefail
 
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
+cd "${REPO_ROOT}"
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
 mkdir -p logs
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
