@@ -1463,11 +1463,17 @@ def _save_sign_norm_combined_grid(
         print("[warn] combined sign normalization figure: no metrics to plot.")
         return
 
-    fig, axes = plt.subplots(2, 2, figsize=(13.0, 8.2), dpi=300, squeeze=False)
-    performance_ax, cv_ax, rho_ax, scale_ax = axes.ravel()
+    fig, axes = plt.subplots(2, 3, figsize=(16.0, 8.4), dpi=300, squeeze=False)
+    memory_performance_ax, kernel_performance_ax, rho_ax = axes[0]
+    memory_cv_ax, kernel_cv_ax, scale_ax = axes[1]
 
-    def draw_combined_metrics(summary: pd.DataFrame, ax: plt.Axes, ylabel: str):
-        for metric in metrics:
+    def draw_combined_metrics(
+        summary: pd.DataFrame,
+        ax: plt.Axes,
+        selected_metrics: list[str],
+        ylabel: str,
+    ):
+        for metric in selected_metrics:
             for norm_name in norm_order:
                 sub = summary[
                     (summary["metric"] == metric)
@@ -1499,14 +1505,27 @@ def _save_sign_norm_combined_grid(
         ax.grid(True, alpha=0.22)
         ax.margins(y=0.08)
 
-    draw_combined_metrics(performance, performance_ax, "Mean performance (log scale)")
-    performance_ax.set_title("Mean performance")
-    if (performance["mean"] > 0).all():
-        performance_ax.set_yscale("log")
-        performance_ax.yaxis.set_major_formatter(mpl.ticker.ScalarFormatter())
+    memory_metrics = [metric for metric in ("MC", "IPC") if metric in metrics]
+    kernel_metrics = [metric for metric in ("KR", "GR") if metric in metrics]
+    draw_combined_metrics(
+        performance,
+        memory_performance_ax,
+        memory_metrics,
+        "Mean performance",
+    )
+    memory_performance_ax.set_title("Memory metrics: mean performance")
+    draw_combined_metrics(
+        performance,
+        kernel_performance_ax,
+        kernel_metrics,
+        "Mean performance",
+    )
+    kernel_performance_ax.set_title("Kernel metrics: mean performance")
 
-    draw_combined_metrics(cv, cv_ax, "Mean within-target CV")
-    cv_ax.set_title("Within-target hyperparameter CV")
+    draw_combined_metrics(cv, memory_cv_ax, memory_metrics, "Mean within-target CV")
+    memory_cv_ax.set_title("Memory metrics: hyperparameter CV")
+    draw_combined_metrics(cv, kernel_cv_ax, kernel_metrics, "Mean within-target CV")
+    kernel_cv_ax.set_title("Kernel metrics: hyperparameter CV")
 
     if scaling.empty:
         rho_ax.set_axis_off()

@@ -33,6 +33,11 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 NEURON_BIASES=(0.0 0.1)
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+CE_EI="${CE_EI:-}"
+UNKNOWN_SIGN_POLICY="random_unknown_4to1"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
+OUT_PREFIX="${OUT_PREFIX:-full_v1_new_cel_4to1}"
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -49,14 +54,27 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
   fi
 fi
 
+for required_file in "${CE_ADJ}" "${CE_UNKNOWN_SIGN_WEIGHTS}"
+do
+  if [[ ! -f "${required_file}" ]]; then
+    echo "[error] Missing required 4:1-completion input: ${required_file}" >&2
+    exit 1
+  fi
+done
+
+UNKNOWN_SIGN_ARGS=(
+  --unknown-sign-policy "${UNKNOWN_SIGN_POLICY}"
+  --ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}"
+)
+
 # choose which variant this script runs
 JOB_KIND="all"   # or all / global_sign_pres_real_weight / local_sign+binary / local_sign+sample / local_sign+flat / shuffle_weights / cel_randN / er_randN / ws_p01_randN / conn_shuf / local_sign / real
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "full_v1_${OUTDIR}" \
-  --ce-adj Connectome/ce_adj.npy \
-  --ce-ei  Connectome/ce_ei.npy \
+  --out-dir "${OUT_PREFIX}_${OUTDIR}" \
+  --ce-adj "${CE_ADJ}" \
+  --ce-ei "${CE_EI}" \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \
   --seed "${START_SEED}" \
   --sid "${SID_BASE}" \
@@ -67,7 +85,8 @@ conda run -n cel python inv_arc_test.py \
   --repeat-rank "${REPEAT_RANK}" \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --neuron-biases "${NEURON_BIASES[@]}" \
+  "${UNKNOWN_SIGN_ARGS[@]}" \
   --ws-p 0.1 \
   --er-p 0.1 \
-  --cuda ${SLURM_LOCALID} \
+  --cuda "${SLURM_LOCALID:-0}" \
   "${SUBSET_ARGS[@]}"

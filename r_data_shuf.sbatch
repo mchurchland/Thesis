@@ -37,7 +37,7 @@ CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
 CE_EI="${CE_EI:-}"
 UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
 CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-OUT_PREFIX="${OUT_PREFIX:-shuf_sep_pm1_fix_new_cel_${UNKNOWN_SIGN_POLICY}}"
+OUT_PREFIX="${OUT_PREFIX:-topology_shuffles_new_cel_4to1}"
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -55,8 +55,13 @@ if [[ "${RANDOM_NODE_SUBSETS}" == "1" ]]; then
 fi
 
 ensure_unknown_sign_weights() {
+  if [[ ! -f "${CE_ADJ}" ]]; then
+    echo "[error] Missing 4:1-completion adjacency: ${CE_ADJ}" >&2
+    exit 1
+  fi
   if [[ "${UNKNOWN_SIGN_POLICY}" != "random_unknown_4to1" ]]; then
-    return
+    echo "[error] r_data_shuf.sbatch requires UNKNOWN_SIGN_POLICY=random_unknown_4to1" >&2
+    exit 1
   fi
   if [[ -f "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
     return
@@ -94,5 +99,5 @@ conda run -n cel python inv_arc_test.py \
   "${UNKNOWN_SIGN_ARGS[@]}" \
   --ws-p 0.1 \
   --er-p 0.1 \
-  --cuda ${SLURM_LOCALID} \
+  --cuda "${SLURM_LOCALID:-0}" \
   "${SUBSET_ARGS[@]}"
