@@ -24,9 +24,9 @@ export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 # lets load_connectome use the adjacency without trying to load old-size EI labels.
 CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
 CE_EI=""
-UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
+UNKNOWN_SIGN_POLICY="random_unknown_4to1"
 CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-BASE_OUT_DIR="${BASE_OUT_DIR:-ipc_methodology_new_connectome_${UNKNOWN_SIGN_POLICY}}"
+BASE_OUT_DIR="${BASE_OUT_DIR:-ipc_methodology_new_cel_4to1}"
 
 # Representative model/hyperparameter set. This is intentionally not the full
 # architecture sweep.
@@ -52,15 +52,18 @@ RIDGE_ALPHA=1e-4
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
-UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
-if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" ]]; then
-  if [[ ! -f "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
-    echo "[error] Missing processed unknown-sign weights: ${CE_UNKNOWN_SIGN_WEIGHTS}" >&2
-    echo "[error] Generate/copy the processed .npy into Connectome; sbatch runs do not read XLS files." >&2
+for required_file in "${CE_ADJ}" "${CE_UNKNOWN_SIGN_WEIGHTS}"
+do
+  if [[ ! -f "${required_file}" ]]; then
+    echo "[error] Missing required 4:1-completion input: ${required_file}" >&2
     exit 1
   fi
-  UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
-fi
+done
+
+UNKNOWN_SIGN_ARGS=(
+  --unknown-sign-policy "${UNKNOWN_SIGN_POLICY}"
+  --ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}"
+)
 
 for setting in "${SERIES_SETTINGS[@]}"; do
   IFS=: read -r SERIES_LABEL T_TRAIN T_TEST <<< "${setting}"

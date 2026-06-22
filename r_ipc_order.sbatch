@@ -19,11 +19,11 @@ mkdir -p "${MPLCONFIGDIR}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-CE_ADJ="Connectome/ce_adj.npy"
-CE_EI="Connectome/ce_ei.npy"
-UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-drop}"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-}"
-OUT_DIR="ipc_order_sweep_ce_all"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+CE_EI=""
+UNKNOWN_SIGN_POLICY="random_unknown_4to1"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
+OUT_DIR="${OUT_DIR:-ipc_order_sweep_new_cel_4to1}"
 
 # Sweep settings
 N_SEEDS=20
@@ -35,10 +35,18 @@ CAPACITY_THRESHOLDS=(0.0)
 
 CUDA_IDX="${SLURM_LOCALID:-0}"
 
-UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
-if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" && -n "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
-  UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
-fi
+for required_file in "${CE_ADJ}" "${CE_UNKNOWN_SIGN_WEIGHTS}"
+do
+  if [[ ! -f "${required_file}" ]]; then
+    echo "[error] Missing required 4:1-completion input: ${required_file}" >&2
+    exit 1
+  fi
+done
+
+UNKNOWN_SIGN_ARGS=(
+  --unknown-sign-policy "${UNKNOWN_SIGN_POLICY}"
+  --ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}"
+)
 
 conda run -n cel python Parameter_justification/ipc_order_sweep_ce.py \
   --ce-adj "${CE_ADJ}" \
