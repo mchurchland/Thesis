@@ -23,7 +23,8 @@ import pandas as pd
 import itertools
 import pingouin as pg
 import warnings
-from scipy.stats import kruskal
+from scipy.stats import t as student_t
+from scipy.ndimage import gaussian_filter
 import matplotlib as mpl
 import re
 from matplotlib.ticker import FormatStrFormatter
@@ -53,10 +54,10 @@ ANALYSIS_MODE_FILTER = [
     #"global_sign_pres",
     #"binary+conshuffle+wshuffle"
     #------------------------------
-    "real",
-    "shuffle",
-    "celW+connShuf",
-    "conn_shuf_only",
+    #"real",
+    #"shuffle",
+    #"celW+connShuf",
+    #"conn_shuf_only",
     #-------- main experiment above was shuffle experiment
       #          "real",
       #      "cel+randN",
@@ -230,6 +231,14 @@ def parse_args():
         "--sign-norm-prefix",
         default="sign_test_og_cel",
         help="Mode prefix used to identify sign-normalization ablation rows.",
+    )
+    ap.add_argument(
+        "--show-cv-performance-3d",
+        action="store_true",
+        help=(
+            "Show interactive joint-distribution hills with CV on x, mean "
+            "performance on y, and normalized trial fraction as height."
+        ),
     )
     return ap.parse_args()
 
@@ -3224,63 +3233,569 @@ def plot_mc_vs_gr_all_arch(combined: pd.DataFrame, out_dir: str, alpha: float):
     plt.close()
     print(f"[saved] {out_fig}")
 
-def print_kruskal_wallis_tables(disp: pd.DataFrame):
-    if kruskal is None:
-        print("[warn] scipy is not available; skipping Kruskal-Wallis tables.")
-        return
-    metrics_present = set(disp["metric"].unique())
-    metrics = [m for m in ["MC", "IPC", "KR", "GR"] if m in metrics_present]
-    modes = sorted(disp["mode"].unique())
-    if not metrics:
-        print("[warn] none of MC/IPC/KR/GR present for testing.")
-        return
-    if not modes:
-        print("[warn] no modes to test.")
-        return
-    print("\n=== Kruskal-Wallis tests (dispersion across modes within each metric) ===")
-    
-    for m in metrics:
-        rows = []
-        groups = []
-        for mode in modes:
-            vals = disp[(disp["metric"] == m) & (disp["mode"] == mode)]["dispersion"].dropna().to_numpy()
-            if vals.size == 0:
-                continue
-            rows.append({"mode": mode,
-                         'metric': m,
-                         "N": len(vals),
-                         "median": float(np.median(vals)),
-                         "mean": float(np.mean(vals)),
-                         "std": float(np.std(vals))})
-            groups.append(vals)
-        if len(groups) < 2:
-            print(f"{m}: not enough non-empty modes for Kruskal-Wallis (need >=2).")
-            continue
-        H, p = kruskal(*groups)
-        df = pd.DataFrame(rows)
-        for a, b in itertools.combinations(df["mode"].unique(), 2):
-                    row_a = df[df["mode"] == a].iloc[0]
-                    row_b = df[df["mode"] == b].iloc[0]
-                    sd_ref = row_a["std"] if row_a["std"] > 0 else np.nan
-                    d_glass = (row_a["mean"] - row_b["mean"]) / sd_ref if np.isfinite(sd_ref) else np.nan
-                    vals_a = disp[(disp["metric"] == m) & (disp["mode"] == a)]["dispersion"].dropna().to_numpy()
-                    vals_b = disp[(disp["metric"] == m) & (disp["mode"] == b)]["dispersion"].dropna().to_numpy()
-                    vals_all = disp[(disp["metric"] == m)]["dispersion"].dropna().to_numpy()
-    
-                    # pg.tost can emit overflow RuntimeWarnings for extreme t values; suppress locally
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore", category=RuntimeWarning, module="pingouin")
-                        tost = (pg.tost(vals_a, vals_b, np.abs(np.median(vals_all)) * 0.05, paired=False))
-                    if tost['pval'].iloc[0]<0.06:
-                        print(
-                            rf"{m} & {_short_thesis_name(a)} vs {_short_thesis_name(b)} & "
-                            rf"{tost['bound'].iloc[0]:.4g} & {tost['pval'].iloc[0]:.4g} \\"
-                        )
+def _mean_difference_ci(values: np.ndarray, confidence: float = 0.95) -> tuple[float, float]:
+    """Student-t confidence interval for a one-sample mean difference."""
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if values.size < 2:
+        return np.nan, np.nan
+    mean = float(np.mean(values))
+    sem = float(np.std(values, ddof=1) / np.sqrt(values.size))
+    critical = float(student_t.ppf(0.5 + confidence / 2.0, df=values.size - 1))
+    return mean - critical * sem, mean + critical * sem
 
-        #print(f"\n{m}")
-        #print(df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))  # one table per metric
-        #print(f"H = {H:.4g}, p = {p:.4g}")
+
+def _latex_escape_table_text(value: str) -> str:
+    text = str(value)
+    for old, new in (
+        ("\\", r"\textbackslash{}"),
+        ("&", r"\&"),
+        ("%", r"\%"),
+        ("_", r"\_"),
+        ("#", r"\#"),
+    ):
+        text = text.replace(old, new)
+    return text
+
+
+def _cv_difference_latex_table(
+    table: pd.DataFrame,
+    metrics: tuple[str, ...],
+    baseline_label: str,
+) -> str:
+    sub = table[table["metric"].isin(metrics)].copy()
+    lines = [
+        r"\begin{tabular}{llrrrrl}",
+        r"\toprule",
+        r"Metric & Control & CE mean CV & Control mean CV & $\Delta$CV & $\Delta$CV (\%) & 95\% CI \\",
+        r"\midrule",
+    ]
+    for _, row in sub.iterrows():
+        comparison = _latex_escape_table_text(row["control_label"])
+        ci = f"[{row['ci95_low']:+.4f}, {row['ci95_high']:+.4f}]"
+        lines.append(
+            f"{_latex_escape_table_text(row['metric'])} & {comparison} & "
+            f"{row['baseline_mean_cv']:.4f} & {row['control_mean_cv']:.4f} & "
+            f"{row['delta_cv']:+.4f} & {row['pct_delta_cv']:+.2f} & {ci} \\\\"
+        )
+    lines.extend(
+        [
+            r"\bottomrule",
+            r"\end{tabular}",
+            f"% Differences are control minus {_latex_escape_table_text(baseline_label)}; paired by trial where available.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def print_cv_difference_tables(
+    disp: pd.DataFrame,
+    out_dir: str,
+    baseline_mode: str = "real",
+) -> pd.DataFrame:
+    """Compare each architecture's mean CV with the CE baseline, without equivalence bounds."""
+    required = {"mode", "metric", "dispersion"}
+    missing = required.difference(disp.columns)
+    if missing:
+        print(f"[warn] CV-difference table missing columns: {sorted(missing)}")
+        return pd.DataFrame()
+
+    modes = set(disp["mode"].dropna().astype(str))
+    if baseline_mode not in modes:
+        if baseline_mode == "real" and "CE-real" in modes:
+            baseline_mode = "CE-real"
+        else:
+            print(
+                f"[warn] CV-difference table baseline {baseline_mode!r} is absent. "
+                f"Available modes: {sorted(modes)}"
+            )
+            return pd.DataFrame()
+
+    metrics = [
+        metric
+        for metric in ("MC", "IPC", "KR", "GR")
+        if metric in set(disp["metric"].dropna())
+    ]
+    pairing_keys = [key for key in ("src", "group_id") if key in disp.columns]
+    rows: list[dict] = []
+
+    for metric in metrics:
+        metric_df = disp[disp["metric"] == metric].copy()
+        baseline = metric_df[metric_df["mode"] == baseline_mode].dropna(subset=["dispersion"])
+        if baseline.empty:
+            continue
+        for control_mode in sorted(set(metric_df["mode"].dropna()) - {baseline_mode}):
+            control = metric_df[metric_df["mode"] == control_mode].dropna(subset=["dispersion"])
+            if control.empty:
+                continue
+
+            paired = pd.DataFrame()
+            if pairing_keys:
+                base_pair = baseline[pairing_keys + ["dispersion"]].rename(
+                    columns={"dispersion": "baseline_cv"}
+                )
+                control_pair = control[pairing_keys + ["dispersion"]].rename(
+                    columns={"dispersion": "control_cv"}
+                )
+                paired = base_pair.merge(control_pair, on=pairing_keys, how="inner")
+
+            if len(paired) >= 2:
+                baseline_values = paired["baseline_cv"].to_numpy(float)
+                control_values = paired["control_cv"].to_numpy(float)
+                differences = control_values - baseline_values
+                comparison_type = "paired"
+                n_comparisons = int(len(paired))
+                ci_low, ci_high = _mean_difference_ci(differences)
+            else:
+                baseline_values = baseline["dispersion"].to_numpy(float)
+                control_values = control["dispersion"].to_numpy(float)
+                delta = float(np.mean(control_values) - np.mean(baseline_values))
+                se = np.sqrt(
+                    np.var(control_values, ddof=1) / len(control_values)
+                    + np.var(baseline_values, ddof=1) / len(baseline_values)
+                ) if len(control_values) >= 2 and len(baseline_values) >= 2 else np.nan
+                ci_low = delta - 1.96 * se if np.isfinite(se) else np.nan
+                ci_high = delta + 1.96 * se if np.isfinite(se) else np.nan
+                differences = np.array([delta], dtype=float)
+                comparison_type = "unpaired"
+                n_comparisons = int(min(len(baseline_values), len(control_values)))
+
+            baseline_mean = float(np.mean(baseline_values))
+            control_mean = float(np.mean(control_values))
+            delta_cv = float(control_mean - baseline_mean)
+            pct_delta = (
+                100.0 * delta_cv / abs(baseline_mean)
+                if abs(baseline_mean) > 1e-12
+                else np.nan
+            )
+            rows.append(
+                {
+                    "metric": metric,
+                    "baseline_mode": baseline_mode,
+                    "baseline_label": _short_thesis_name(baseline_mode),
+                    "control_mode": control_mode,
+                    "control_label": _short_thesis_name(control_mode),
+                    "baseline_mean_cv": baseline_mean,
+                    "control_mean_cv": control_mean,
+                    "delta_cv": delta_cv,
+                    "pct_delta_cv": pct_delta,
+                    "ci95_low": ci_low,
+                    "ci95_high": ci_high,
+                    "comparison_type": comparison_type,
+                    "n": n_comparisons,
+                }
+            )
+
+    table = pd.DataFrame(rows)
+    if table.empty:
+        print("[warn] no CV differences could be computed.")
+        return table
+    metric_order = {metric: idx for idx, metric in enumerate(("MC", "IPC", "KR", "GR"))}
+    table["_metric_order"] = table["metric"].map(metric_order)
+    table = table.sort_values(["_metric_order", "control_label"], kind="stable").drop(
+        columns="_metric_order"
+    ).reset_index(drop=True)
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_csv = _safe_path(os.path.join(out_dir, "cv_mean_differences_vs_ce.csv"))
+    table.to_csv(out_csv, index=False)
+    print(f"[saved] {out_csv} (rows={len(table)})")
+
+    baseline_label = _short_thesis_name(baseline_mode)
+    for name, selected_metrics in (
+        ("memory", ("MC", "IPC")),
+        ("kernel", ("KR", "GR")),
+    ):
+        latex = _cv_difference_latex_table(table, selected_metrics, baseline_label)
+        out_tex = _safe_path(os.path.join(out_dir, f"cv_mean_differences_{name}_table.tex"))
+        with open(out_tex, "w", encoding="utf-8") as handle:
+            handle.write(latex + "\n")
+        print(f"\n=== Mean CV differences vs {baseline_label}: {name} metrics ===")
+        print(latex)
+        print(f"[saved] {out_tex}")
     print()
+    return table
+
+
+def _mean_performance_differences(
+    mean_tbl: pd.DataFrame,
+    baseline_mode: str,
+) -> pd.DataFrame:
+    """Calculate control-minus-baseline mean-performance differences by metric."""
+    required = {"mode", "metric", "mean"}
+    if mean_tbl.empty or not required.issubset(mean_tbl.columns):
+        return pd.DataFrame()
+
+    rows: list[dict] = []
+    pairing_keys = [key for key in ("src", "group_id") if key in mean_tbl.columns]
+    for metric in ("MC", "IPC", "KR", "GR"):
+        metric_df = mean_tbl[mean_tbl["metric"] == metric]
+        baseline = metric_df[metric_df["mode"] == baseline_mode].dropna(subset=["mean"])
+        if baseline.empty:
+            continue
+        for control_mode in sorted(set(metric_df["mode"].dropna()) - {baseline_mode}):
+            control = metric_df[metric_df["mode"] == control_mode].dropna(subset=["mean"])
+            if control.empty:
+                continue
+
+            paired = pd.DataFrame()
+            if pairing_keys:
+                base_pair = baseline[pairing_keys + ["mean"]].rename(
+                    columns={"mean": "baseline_performance"}
+                )
+                control_pair = control[pairing_keys + ["mean"]].rename(
+                    columns={"mean": "control_performance"}
+                )
+                paired = base_pair.merge(control_pair, on=pairing_keys, how="inner")
+
+            if not paired.empty:
+                baseline_values = paired["baseline_performance"].to_numpy(float)
+                control_values = paired["control_performance"].to_numpy(float)
+            else:
+                baseline_values = baseline["mean"].to_numpy(float)
+                control_values = control["mean"].to_numpy(float)
+
+            baseline_mean = float(np.mean(baseline_values))
+            control_mean = float(np.mean(control_values))
+            delta = control_mean - baseline_mean
+            pct_delta = (
+                100.0 * delta / abs(baseline_mean)
+                if abs(baseline_mean) > 1e-12
+                else np.nan
+            )
+            rows.append(
+                {
+                    "metric": metric,
+                    "control_mode": control_mode,
+                    "baseline_mean_performance": baseline_mean,
+                    "control_mean_performance": control_mean,
+                    "delta_performance": delta,
+                    "pct_delta_performance": pct_delta,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def plot_cv_performance_differences_3d(
+    cv_differences: pd.DataFrame,
+    mean_tbl: pd.DataFrame,
+    out_dir: str,
+    baseline_mode: str = "real",
+    show: bool = True,
+) -> str | None:
+    """Plot isolated CV bumps whose colors encode mean-performance change."""
+    if cv_differences.empty:
+        print("[warn] interactive 3D plot: no CV differences available.")
+        return None
+    if "baseline_mode" in cv_differences.columns:
+        baseline_modes = cv_differences["baseline_mode"].dropna().astype(str).unique()
+        if len(baseline_modes):
+            baseline_mode = baseline_modes[0]
+
+    performance = _mean_performance_differences(mean_tbl, baseline_mode)
+    if performance.empty:
+        print("[warn] interactive 3D plot: no mean-performance differences available.")
+        return None
+
+    plot_df = cv_differences.merge(
+        performance,
+        on=["control_mode", "metric"],
+        how="inner",
+    )
+    plot_df = plot_df[
+        np.isfinite(plot_df["pct_delta_cv"])
+        & np.isfinite(plot_df["pct_delta_performance"])
+    ].copy()
+    if plot_df.empty:
+        print("[warn] interactive 3D plot: CV and performance rows did not overlap.")
+        return None
+
+    # Order controls from most CE-like to least CE-like in joint percent-difference space.
+    control_order = (
+        plot_df.assign(
+            distance=lambda frame: np.hypot(
+                frame["pct_delta_cv"], frame["pct_delta_performance"]
+            )
+        )
+        .groupby("control_mode")["distance"]
+        .mean()
+        .sort_values()
+        .index.tolist()
+    )
+    x_lookup = {mode: idx for idx, mode in enumerate(control_order)}
+    label_lookup = (
+        plot_df.drop_duplicates("control_mode")
+        .set_index("control_mode")["control_label"]
+        .to_dict()
+    )
+    metric_order = [
+        metric for metric in ("MC", "IPC", "KR", "GR")
+        if metric in set(plot_df["metric"])
+    ]
+    metric_lookup = {metric: idx for idx, metric in enumerate(metric_order)}
+
+    perf_limit = float(np.nanmax(np.abs(plot_df["pct_delta_performance"])))
+    perf_limit = max(perf_limit, 1e-9)
+    color_norm = mpl.colors.TwoSlopeNorm(
+        vmin=-perf_limit,
+        vcenter=0.0,
+        vmax=perf_limit,
+    )
+    color_map = mpl.colormaps["coolwarm"]
+
+    fig = plt.figure(figsize=(14.0, 8.6), dpi=140)
+    ax = fig.add_subplot(111, projection="3d")
+    # Each category/metric pair gets its own compact Gaussian cap. The caps do not
+    # touch, so the surface does not imply continuity between categorical controls.
+    local_axis = np.linspace(-0.42, 0.42, 31)
+    local_x, local_y = np.meshgrid(local_axis, local_axis)
+    radial = np.exp(-0.5 * ((local_x / 0.17) ** 2 + (local_y / 0.17) ** 2))
+    radial[radial < 0.025] = np.nan
+    for _, row in plot_df.iterrows():
+        x_center = float(x_lookup[row["control_mode"]])
+        y_center = float(metric_lookup[row["metric"]])
+        cv_height = float(row["pct_delta_cv"])
+        performance_color = float(row["pct_delta_performance"])
+        rgba = color_map(color_norm(performance_color))
+        ax.plot_surface(
+            x_center + local_x,
+            y_center + local_y,
+            cv_height * radial,
+            color=rgba,
+            alpha=0.92,
+            linewidth=0,
+            antialiased=True,
+            shade=True,
+        )
+        ax.scatter(
+            [x_center],
+            [y_center],
+            [cv_height],
+            color=[rgba],
+            edgecolors="#222222",
+            linewidths=0.45,
+            s=18,
+            depthshade=False,
+        )
+
+    x_plane, y_plane = np.meshgrid(
+        np.linspace(-0.5, len(control_order) - 0.5, 2),
+        np.linspace(-0.5, len(metric_order) - 0.5, 2),
+    )
+    ax.plot_surface(
+        x_plane,
+        y_plane,
+        np.zeros_like(x_plane),
+        color="#777777",
+        alpha=0.08,
+        linewidth=0,
+        shade=False,
+    )
+
+    x_values = np.arange(len(control_order), dtype=float)
+    y_values = np.arange(len(metric_order), dtype=float)
+    ax.set_xlabel("Control architecture", labelpad=17)
+    ax.set_ylabel("Metric", labelpad=10)
+    ax.set_zlabel(r"Mean CV difference from CE (\%)", labelpad=12)
+    ax.set_xticks(x_values)
+    ax.set_xticklabels(
+        [label_lookup.get(mode, _short_thesis_name(mode)) for mode in control_order],
+        fontsize=8,
+        rotation=18,
+        ha="right",
+    )
+    ax.set_yticks(y_values)
+    ax.set_yticklabels(metric_order, fontsize=10)
+    ax.set_title("CV landscape colored by performance difference", pad=22)
+    ax.view_init(elev=29, azim=-55)
+    _style_3d_axis(ax, tick_labelsize=9, tick_pad=1)
+    color_scalar = mpl.cm.ScalarMappable(norm=color_norm, cmap=color_map)
+    color_scalar.set_array([])
+    colorbar = fig.colorbar(color_scalar, ax=ax, shrink=0.64, pad=0.08, aspect=24)
+    colorbar.set_label(r"Mean performance difference from CE (\%)")
+    fig.subplots_adjust(left=0.02, right=0.91, bottom=0.08, top=0.92)
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_png = _replace_path(os.path.join(out_dir, "cv_performance_differences_3d.png"))
+    fig.savefig(out_png, dpi=300, bbox_inches="tight", facecolor="white")
+    print(f"[saved] {out_png}")
+    if show:
+        print("[info] 3D bump window opened; drag to rotate and use the toolbar to zoom.")
+        plt.show()
+    plt.close(fig)
+    return out_png
+
+
+def plot_cv_performance_hills_3d(
+    disp: pd.DataFrame,
+    mean_tbl: pd.DataFrame,
+    out_dir: str,
+    bins: int = 18,
+    show: bool = True,
+) -> str | None:
+    """Add performance to the CV histograms as smooth 3D joint-distribution hills."""
+    required_disp = {"mode", "metric", "dispersion"}
+    required_mean = {"mode", "metric", "mean"}
+    if not required_disp.issubset(disp.columns) or not required_mean.issubset(mean_tbl.columns):
+        print("[warn] 3D hills require mode, metric, CV dispersion, and mean performance.")
+        return None
+
+    join_keys = ["mode", "metric"] + [
+        key for key in ("src", "group_id")
+        if key in disp.columns and key in mean_tbl.columns
+    ]
+    left = disp[join_keys + ["dispersion"]].copy()
+    right = mean_tbl[join_keys + ["mean"]].copy()
+    for key in ("mode", "metric", "src", "group_id"):
+        if key in join_keys:
+            left[key] = left[key].astype(str)
+            right[key] = right[key].astype(str)
+    joint = left.merge(right, on=join_keys, how="inner")
+    joint = joint[
+        np.isfinite(pd.to_numeric(joint["dispersion"], errors="coerce"))
+        & np.isfinite(pd.to_numeric(joint["mean"], errors="coerce"))
+    ].copy()
+    if joint.empty:
+        print("[warn] 3D hills: CV and performance trials did not match.")
+        return None
+
+    present_modes = list(dict.fromkeys(joint["mode"].astype(str)))
+    preferred_order = [
+        "real",
+        "cel+randN",
+        "er+randN",
+        "ws_p0.1+randN",
+        "local_sign",
+        "local_sign+flat",
+        "local_sign+binary",
+        "global_sign_pres",
+        "global_sign_pres_real_w",
+        "global_sign_pres_real_weight",
+        "binary_base",
+    ]
+    modes = [mode for mode in preferred_order if mode in present_modes]
+    modes.extend(mode for mode in present_modes if mode not in modes)
+    preserved_colors = {
+        "real": "#32a2f2",
+        "local_sign+binary": "#7488FF",
+        "binary_base": "#78dee5",
+    }
+    palette = [
+        "#E69F00", "#009E73", "#D55E00", "#CC79A7",
+        "#56B4E9", "#F0E442", "#0072B2", "#000000",
+    ]
+    color_map = dict(preserved_colors)
+    palette_idx = 0
+    for mode in modes:
+        if mode not in color_map:
+            color_map[mode] = palette[palette_idx % len(palette)]
+            palette_idx += 1
+
+    metrics = [
+        metric for metric in ("GR", "IPC", "KR", "MC")
+        if metric in set(joint["metric"])
+    ]
+    if not metrics:
+        print("[warn] 3D hills: none of GR/IPC/KR/MC were available.")
+        return None
+
+    bins = max(10, min(int(bins), 28))
+    fig = plt.figure(figsize=(16, 11.5), dpi=140)
+    axes = []
+    plotted_any = False
+    for panel_idx, metric in enumerate(metrics, start=1):
+        ax = fig.add_subplot(2, 2, panel_idx, projection="3d")
+        axes.append(ax)
+        metric_df = joint[joint["metric"] == metric].copy()
+        cv_values = metric_df["dispersion"].to_numpy(float)
+        perf_values = metric_df["mean"].to_numpy(float)
+        if not len(cv_values):
+            ax.set_axis_off()
+            continue
+
+        cv_lo, cv_hi = float(np.nanmin(cv_values)), float(np.nanmax(cv_values))
+        perf_lo, perf_hi = float(np.nanmin(perf_values)), float(np.nanmax(perf_values))
+        if np.isclose(cv_lo, cv_hi):
+            cv_lo, cv_hi = cv_lo - 0.5, cv_hi + 0.5
+        if np.isclose(perf_lo, perf_hi):
+            perf_lo, perf_hi = perf_lo - 0.5, perf_hi + 0.5
+        cv_pad = 0.03 * (cv_hi - cv_lo)
+        perf_pad = 0.03 * (perf_hi - perf_lo)
+        cv_edges = np.linspace(cv_lo - cv_pad, cv_hi + cv_pad, bins + 1)
+        perf_edges = np.linspace(perf_lo - perf_pad, perf_hi + perf_pad, bins + 1)
+        cv_centers = 0.5 * (cv_edges[:-1] + cv_edges[1:])
+        perf_centers = 0.5 * (perf_edges[:-1] + perf_edges[1:])
+        grid_cv, grid_perf = np.meshgrid(cv_centers, perf_centers, indexing="ij")
+
+        panel_peak = 0.0
+        for mode in modes:
+            sub = metric_df[metric_df["mode"] == mode]
+            if sub.empty:
+                continue
+            hist, _, _ = np.histogram2d(
+                sub["dispersion"].to_numpy(float),
+                sub["mean"].to_numpy(float),
+                bins=(cv_edges, perf_edges),
+            )
+            height = gaussian_filter(hist / max(len(sub), 1), sigma=0.9, mode="constant")
+            if height.sum() > 0:
+                height *= (hist.sum() / max(len(sub), 1)) / height.sum()
+            peak = float(np.nanmax(height)) if height.size else 0.0
+            if peak <= 0:
+                continue
+            panel_peak = max(panel_peak, peak)
+            height_plot = height.copy()
+            height_plot[height_plot < peak * 0.025] = np.nan
+            ax.plot_surface(
+                grid_cv,
+                grid_perf,
+                height_plot,
+                color=color_map[mode],
+                alpha=0.46,
+                linewidth=0,
+                antialiased=True,
+                shade=True,
+            )
+            plotted_any = True
+
+        ax.set_title(f"Invariance and performance of {metric}", pad=10)
+        ax.set_xlabel("coefficient of variation", labelpad=8)
+        ax.set_ylabel("mean performance", labelpad=9)
+        ax.set_zlabel("fraction (normalized by N)", labelpad=8)
+        if panel_peak > 0:
+            ax.set_zlim(0, panel_peak * 1.12)
+        ax.view_init(elev=28, azim=-55)
+        _style_3d_axis(ax, tick_labelsize=9, tick_pad=0)
+
+    if not plotted_any:
+        plt.close(fig)
+        print("[warn] 3D hills: no finite architecture surfaces could be drawn.")
+        return None
+
+    legend_handles = [
+        Line2D([0], [0], color=color_map[mode], linewidth=4, label=_short_legend_name(mode))
+        for mode in modes
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.01),
+        ncol=min(5, max(1, len(legend_handles))),
+        frameon=True,
+        fontsize=11,
+    )
+    fig.suptitle("Joint CV–performance landscapes", fontsize=22, y=0.985)
+    fig.subplots_adjust(left=0.01, right=0.98, bottom=0.13, top=0.93, wspace=0.01, hspace=0.08)
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_png = _replace_path(os.path.join(out_dir, "cv_performance_hills_3d.png"))
+    fig.savefig(out_png, dpi=300, bbox_inches="tight", facecolor="white")
+    print(f"[saved] {out_png}")
+    if show:
+        print("[info] 3D hill window opened; drag any panel to rotate it.")
+        plt.show()
+    plt.close(fig)
+    return out_png
 
 
 # --------------------------- main ----------------------------
@@ -3415,7 +3930,16 @@ def main():
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    #print_kruskal_wallis_tables(disp)
+    print_cv_difference_tables(disp, args.out_dir, baseline_mode="real")
+    if args.show_cv_performance_3d:
+        mean_tbl = _compute_mean_table(combined)
+        plot_cv_performance_hills_3d(
+            disp,
+            mean_tbl,
+            args.out_dir,
+            bins=min(args.bins, 22),
+            show=True,
+        )
 
 
 if __name__ == "__main__":
