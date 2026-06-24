@@ -16,6 +16,7 @@ Outputs (defaults)
 """
 
 import os
+import sys
 import argparse
 import csv
 import numpy as np
@@ -30,7 +31,10 @@ import re
 from matplotlib.ticker import FormatStrFormatter
 
 if not os.environ.get("MPLBACKEND"):
-    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+    interactive_3d_requested = "--show-cv-performance-3d" in sys.argv
+    if not interactive_3d_requested or not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
         mpl.use("Agg")
 
 import matplotlib.pyplot as plt
@@ -238,6 +242,30 @@ def parse_args():
         help=(
             "Show interactive joint-distribution hills with CV on x, mean "
             "performance on y, and normalized trial fraction as height."
+        ),
+    )
+    ap.add_argument(
+        "--show-cv-performance-contours",
+        action="store_true",
+        help=(
+            "Show the publication-oriented top-down joint CV/performance density "
+            "contours for each metric."
+        ),
+    )
+    ap.add_argument(
+        "--cv-performance-contour-percent",
+        "--contour-percent",
+        dest="cv_performance_contour_percent",
+        type=float,
+        default=50.0,
+        help="Highest-density percentage shown by CV/performance contours (default: 50).",
+    )
+    ap.add_argument(
+        "--cv-baseline-mode",
+        default="auto",
+        help=(
+            "Mode used as the CV-difference baseline. The default 'auto' uses "
+            "real/CE-real when present and binary_base for binary shuffle runs."
         ),
     )
     return ap.parse_args()
@@ -3264,10 +3292,12 @@ def _cv_difference_latex_table(
     baseline_label: str,
 ) -> str:
     sub = table[table["metric"].isin(metrics)].copy()
+    escaped_baseline = _latex_escape_table_text(baseline_label)
     lines = [
         r"\begin{tabular}{llrrrrl}",
         r"\toprule",
-        r"Metric & Control & CE mean CV & Control mean CV & $\Delta$CV & $\Delta$CV (\%) & 95\% CI \\",
+        f"Metric & Control & {escaped_baseline} mean CV & Control mean CV & "
+        r"$\Delta$CV & $\Delta$CV (\%) & 95\% CI \\",
         r"\midrule",
     ]
     for _, row in sub.iterrows():
@@ -3288,12 +3318,32 @@ def _cv_difference_latex_table(
     return "\n".join(lines)
 
 
+def _resolve_cv_baseline_mode(modes: set[str], requested: str) -> str | None:
+    """Resolve an explicit or experiment-appropriate CV baseline."""
+    requested = str(requested or "auto").strip()
+    if requested.lower() != "auto":
+        if requested in modes:
+            return requested
+        if requested == "real" and "CE-real" in modes:
+            return "CE-real"
+        return None
+
+    for candidate in ("real", "CE-real"):
+        if candidate in modes:
+            return candidate
+    if {"binary_base", "binary_base_topology_shuffle"}.issubset(modes):
+        return "binary_base"
+    if "binary_base" in modes:
+        return "binary_base"
+    return None
+
+
 def print_cv_difference_tables(
     disp: pd.DataFrame,
     out_dir: str,
-    baseline_mode: str = "real",
+    baseline_mode: str = "auto",
 ) -> pd.DataFrame:
-    """Compare each architecture's mean CV with the CE baseline, without equivalence bounds."""
+    """Compare each architecture's mean CV with the experiment-appropriate baseline."""
     required = {"mode", "metric", "dispersion"}
     missing = required.difference(disp.columns)
     if missing:
@@ -3301,15 +3351,15 @@ def print_cv_difference_tables(
         return pd.DataFrame()
 
     modes = set(disp["mode"].dropna().astype(str))
-    if baseline_mode not in modes:
-        if baseline_mode == "real" and "CE-real" in modes:
-            baseline_mode = "CE-real"
-        else:
-            print(
-                f"[warn] CV-difference table baseline {baseline_mode!r} is absent. "
-                f"Available modes: {sorted(modes)}"
-            )
-            return pd.DataFrame()
+    requested_baseline = baseline_mode
+    baseline_mode = _resolve_cv_baseline_mode(modes, requested_baseline)
+    if baseline_mode is None:
+        print(
+            f"[warn] CV-difference table could not resolve baseline {requested_baseline!r}. "
+            f"Available modes: {sorted(modes)}"
+        )
+        return pd.DataFrame()
+    print(f"[info] CV-difference baseline: {_short_thesis_name(baseline_mode)} ({baseline_mode})")
 
     metrics = [
         metric
@@ -3397,17 +3447,20 @@ def print_cv_difference_tables(
     ).reset_index(drop=True)
 
     os.makedirs(out_dir, exist_ok=True)
-    out_csv = _safe_path(os.path.join(out_dir, "cv_mean_differences_vs_ce.csv"))
-    table.to_csv(out_csv, index=False)
-    print(f"[saved] {out_csv} (rows={len(table)})")
-
+    baseline_is_ce = baseline_mode in {"real", "CE-real"}
+    baseline_tag = "ce" if baseline_is_ce else re.sub(r"[^A-Za-z0-9._-]+", "_", baseline_mode)
     baseline_label = _short_thesis_name(baseline_mode)
     for name, selected_metrics in (
         ("memory", ("MC", "IPC")),
         ("kernel", ("KR", "GR")),
     ):
         latex = _cv_difference_latex_table(table, selected_metrics, baseline_label)
-        out_tex = _safe_path(os.path.join(out_dir, f"cv_mean_differences_{name}_table.tex"))
+        tex_name = (
+            f"cv_mean_differences_{name}_table.tex"
+            if baseline_is_ce
+            else f"cv_mean_differences_{name}_vs_{baseline_tag}_table.tex"
+        )
+        out_tex = _safe_path(os.path.join(out_dir, tex_name))
         with open(out_tex, "w", encoding="utf-8") as handle:
             handle.write(latex + "\n")
         print(f"\n=== Mean CV differences vs {baseline_label}: {name} metrics ===")
@@ -3675,20 +3728,29 @@ def plot_cv_performance_hills_3d(
     ]
     modes = [mode for mode in preferred_order if mode in present_modes]
     modes.extend(mode for mode in present_modes if mode not in modes)
-    preserved_colors = {
-        "real": "#32a2f2",
-        "local_sign+binary": "#7488FF",
-        "binary_base": "#78dee5",
+    fixed_colors = {
+        "real": "#111111",
+        "CE-real": "#111111",
+        "cel+randN": "#E69F00",
+        "cel_randN": "#E69F00",
+        "er+randN": "#009E73",
+        "er_randN": "#009E73",
+        "ws_p0.1+randN": "#D55E00",
+        "ws_p01_randN": "#D55E00",
+        "local_sign": "#CC79A7",
+        "local_sign+flat": "#56B4E9",
+        "local_sign+binary": "#7B61C9",
+        "global_sign_pres": "#B79F00",
+        "global_sign_pres_real_w": "#0072B2",
+        "global_sign_pres_real_weight": "#0072B2",
+        "binary_base": "#00A6A6",
     }
-    palette = [
-        "#E69F00", "#009E73", "#D55E00", "#CC79A7",
-        "#56B4E9", "#F0E442", "#0072B2", "#000000",
-    ]
-    color_map = dict(preserved_colors)
+    fallback_palette = mpl.colormaps["tab20"]
+    color_map = dict(fixed_colors)
     palette_idx = 0
     for mode in modes:
         if mode not in color_map:
-            color_map[mode] = palette[palette_idx % len(palette)]
+            color_map[mode] = fallback_palette(palette_idx % 20)
             palette_idx += 1
 
     metrics = [
@@ -3700,11 +3762,19 @@ def plot_cv_performance_hills_3d(
         return None
 
     bins = max(10, min(int(bins), 28))
-    fig = plt.figure(figsize=(16, 11.5), dpi=140)
+    # Use explicit sizes here because the 2D histogram routine intentionally
+    # enlarges global rcParams for its own publication layout.
+    fig = plt.figure(figsize=(13.0, 10.0), dpi=140)
+    panel_positions = (
+        (0.025, 0.560, 0.440, 0.340),
+        (0.515, 0.560, 0.440, 0.340),
+        (0.025, 0.145, 0.440, 0.340),
+        (0.515, 0.145, 0.440, 0.340),
+    )
     axes = []
     plotted_any = False
-    for panel_idx, metric in enumerate(metrics, start=1):
-        ax = fig.add_subplot(2, 2, panel_idx, projection="3d")
+    for panel_idx, metric in enumerate(metrics):
+        ax = fig.add_axes(panel_positions[panel_idx], projection="3d")
         axes.append(ax)
         metric_df = joint[joint["metric"] == metric].copy()
         cv_values = metric_df["dispersion"].to_numpy(float)
@@ -3737,7 +3807,7 @@ def plot_cv_performance_hills_3d(
                 sub["mean"].to_numpy(float),
                 bins=(cv_edges, perf_edges),
             )
-            height = gaussian_filter(hist / max(len(sub), 1), sigma=0.9, mode="constant")
+            height = gaussian_filter(hist / max(len(sub), 1), sigma=1.0, mode="constant")
             if height.sum() > 0:
                 height *= (hist.sum() / max(len(sub), 1)) / height.sum()
             peak = float(np.nanmax(height)) if height.size else 0.0
@@ -3751,21 +3821,28 @@ def plot_cv_performance_hills_3d(
                 grid_perf,
                 height_plot,
                 color=color_map[mode],
-                alpha=0.46,
+                alpha=0.42,
                 linewidth=0,
                 antialiased=True,
                 shade=True,
             )
             plotted_any = True
 
-        ax.set_title(f"Invariance and performance of {metric}", pad=10)
-        ax.set_xlabel("coefficient of variation", labelpad=8)
-        ax.set_ylabel("mean performance", labelpad=9)
-        ax.set_zlabel("fraction (normalized by N)", labelpad=8)
+        ax.set_title(metric, fontsize=18, fontweight="semibold", pad=5)
+        ax.set_xlabel("CV", fontsize=12.5, labelpad=6)
+        ax.set_ylabel("Mean performance", fontsize=12.5, labelpad=7)
+        ax.set_zlabel("")
         if panel_peak > 0:
             ax.set_zlim(0, panel_peak * 1.12)
-        ax.view_init(elev=28, azim=-55)
-        _style_3d_axis(ax, tick_labelsize=9, tick_pad=0)
+        ax.set_proj_type("ortho")
+        ax.view_init(elev=31, azim=-55)
+        ax.set_box_aspect((1.18, 1.0, 0.72), zoom=1.12)
+        _style_3d_axis(ax, tick_labelsize=10, tick_pad=0)
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+            axis._axinfo["grid"].update(
+                color=(0.55, 0.55, 0.55, 0.28),
+                linewidth=0.55,
+            )
 
     if not plotted_any:
         plt.close(fig)
@@ -3782,17 +3859,275 @@ def plot_cv_performance_hills_3d(
         bbox_to_anchor=(0.5, 0.01),
         ncol=min(5, max(1, len(legend_handles))),
         frameon=True,
+        fontsize=10.5,
+        columnspacing=1.25,
+        handlelength=2.2,
+    )
+    fig.text(
+        0.012,
+        0.515,
+        "Normalized trial fraction",
+        rotation=90,
+        va="center",
+        ha="center",
         fontsize=11,
     )
-    fig.suptitle("Joint CV–performance landscapes", fontsize=22, y=0.985)
-    fig.subplots_adjust(left=0.01, right=0.98, bottom=0.13, top=0.93, wspace=0.01, hspace=0.08)
 
     os.makedirs(out_dir, exist_ok=True)
     out_png = _replace_path(os.path.join(out_dir, "cv_performance_hills_3d.png"))
-    fig.savefig(out_png, dpi=300, bbox_inches="tight", facecolor="white")
+    fig.savefig(out_png, dpi=300, facecolor="white")
     print(f"[saved] {out_png}")
     if show:
         print("[info] 3D hill window opened; drag any panel to rotate it.")
+        plt.show()
+    plt.close(fig)
+    return out_png
+
+
+def plot_cv_performance_contours_2d(
+    disp: pd.DataFrame,
+    mean_tbl: pd.DataFrame,
+    out_dir: str,
+    bins: int = 36,
+    show: bool = True,
+    contour_percent: float = 50.0,
+) -> str | None:
+    """Plot top-down highest-density contours of joint CV/performance trials."""
+    contour_percent = float(contour_percent)
+    if not (0.0 < contour_percent < 100.0):
+        raise ValueError("contour_percent must be greater than 0 and less than 100.")
+    contour_mass = contour_percent / 100.0
+    print(f"[info] CV/performance contour coverage: {contour_percent:g}%")
+    required_disp = {"mode", "metric", "dispersion"}
+    required_mean = {"mode", "metric", "mean"}
+    if not required_disp.issubset(disp.columns) or not required_mean.issubset(mean_tbl.columns):
+        print("[warn] 2D contours require mode, metric, CV dispersion, and mean performance.")
+        return None
+
+    join_keys = ["mode", "metric"] + [
+        key for key in ("src", "group_id")
+        if key in disp.columns and key in mean_tbl.columns
+    ]
+    left = disp[join_keys + ["dispersion"]].copy()
+    right = mean_tbl[join_keys + ["mean"]].copy()
+    for key in ("mode", "metric", "src", "group_id"):
+        if key in join_keys:
+            left[key] = left[key].astype(str)
+            right[key] = right[key].astype(str)
+    joint = left.merge(right, on=join_keys, how="inner")
+    joint["dispersion"] = pd.to_numeric(joint["dispersion"], errors="coerce")
+    joint["mean"] = pd.to_numeric(joint["mean"], errors="coerce")
+    joint = joint[np.isfinite(joint["dispersion"]) & np.isfinite(joint["mean"])].copy()
+    if joint.empty:
+        print("[warn] 2D contours: CV and performance trials did not match.")
+        return None
+
+    present_modes = list(dict.fromkeys(joint["mode"].astype(str)))
+    preferred_order = [
+        "real", "cel+randN", "er+randN", "ws_p0.1+randN",
+        "local_sign", "local_sign+flat", "local_sign+binary",
+        "global_sign_pres", "global_sign_pres_real_w",
+        "global_sign_pres_real_weight", "binary_base",
+    ]
+    modes = [mode for mode in preferred_order if mode in present_modes]
+    modes.extend(mode for mode in present_modes if mode not in modes)
+    fixed_colors = {
+        "real": "#111111",
+        "CE-real": "#111111",
+        "cel+randN": "#E69F00",
+        "cel_randN": "#E69F00",
+        "er+randN": "#009E73",
+        "er_randN": "#009E73",
+        "ws_p0.1+randN": "#D55E00",
+        "ws_p01_randN": "#D55E00",
+        "local_sign": "#CC79A7",
+        "local_sign+flat": "#56B4E9",
+        "local_sign+binary": "#7B61C9",
+        "global_sign_pres": "#B79F00",
+        "global_sign_pres_real_w": "#0072B2",
+        "global_sign_pres_real_weight": "#0072B2",
+        "binary_base": "#00A6A6",
+    }
+    fallback_palette = mpl.colormaps["tab20"]
+    color_map = dict(fixed_colors)
+    palette_idx = 0
+    for mode in modes:
+        if mode not in color_map:
+            color_map[mode] = fallback_palette(palette_idx % 20)
+            palette_idx += 1
+
+    metrics = [
+        metric for metric in ("GR", "IPC", "KR", "MC")
+        if metric in set(joint["metric"])
+    ]
+    if not metrics:
+        print("[warn] 2D contours: none of GR/IPC/KR/MC were available.")
+        return None
+
+    bins = max(24, min(int(bins), 52))
+    fig = plt.figure(figsize=(13.2, 10.0), dpi=140)
+    grid = fig.add_gridspec(
+        2,
+        2,
+        left=0.075,
+        right=0.985,
+        bottom=0.200,
+        top=0.945,
+        wspace=0.16,
+        hspace=0.20,
+    )
+    flat_axes = np.array(
+        [
+            fig.add_subplot(grid[0, 0]),
+            fig.add_subplot(grid[0, 1]),
+            fig.add_subplot(grid[1, 0]),
+            fig.add_subplot(grid[1, 1]),
+        ],
+        dtype=object,
+    )
+    plotted_any = False
+
+    for panel_idx, metric in enumerate(metrics):
+        ax = flat_axes[panel_idx]
+        metric_df = joint[joint["metric"] == metric]
+        cv_values = metric_df["dispersion"].to_numpy(float)
+        perf_values = metric_df["mean"].to_numpy(float)
+        cv_lo, cv_hi = float(np.nanmin(cv_values)), float(np.nanmax(cv_values))
+        perf_lo, perf_hi = float(np.nanmin(perf_values)), float(np.nanmax(perf_values))
+        cv_pad = max(0.035 * (cv_hi - cv_lo), 1e-9)
+        perf_pad = max(0.035 * (perf_hi - perf_lo), 1e-9)
+        cv_edges = np.linspace(cv_lo - cv_pad, cv_hi + cv_pad, bins + 1)
+        perf_edges = np.linspace(perf_lo - perf_pad, perf_hi + perf_pad, bins + 1)
+        cv_centers = 0.5 * (cv_edges[:-1] + cv_edges[1:])
+        perf_centers = 0.5 * (perf_edges[:-1] + perf_edges[1:])
+        grid_cv, grid_perf = np.meshgrid(cv_centers, perf_centers, indexing="ij")
+
+        baseline_mode = "real" if "real" in modes else ("CE-real" if "CE-real" in modes else None)
+        draw_modes = [mode for mode in modes if mode != baseline_mode]
+        if baseline_mode is not None:
+            draw_modes.append(baseline_mode)
+
+        for mode in draw_modes:
+            sub = metric_df[metric_df["mode"] == mode]
+            if len(sub) < 2:
+                continue
+            x = sub["dispersion"].to_numpy(float)
+            y = sub["mean"].to_numpy(float)
+            hist, _, _ = np.histogram2d(x, y, bins=(cv_edges, perf_edges))
+            density = gaussian_filter(hist, sigma=1.35, mode="constant")
+            total = float(density.sum())
+            if total <= 0:
+                continue
+
+            ordered = np.sort(density.ravel())[::-1]
+            cumulative = np.cumsum(ordered) / total
+            idx = min(int(np.searchsorted(cumulative, contour_mass)), len(ordered) - 1)
+            contour_level = float(ordered[idx])
+            levels = [contour_level] if contour_level > 0 else []
+            if levels:
+                if mode == baseline_mode:
+                    baseline_levels = [levels[-1]]
+                    baseline_widths = [3.4]
+                    ax.contour(
+                        grid_cv,
+                        grid_perf,
+                        density,
+                        levels=baseline_levels,
+                        colors=["white"],
+                        linewidths=[width + 2.4 for width in baseline_widths],
+                        alpha=0.96,
+                        zorder=8,
+                    )
+                    ax.contour(
+                        grid_cv,
+                        grid_perf,
+                        density,
+                        levels=baseline_levels,
+                        colors=[color_map[mode]],
+                        linewidths=baseline_widths,
+                        alpha=1.0,
+                        zorder=9,
+                    )
+                else:
+                    ax.contour(
+                        grid_cv,
+                        grid_perf,
+                        density,
+                        levels=[levels[-1]],
+                        colors=[color_map[mode]],
+                        linewidths=1.5,
+                        alpha=0.84,
+                        zorder=4,
+                    )
+            is_baseline = mode == baseline_mode
+            ax.scatter(
+                x,
+                y,
+                s=8 if is_baseline else 6,
+                color=color_map[mode],
+                alpha=0.10 if is_baseline else 0.035,
+                linewidths=0,
+                zorder=3,
+            )
+            ax.scatter(
+                [float(np.mean(x))],
+                [float(np.mean(y))],
+                s=115 if is_baseline else 34,
+                color=color_map[mode],
+                marker="*" if is_baseline else "o",
+                edgecolor="#222222" if is_baseline else "white",
+                linewidth=0.9 if is_baseline else 0.7,
+                zorder=10 if is_baseline else 6,
+            )
+            plotted_any = True
+
+        ax.set_title(metric, fontsize=24, fontweight="semibold", pad=8)
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.tick_params(axis="both", labelsize=15)
+        ax.grid(True, color="#bdbdbd", alpha=0.24, linewidth=0.7)
+        ax.margins(x=0.015, y=0.025)
+
+    for idx in range(len(metrics), len(flat_axes)):
+        flat_axes[idx].set_axis_off()
+    if not plotted_any:
+        plt.close(fig)
+        print("[warn] 2D contours: no finite architecture contours could be drawn.")
+        return None
+
+    legend_handles = []
+    for mode in modes:
+        is_baseline = mode in {"real", "CE-real"}
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                color=color_map[mode],
+                linewidth=3.5 if is_baseline else 2.5,
+                marker="*" if is_baseline else None,
+                markersize=10 if is_baseline else 0,
+                markeredgecolor="#222222" if is_baseline else color_map[mode],
+                label=_short_legend_name(mode),
+            )
+        )
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.012),
+        ncol=min(5, max(1, len(legend_handles))),
+        frameon=True,
+        fontsize=13,
+        columnspacing=1.15,
+        handlelength=2.5,
+    )
+    fig.text(0.53, 0.135, "Coefficient of variation", fontsize=21, ha="center")
+    fig.text(0.012, 0.565, "Mean performance", fontsize=21, va="center", rotation=90)
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_png = _replace_path(os.path.join(out_dir, "cv_performance_density_contours.png"))
+    fig.savefig(out_png, dpi=300, facecolor="white")
+    print(f"[saved] {out_png}")
+    if show:
         plt.show()
     plt.close(fig)
     return out_png
@@ -3930,9 +4265,19 @@ def main():
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
     plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
-    print_cv_difference_tables(disp, args.out_dir, baseline_mode="real")
-    if args.show_cv_performance_3d:
+    print_cv_difference_tables(disp, args.out_dir, baseline_mode=args.cv_baseline_mode)
+    if args.show_cv_performance_3d or args.show_cv_performance_contours:
         mean_tbl = _compute_mean_table(combined)
+    if args.show_cv_performance_contours:
+        plot_cv_performance_contours_2d(
+            disp,
+            mean_tbl,
+            args.out_dir,
+            bins=max(args.bins, 36),
+            show=True,
+            contour_percent=args.cv_performance_contour_percent,
+        )
+    if args.show_cv_performance_3d:
         plot_cv_performance_hills_3d(
             disp,
             mean_tbl,

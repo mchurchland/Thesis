@@ -32,6 +32,6 @@ def test_cv_difference_table_uses_paired_trial_differences(tmp_path):
     assert mc["ci95_high"] == 0.5
     assert ipc["delta_cv"] == 0.0
     assert np.isclose(ipc["pct_delta_cv"], 0.0)
-    assert (tmp_path / "cv_mean_differences_vs_ce.csv").is_file()
+    assert not (tmp_path / "cv_mean_differences_vs_ce.csv").exists()
     assert (tmp_path / "cv_mean_differences_memory_table.tex").is_file()
     assert (tmp_path / "cv_mean_differences_kernel_table.tex").is_file()
