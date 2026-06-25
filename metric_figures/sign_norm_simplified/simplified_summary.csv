@@ -1,0 +1,141 @@
+dataset,summary,metric_group,sign_frac,value
+matched_cel,performance_delta_pct,All metrics,0.0,-21.00638137354313
+matched_cel,performance_delta_pct,All metrics,0.2,14.472441954528735
+matched_cel,performance_delta_pct,All metrics,0.2205882352941176,21.46479984070049
+matched_cel,performance_delta_pct,All metrics,0.4,61.69188393479997
+matched_cel,performance_delta_pct,All metrics,0.6,64.42957056281925
+matched_cel,performance_delta_pct,All metrics,0.8,11.241829790952545
+matched_cel,performance_delta_pct,All metrics,1.0,-25.43689479784766
+matched_cel,cv_delta_pct,All metrics,0.0,-15.853391051986508
+matched_cel,cv_delta_pct,All metrics,0.2,2.6309160314860147
+matched_cel,cv_delta_pct,All metrics,0.2205882352941176,4.225552534361908
+matched_cel,cv_delta_pct,All metrics,0.4,13.320964994194652
+matched_cel,cv_delta_pct,All metrics,0.6,13.509524092450055
+matched_cel,cv_delta_pct,All metrics,0.8,2.966238462894289
+matched_cel,cv_delta_pct,All metrics,1.0,-17.42780245492458
+matched_cel,performance_delta_pct,Memory,0.0,2.0988121548848424
+matched_cel,performance_delta_pct,Memory,0.2,4.631513112167804
+matched_cel,performance_delta_pct,Memory,0.2205882352941176,7.228716901561485
+matched_cel,performance_delta_pct,Memory,0.4,22.524729588186553
+matched_cel,performance_delta_pct,Memory,0.6,23.600312668430703
+matched_cel,performance_delta_pct,Memory,0.8,4.3511006072641365
+matched_cel,performance_delta_pct,Memory,1.0,-10.061860348897483
+matched_cel,cv_delta_pct,Memory,0.0,-3.955150181620804
+matched_cel,cv_delta_pct,Memory,0.2,3.9843399455306074
+matched_cel,cv_delta_pct,Memory,0.2205882352941176,5.9417695057712105
+matched_cel,cv_delta_pct,Memory,0.4,17.98501278840399
+matched_cel,cv_delta_pct,Memory,0.6,18.06603806600704
+matched_cel,cv_delta_pct,Memory,0.8,4.152208507674699
+matched_cel,cv_delta_pct,Memory,1.0,-8.331069102332396
+matched_cel,performance_delta_pct,Kernel,0.0,-44.11157490197111
+matched_cel,performance_delta_pct,Kernel,0.2,24.313370796889664
+matched_cel,performance_delta_pct,Kernel,0.2205882352941176,35.70088277983949
+matched_cel,performance_delta_pct,Kernel,0.4,100.85903828141338
+matched_cel,performance_delta_pct,Kernel,0.6,105.2588284572078
+matched_cel,performance_delta_pct,Kernel,0.8,18.13255897464095
+matched_cel,performance_delta_pct,Kernel,1.0,-40.81192924679784
+matched_cel,cv_delta_pct,Kernel,0.0,-27.75163192235221
+matched_cel,cv_delta_pct,Kernel,0.2,1.277492117441422
+matched_cel,cv_delta_pct,Kernel,0.2205882352941176,2.5093355629526055
+matched_cel,cv_delta_pct,Kernel,0.4,8.656917199985317
+matched_cel,cv_delta_pct,Kernel,0.6,8.95301011889307
+matched_cel,cv_delta_pct,Kernel,0.8,1.7802684181138788
+matched_cel,cv_delta_pct,Kernel,1.0,-26.52453580751677
+matched_cel,raw_rho_relative,diagnostic,0.0,0.9999989378258647
+matched_cel,raw_rho_relative,diagnostic,0.2,0.6208217123263716
+matched_cel,raw_rho_relative,diagnostic,0.2205882352941176,0.5911684825924455
+matched_cel,raw_rho_relative,diagnostic,0.4,0.46951085856825153
+matched_cel,raw_rho_relative,diagnostic,0.6,0.4614903099750367
+matched_cel,raw_rho_relative,diagnostic,0.8,0.6345299374918109
+matched_cel,raw_rho_relative,diagnostic,1.0,1.0
+matched_er,performance_delta_pct,All metrics,0.0,4.3337958037481314
+matched_er,performance_delta_pct,All metrics,0.2,-7.427083668334435
+matched_er,performance_delta_pct,All metrics,0.4,233.75520120474002
+matched_er,performance_delta_pct,All metrics,0.6,230.855823418371
+matched_er,performance_delta_pct,All metrics,0.8,-8.561236662451666
+matched_er,performance_delta_pct,All metrics,1.0,-25.363768929890895
+matched_er,cv_delta_pct,All metrics,0.0,-45.98611289707591
+matched_er,cv_delta_pct,All metrics,0.2,-3.961013762730803
+matched_er,cv_delta_pct,All metrics,0.4,13.010369789906077
+matched_er,cv_delta_pct,All metrics,0.6,13.395605443379711
+matched_er,cv_delta_pct,All metrics,0.8,-3.805019050176328
+matched_er,cv_delta_pct,All metrics,1.0,-44.543364618792076
+matched_er,performance_delta_pct,Memory,0.0,62.97917446012997
+matched_er,performance_delta_pct,Memory,0.2,-0.43873056657269266
+matched_er,performance_delta_pct,Memory,0.4,72.95791335365547
+matched_er,performance_delta_pct,Memory,0.6,72.2603151656679
+matched_er,performance_delta_pct,Memory,0.8,-4.67232867167307
+matched_er,performance_delta_pct,Memory,1.0,-0.4469062012685454
+matched_er,cv_delta_pct,Memory,0.0,-40.93719862345476
+matched_er,cv_delta_pct,Memory,0.2,-4.2938048153714
+matched_er,cv_delta_pct,Memory,0.4,8.453134778984953
+matched_er,cv_delta_pct,Memory,0.6,9.031625024952685
+matched_er,cv_delta_pct,Memory,0.8,-1.5020261399679997
+matched_er,cv_delta_pct,Memory,1.0,-44.74015801078188
+matched_er,performance_delta_pct,Kernel,0.0,-54.311582852633705
+matched_er,performance_delta_pct,Kernel,0.2,-14.415436770096175
+matched_er,performance_delta_pct,Kernel,0.4,394.5524890558246
+matched_er,performance_delta_pct,Kernel,0.6,389.45133167107406
+matched_er,performance_delta_pct,Kernel,0.8,-12.45014465323026
+matched_er,performance_delta_pct,Kernel,1.0,-50.280631658513244
+matched_er,cv_delta_pct,Kernel,0.0,-51.03502717069706
+matched_er,cv_delta_pct,Kernel,0.2,-3.6282227100902054
+matched_er,cv_delta_pct,Kernel,0.4,17.5676048008272
+matched_er,cv_delta_pct,Kernel,0.6,17.759585861806737
+matched_er,cv_delta_pct,Kernel,0.8,-6.1080119603846565
+matched_er,cv_delta_pct,Kernel,1.0,-44.34657122680227
+matched_er,raw_rho_relative,diagnostic,0.0,0.9999999410163142
+matched_er,raw_rho_relative,diagnostic,0.2,0.5996006745484417
+matched_er,raw_rho_relative,diagnostic,0.4,0.2974244344959764
+matched_er,raw_rho_relative,diagnostic,0.6,0.29832644919662193
+matched_er,raw_rho_relative,diagnostic,0.8,0.6000820903481664
+matched_er,raw_rho_relative,diagnostic,1.0,1.0
+removed_cel,performance_delta_pct,All metrics,0.0,-4.9751447836055585
+removed_cel,performance_delta_pct,All metrics,0.2,44.0919996489763
+removed_cel,performance_delta_pct,All metrics,0.2425287356321839,53.822989061236676
+removed_cel,performance_delta_pct,All metrics,0.4,66.04827908291409
+removed_cel,performance_delta_pct,All metrics,0.6,66.30382103490946
+removed_cel,performance_delta_pct,All metrics,0.8,36.94392306472779
+removed_cel,performance_delta_pct,All metrics,1.0,-5.381855949343517
+removed_cel,cv_delta_pct,All metrics,0.0,-3.2508848515485713
+removed_cel,cv_delta_pct,All metrics,0.2,11.091280523337847
+removed_cel,cv_delta_pct,All metrics,0.2425287356321839,12.557472673627299
+removed_cel,cv_delta_pct,All metrics,0.4,16.12223888308837
+removed_cel,cv_delta_pct,All metrics,0.6,16.24896076214099
+removed_cel,cv_delta_pct,All metrics,0.8,9.122960078214224
+removed_cel,cv_delta_pct,All metrics,1.0,-1.2562296095348175
+removed_cel,performance_delta_pct,Memory,0.0,-1.0101269416596081
+removed_cel,performance_delta_pct,Memory,0.2,16.061944274270026
+removed_cel,performance_delta_pct,Memory,0.2425287356321839,19.96385541771508
+removed_cel,performance_delta_pct,Memory,0.4,24.783451758234463
+removed_cel,performance_delta_pct,Memory,0.6,25.11794075026192
+removed_cel,performance_delta_pct,Memory,0.8,14.366082306878665
+removed_cel,performance_delta_pct,Memory,1.0,-1.8162101999563278
+removed_cel,cv_delta_pct,Memory,0.0,-1.1079584448538766
+removed_cel,cv_delta_pct,Memory,0.2,15.89204303468402
+removed_cel,cv_delta_pct,Memory,0.2425287356321839,17.80056975817439
+removed_cel,cv_delta_pct,Memory,0.4,23.60535242926623
+removed_cel,cv_delta_pct,Memory,0.6,23.46747504946595
+removed_cel,cv_delta_pct,Memory,0.8,12.537085977771174
+removed_cel,cv_delta_pct,Memory,1.0,1.226092474576041
+removed_cel,performance_delta_pct,Kernel,0.0,-8.940162625551508
+removed_cel,performance_delta_pct,Kernel,0.2,72.12205502368256
+removed_cel,performance_delta_pct,Kernel,0.2425287356321839,87.68212270475826
+removed_cel,performance_delta_pct,Kernel,0.4,107.31310640759371
+removed_cel,performance_delta_pct,Kernel,0.6,107.48970131955701
+removed_cel,performance_delta_pct,Kernel,0.8,59.521763822576915
+removed_cel,performance_delta_pct,Kernel,1.0,-8.947501698730708
+removed_cel,cv_delta_pct,Kernel,0.0,-5.393811258243266
+removed_cel,cv_delta_pct,Kernel,0.2,6.290518011991674
+removed_cel,cv_delta_pct,Kernel,0.2425287356321839,7.314375589080205
+removed_cel,cv_delta_pct,Kernel,0.4,8.639125336910515
+removed_cel,cv_delta_pct,Kernel,0.6,9.030446474816022
+removed_cel,cv_delta_pct,Kernel,0.8,5.708834178657273
+removed_cel,cv_delta_pct,Kernel,1.0,-3.738551693645676
+removed_cel,raw_rho_relative,diagnostic,0.0,1.0
+removed_cel,raw_rho_relative,diagnostic,0.2,0.6271487169675858
+removed_cel,raw_rho_relative,diagnostic,0.2425287356321839,0.5817623576782425
+removed_cel,raw_rho_relative,diagnostic,0.4,0.5357437464772742
+removed_cel,raw_rho_relative,diagnostic,0.6,0.5358305961020374
+removed_cel,raw_rho_relative,diagnostic,0.8,0.6594637501843414
+removed_cel,raw_rho_relative,diagnostic,1.0,0.9999995848748745
