@@ -27,7 +27,7 @@ mkdir -p "${OUTDIR}"
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
 RANK=0
-TOTAL_REPEATS=50
+TOTAL_REPEATS=200
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
@@ -37,7 +37,7 @@ CE_ADJ_REMOVED="${CE_ADJ_REMOVED:-Connectome/ce_adj_removed.npy}"
 CE_ADJ_UNREMOVED="${CE_ADJ_UNREMOVED:-Connectome/ce_adj_unk41.npy}"
 CE_EI="${CE_EI:-}"
 CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-SIGN_FLIP_FRACS=(0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
+SIGN_FLIP_FRACS=(0.0 0.2 0.4  0.6  0.8 1.0)
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
