@@ -547,6 +547,14 @@ def parse_args():
         ),
     )
     ap.add_argument(
+        "--triptych-axis-combined",
+        default="",
+        help=(
+            "Optional combined.ALL.csv used only to set CV/performance triptych axis limits. "
+            "Use this to plot one dataset with axes matched to another dataset."
+        ),
+    )
+    ap.add_argument(
         "--cv-performance-contour-percent",
         "--contour-percent",
         dest="cv_performance_contour_percent",
@@ -4486,26 +4494,10 @@ def plot_cv_performance_contours_2d(
     return out_png
 
 
-def plot_cv_performance_contour_triptych(
-    disp: pd.DataFrame,
-    mean_tbl: pd.DataFrame,
-    combined: pd.DataFrame,
-    out_dir: str,
-    bins: int = 36,
-    show: bool = True,
-    contour_percent: float = 50.0,
-) -> str | None:
-    """Plot the three shuffle-control contour comparisons in one 3x4 figure."""
-    contour_percent = float(contour_percent)
-    if not (0.0 < contour_percent < 100.0):
-        raise ValueError("contour_percent must be greater than 0 and less than 100.")
-    contour_mass = contour_percent / 100.0
-    print(f"[info] CV/performance triptych contour coverage: {contour_percent:g}%")
-
+def _cv_performance_joint_table(disp: pd.DataFrame, mean_tbl: pd.DataFrame) -> pd.DataFrame | None:
     required_disp = {"mode", "metric", "dispersion"}
     required_mean = {"mode", "metric", "mean"}
     if not required_disp.issubset(disp.columns) or not required_mean.issubset(mean_tbl.columns):
-        print("[warn] contour triptych requires mode, metric, CV dispersion, and mean performance.")
         return None
 
     join_keys = ["mode", "metric"] + [
@@ -4522,9 +4514,45 @@ def plot_cv_performance_contour_triptych(
     joint["dispersion"] = pd.to_numeric(joint["dispersion"], errors="coerce")
     joint["mean"] = pd.to_numeric(joint["mean"], errors="coerce")
     joint = joint[np.isfinite(joint["dispersion"]) & np.isfinite(joint["mean"])].copy()
+    return joint
+
+
+def plot_cv_performance_contour_triptych(
+    disp: pd.DataFrame,
+    mean_tbl: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    bins: int = 36,
+    show: bool = True,
+    contour_percent: float = 50.0,
+    axis_disp: pd.DataFrame | None = None,
+    axis_mean_tbl: pd.DataFrame | None = None,
+    axis_label: str | None = None,
+) -> str | None:
+    """Plot the three shuffle-control contour comparisons in one 3x4 figure."""
+    contour_percent = float(contour_percent)
+    if not (0.0 < contour_percent < 100.0):
+        raise ValueError("contour_percent must be greater than 0 and less than 100.")
+    contour_mass = contour_percent / 100.0
+    print(f"[info] CV/performance triptych contour coverage: {contour_percent:g}%")
+
+    joint = _cv_performance_joint_table(disp, mean_tbl)
+    if joint is None:
+        print("[warn] contour triptych requires mode, metric, CV dispersion, and mean performance.")
+        return None
     if joint.empty:
         print("[warn] contour triptych: CV and performance trials did not match.")
         return None
+
+    axis_joint = joint
+    if axis_disp is not None and axis_mean_tbl is not None:
+        ref_joint = _cv_performance_joint_table(axis_disp, axis_mean_tbl)
+        if ref_joint is None or ref_joint.empty:
+            print("[warn] contour triptych: axis reference did not produce CV/performance rows; using plotted data limits.")
+        else:
+            axis_joint = ref_joint
+            if axis_label:
+                print(f"[info] contour triptych axis limits from: {axis_label}")
 
     comparison_specs = [
         {
@@ -4660,10 +4688,15 @@ def plot_cv_performance_contour_triptych(
         contour_set.set_paths([mpl.path.Path.make_compound_path(*(mpl.path.Path(seg) for seg in kept))])
 
     for metric in metrics:
-        metric_all = joint[
-            (joint["metric"] == metric)
-            & (joint["mode"].isin(all_triptych_modes))
+        metric_all = axis_joint[
+            (axis_joint["metric"] == metric)
+            & (axis_joint["mode"].isin(all_triptych_modes))
         ]
+        if metric_all.empty:
+            metric_all = joint[
+                (joint["metric"] == metric)
+                & (joint["mode"].isin(all_triptych_modes))
+            ]
         if metric_all.empty:
             continue
         cv_limits = _robust_axis_limits(metric_all["dispersion"].to_numpy(float))
@@ -5002,6 +5035,23 @@ def main():
     print_cv_difference_tables(disp, args.out_dir, baseline_mode=args.cv_baseline_mode)
     if args.show_cv_performance_3d or args.show_cv_performance_contours or args.show_cv_performance_contour_triptych:
         mean_tbl = _compute_mean_table(combined)
+    triptych_axis_disp = None
+    triptych_axis_mean_tbl = None
+    triptych_axis_label = None
+    if args.show_cv_performance_contour_triptych and args.triptych_axis_combined:
+        if not os.path.isfile(args.triptych_axis_combined):
+            raise FileNotFoundError(f"Triptych axis combined CSV not found: {args.triptych_axis_combined}")
+        axis_combined = _read_combined_csv(args.triptych_axis_combined)
+        axis_combined = _ensure_columns(axis_combined)
+        axis_combined = _filter_to_modes(axis_combined, label="triptych axis reference")
+        if axis_combined.empty:
+            raise ValueError(
+                "Mode filter removed all rows from triptych axis reference. "
+                f"Requested modes: {ANALYSIS_MODE_FILTER}"
+            )
+        triptych_axis_disp = _compute_dispersion_table(axis_combined, mode="cv")
+        triptych_axis_mean_tbl = _compute_mean_table(axis_combined)
+        triptych_axis_label = args.triptych_axis_combined
     if args.show_cv_performance_contours:
         plot_cv_performance_contours_2d(
             disp,
@@ -5031,6 +5081,9 @@ def main():
             bins=max(args.bins, 36),
             show=True,
             contour_percent=args.cv_performance_contour_percent,
+            axis_disp=triptych_axis_disp,
+            axis_mean_tbl=triptych_axis_mean_tbl,
+            axis_label=triptych_axis_label,
         )
 
 
