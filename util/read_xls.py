@@ -128,6 +128,7 @@ def process_neuron_to_muscle(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
         src = str(row[neuron]).strip()
         dst = str(row[muscle]).strip()
         if src == "" or dst == "" or pd.isna(row[num]):
+            print(row)
             continue
         weight = float(row[num])
         sign = nt_to_edge_sign(row[nt])
@@ -192,12 +193,9 @@ def process_new_cel(
         src = str(row[source]).strip()
         dst = str(row[target]).strip()
         if src == "" or dst == "" or pd.isna(row[weight_col]):
+            print(row)
             continue
         weight = float(row[weight_col])
-        if weight > 30:
-            weight = 30
-        if weight < -30:
-            weight = -30
         sign = new_cel_sign_to_edge_sign(row[sign_col])
         if sign == 0:
             add_edge(unknown_acc, src, dst, abs(weight))
@@ -223,6 +221,8 @@ def build_matrix(edge_map: Dict[str, Dict[str, float]], include_nodes: Optional[
             nodes.add(t)
     names = sorted(list(nodes)) if include_nodes is None else list(include_nodes)
     idx = {n: i for i, n in enumerate(names)}
+    
+    
     N = len(names)
     W = np.zeros((N, N), dtype=np.float32)
     for s, dd in edge_map.items():

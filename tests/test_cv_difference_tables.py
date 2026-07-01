@@ -33,5 +33,27 @@ def test_cv_difference_table_uses_paired_trial_differences(tmp_path):
     assert ipc["delta_cv"] == 0.0
     assert np.isclose(ipc["pct_delta_cv"], 0.0)
     assert not (tmp_path / "cv_mean_differences_vs_ce.csv").exists()
-    assert (tmp_path / "cv_mean_differences_memory_table.tex").is_file()
-    assert (tmp_path / "cv_mean_differences_kernel_table.tex").is_file()
+    assert (tmp_path / "cv_mean_differences_table.tex").is_file()
+    assert not (tmp_path / "cv_mean_differences_memory_table.tex").exists()
+    assert not (tmp_path / "cv_mean_differences_kernel_table.tex").exists()
+
+
+def test_cv_difference_table_uses_pm1_not_pm1_shuffle_as_auto_baseline(tmp_path):
+    rows = []
+    for metric in ("MC", "IPC", "KR", "GR"):
+        for group_id, value in enumerate([1.0, 1.2, 1.4]):
+            rows.append(("local_sign+binary", "chunk_0", str(group_id), metric, value, 4))
+        for group_id, value in enumerate([1.5, 1.7, 1.9]):
+            rows.append(("global_sign_pres", "chunk_0", str(group_id), metric, value, 4))
+    dispersion = pd.DataFrame(
+        rows,
+        columns=["mode", "src", "group_id", "metric", "dispersion", "n_hparams"],
+    )
+
+    table = print_cv_difference_tables(dispersion, str(tmp_path), baseline_mode="auto")
+
+    assert set(table["baseline_mode"]) == {"local_sign+binary"}
+    assert set(table["control_mode"]) == {"global_sign_pres"}
+    assert (tmp_path / "cv_mean_differences_vs_local_sign_binary_table.tex").is_file()
+    assert not (tmp_path / "cv_mean_differences_memory_vs_local_sign_binary_table.tex").exists()
+    assert not (tmp_path / "cv_mean_differences_kernel_vs_local_sign_binary_table.tex").exists()

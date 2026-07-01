@@ -50,13 +50,13 @@ from util.graph_utils import (
 # Optional hard filter for analysis modes.
 # Leave empty to analyze all modes, or populate with exact mode names.
 ANALYSIS_MODE_FILTER = [
-    #"binary_base_topology_shuffle",
-    #"binary_base"
+    "binary_base_topology_shuffle",
+    "binary_base",
     #------------------------------
-    #"binary+shuffle", 
-    #"local_sign+binary",
-    #"global_sign_pres",
-    #"binary+conshuffle+wshuffle"
+    "binary+shuffle", 
+    "local_sign+binary",
+    "global_sign_pres",
+    "binary+conshuffle+wshuffle",
     #------------------------------
     "real",
     "shuffle",
@@ -85,7 +85,7 @@ SHORT_THESIS_NAMES = {
     "global_sign_pres": "Sign-pres. pm1 + wt. shuf.",
     "global_sign_pres_real_w": "Sign-pres. real wt.",
     "global_sign_pres_real_weight": "Sign-pres. real wt.",
-    "binary+conshuffle+wshuffle": "pm1 sign-pres. + shuf.",
+    "binary+conshuffle+wshuffle": "pm1 sign-pres. Conn + wt. shuf.",
     "binary_base": "Binary wt.",
     "binary_base_topology_shuffle": "Binary wt. + shuf.",
     "binary+shuffle": "pm1 + conn. shuffle",
@@ -122,6 +122,292 @@ def _short_legend_name(mode):
     }
     canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
     return legend_only.get(canonical, legend_only.get(mode, _short_thesis_name(mode)))
+
+
+def _sign_fraction_from_mode(mode) -> float:
+    """Parse sign-balance sweep fractions such as sign_test_og_cel0.2205."""
+    mode_str = str(mode)
+    match = re.search(r"sign_test", mode_str)
+    if not match:
+        return np.nan
+    nums = re.findall(
+        r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?",
+        mode_str[match.end():],
+    )
+    if not nums:
+        return np.nan
+    try:
+        return float(nums[0])
+    except Exception:
+        return np.nan
+
+
+def _is_grid_tenth(value: float, atol: float = 1e-9) -> bool:
+    if not np.isfinite(value):
+        return False
+    return abs(value * 10.0 - round(value * 10.0)) <= atol
+
+
+def _detect_ce_sign_fraction(fractions) -> float | None:
+    values = sorted({round(float(v), 15) for v in fractions if np.isfinite(v)})
+    if not values:
+        return None
+
+    # The CE-balance point is usually inserted as an extra non-decile sample
+    # within the sign sweep; prefer that data-driven marker when present.
+    non_grid = [
+        v for v in values
+        if 0.0 < v < 0.5 and not _is_grid_tenth(v, atol=1e-7)
+    ]
+    if non_grid:
+        return min(non_grid, key=lambda v: abs(v - 0.22))
+
+    # Known CE-balance points used by the current thesis runs.
+    known = (0.22058823529411764, 0.2425287356321839, 0.2, 0.06113256113256113)
+    for target in known:
+        for v in values:
+            if abs(v - target) <= 1e-7:
+                return v
+    return None
+
+
+_SIGN_BALANCE_COLOR_MAX = 0.5
+
+
+def _sign_balance_color(frac: float, ce_frac: float | None) -> str:
+    """Color sign-balance modes only by negative-sign fraction."""
+    if not np.isfinite(frac):
+        return "#8a8a8a"
+    frac = min(max(float(frac), 0.0), _SIGN_BALANCE_COLOR_MAX)
+    return mpl.colors.to_hex(_sign_balance_colormap(ce_frac)(frac / _SIGN_BALANCE_COLOR_MAX))
+
+
+def _sign_balance_colormap(ce_frac: float | None = None):
+    ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.22
+    ce_pos = min(max(ce / _SIGN_BALANCE_COLOR_MAX, 0.08), 0.92)
+    return mpl.colors.LinearSegmentedColormap.from_list(
+        "sign_balance_0_to_50",
+        [
+            (0.0, "#1557D4"),
+            (ce_pos, "#B72FE3"),
+            (1.0, "#F2B705"),
+        ],
+    )
+
+
+def _add_sign_balance_colorbar(
+    fig,
+    ce_frac: float | None,
+    bottom: float = 0.078,
+    *,
+    left: float = 0.34,
+    width: float = 0.32,
+    height: float = 0.012,
+    labelsize: float = 8.0,
+    orientation: str = "horizontal",
+):
+    ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.22
+    ce = min(max(ce, 1e-6), 0.499999)
+    cax = fig.add_axes([left, bottom, width, height])
+    scalar = mpl.cm.ScalarMappable(
+        norm=mpl.colors.Normalize(vmin=0.0, vmax=_SIGN_BALANCE_COLOR_MAX),
+        cmap=_sign_balance_colormap(ce),
+    )
+    scalar.set_array([])
+    cbar = fig.colorbar(scalar, cax=cax, orientation=orientation)
+    cbar.set_ticks([0.0, ce, _SIGN_BALANCE_COLOR_MAX])
+    ce_pct = f"{100.0 * ce:.1f}".rstrip("0").rstrip(".")
+    cbar.ax.tick_params(labelsize=labelsize, length=2.4, width=0.6, pad=1)
+    if orientation == "horizontal":
+        cbar.set_ticklabels(["0", f"CE {ce_pct}%", "50%"])
+        cbar.ax.xaxis.set_ticks_position("top")
+        cbar.ax.xaxis.set_label_position("top")
+        cbar.ax.set_title("Negative sign fraction", fontsize=labelsize + 0.5, pad=12)
+    else:
+        cbar.set_ticklabels(["0", "CE", "50%"])
+        cbar.ax.yaxis.set_ticks_position("right")
+        cbar.ax.yaxis.set_label_position("right")
+        cbar.set_label("Negative sign fraction", fontsize=labelsize + 2, rotation=270, labelpad=9)
+    cbar.outline.set_linewidth(0.45)
+    cbar.outline.set_edgecolor("#333333")
+    return cbar
+
+
+def _mode_sign_fraction(mode, ce_frac: float | None = None) -> float:
+    parsed = _sign_fraction_from_mode(mode)
+    if np.isfinite(parsed):
+        return parsed
+    ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.22058823529411764
+    group = _architecture_sign_balance_group(mode)
+    if group == "zero":
+        return 0.0
+    if group == "ce":
+        return ce
+    if group == "half":
+        return 0.5
+    return np.nan
+
+
+def _mode_marker_map(modes):
+    preferred = {
+        "real": "*",
+        "CE-real": "*",
+    }
+    markers = ["o", "s", "^", "D", "P", "X", "v", "<", ">", "h", "8", "p", "H"]
+    marker_map = {}
+    marker_idx = 0
+    for mode in modes:
+        marker = preferred.get(str(mode))
+        if marker is None:
+            marker = markers[marker_idx % len(markers)]
+            marker_idx += 1
+        marker_map[mode] = marker
+    return marker_map
+
+
+def _sign_balance_label(mode, ce_frac: float | None = None) -> str:
+    frac = _sign_fraction_from_mode(mode)
+    if not np.isfinite(frac):
+        return _short_legend_name(mode)
+    pct = f"{100.0 * frac:.1f}".rstrip("0").rstrip(".") + "%"
+    if abs(frac - 0.0) <= 1e-9:
+        return "0% inhib."
+    if ce_frac is not None and np.isfinite(ce_frac) and abs(frac - ce_frac) <= 1e-7:
+        return f"CE balance ({pct})"
+    if abs(frac - 0.5) <= 1e-9:
+        return "50% balance"
+    return f"{pct} inhib."
+
+
+def _architecture_sign_balance_group(mode) -> str | None:
+    canonical = _SHORT_THESIS_NAME_ALIASES.get(str(mode), str(mode))
+    zero_balance = {
+        "binary_base",
+        "binary_base_topology_shuffle",
+    }
+    ce_balance = {
+        "real",
+        "CE-real",
+        "local_sign",
+        "local_sign+flat",
+        "local_sign+binary",
+        "local_sign+sample",
+        "global_sign_pres",
+        "global_sign_pres_real_w",
+        "global_sign_pres_real_weight",
+        "binary+conshuffle+wshuffle",
+        "binary+shuffle",
+        "shuffle_weights",
+        "shuffle",
+        "conn_shuf",
+        "conn_shuf_only",
+        "celW+connShuf",
+        "cel_sample",
+    }
+    half_balance = {
+        "cel+randN",
+        "cel_randN",
+        "er+randN",
+        "er_randN",
+        "ws_p0.1+randN",
+        "ws_p01_randN",
+    }
+
+    if canonical in zero_balance:
+        return "zero"
+    if canonical in ce_balance:
+        return "ce"
+    if canonical in half_balance:
+        return "half"
+    return None
+
+
+def _architecture_sign_balance_color_map(modes):
+    groups = {
+        "zero": ["#1100FF"],
+        "ce": ["#DD00FF"],
+        "half": ["#FF0000"],
+    }
+    grouped_modes = {"zero": [], "ce": [], "half": []}
+    for mode in modes:
+        group = _architecture_sign_balance_group(mode)
+        if group in grouped_modes:
+            grouped_modes[group].append(mode)
+
+    if not any(grouped_modes.values()):
+        return {}
+
+    color_map = {}
+    for group, members in grouped_modes.items():
+        palette = groups[group]
+        for idx, mode in enumerate(members):
+            color_map[mode] = palette[idx % len(palette)]
+    return color_map
+
+
+def _mode_styles_for_cv_performance(present_modes):
+    present_modes = list(dict.fromkeys(str(mode) for mode in present_modes))
+    sign_fracs = {mode: _sign_fraction_from_mode(mode) for mode in present_modes}
+    sign_modes = [mode for mode, frac in sign_fracs.items() if np.isfinite(frac)]
+    sign_sweep = len(sign_modes) >= 3 and len(sign_modes) >= 0.6 * max(len(present_modes), 1)
+
+    if sign_sweep:
+        ce_frac = _detect_ce_sign_fraction(sign_fracs.values())
+        modes = sorted(sign_modes, key=lambda mode: (sign_fracs[mode], mode))
+        modes.extend(mode for mode in present_modes if mode not in modes)
+        color_map = {
+            mode: _sign_balance_color(sign_fracs.get(mode, np.nan), ce_frac)
+            for mode in modes
+            if np.isfinite(sign_fracs.get(mode, np.nan))
+        }
+        fallback_palette = mpl.colormaps["tab20"]
+        fallback_idx = 0
+        for mode in modes:
+            if mode not in color_map:
+                color_map[mode] = fallback_palette(fallback_idx % 20)
+                fallback_idx += 1
+        label_map = {mode: _sign_balance_label(mode, ce_frac) for mode in modes}
+        marker_map = _mode_marker_map(modes)
+        return modes, color_map, label_map, {
+            "sign_balance_colorbar": True,
+            "ce_frac": ce_frac,
+            "marker_map": marker_map,
+        }
+
+    preferred_order = [
+        "real",
+        "cel+randN",
+        "er+randN",
+        "ws_p0.1+randN",
+        "local_sign",
+        "local_sign+flat",
+        "local_sign+binary",
+        "global_sign_pres",
+        "global_sign_pres_real_w",
+        "global_sign_pres_real_weight",
+        "binary_base",
+    ]
+    modes = [mode for mode in preferred_order if mode in present_modes]
+    modes.extend(mode for mode in present_modes if mode not in modes)
+    ce_frac = 0.22058823529411764
+    mode_fracs = {mode: _mode_sign_fraction(mode, ce_frac) for mode in modes}
+    fallback_palette = mpl.colormaps["tab20"]
+    color_map = {}
+    palette_idx = 0
+    for mode in modes:
+        frac = mode_fracs.get(mode, np.nan)
+        if np.isfinite(frac):
+            color_map[mode] = _sign_balance_color(frac, ce_frac)
+        else:
+            color_map[mode] = fallback_palette(palette_idx % 20)
+            palette_idx += 1
+    label_map = {mode: _short_legend_name(mode) for mode in modes}
+    marker_map = _mode_marker_map(modes)
+    return modes, color_map, label_map, {
+        "sign_balance_colorbar": any(np.isfinite(v) for v in mode_fracs.values()),
+        "ce_frac": ce_frac,
+        "marker_map": marker_map,
+    }
 
 # ---------------------------- CLI ----------------------------
 
@@ -250,6 +536,14 @@ def parse_args():
         help=(
             "Show the publication-oriented top-down joint CV/performance density "
             "contours for each metric."
+        ),
+    )
+    ap.add_argument(
+        "--show-cv-performance-contour-triptych",
+        action="store_true",
+        help=(
+            "Plot the binary, sign-preserving, and C. elegans shuffle-control "
+            "CV/performance contour comparisons together in one 3x4 figure."
         ),
     )
     ap.add_argument(
@@ -3028,7 +3322,37 @@ def plot_rho_cv_other_perf(
     if not saved_any:
         print("[warn] plot_rho_cv_other_perf: no finite data to plot.")
 
-def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, mode_preset: str = "all"):
+def _rho_delta_by_mode(
+    combined: pd.DataFrame,
+    baseline_mode: str | None,
+    *,
+    rho_col: str = "raw_rho",
+) -> dict[str, float]:
+    """Mean raw-rho difference by mode relative to the requested baseline mode."""
+    if not baseline_mode or rho_col not in combined.columns or "mode" not in combined.columns:
+        return {}
+    tmp = combined[["mode", rho_col]].copy()
+    tmp["mode"] = tmp["mode"].astype(str)
+    tmp[rho_col] = pd.to_numeric(tmp[rho_col], errors="coerce")
+    mean_rho = tmp.groupby("mode", sort=False)[rho_col].mean()
+    if baseline_mode not in mean_rho.index or not np.isfinite(mean_rho.loc[baseline_mode]):
+        return {}
+    baseline_rho = float(mean_rho.loc[baseline_mode])
+    return {
+        str(mode): float(value - baseline_rho)
+        for mode, value in mean_rho.items()
+        if np.isfinite(value)
+    }
+
+
+def plot_overlaid_arch_histograms(
+    disp: pd.DataFrame,
+    out_dir: str,
+    bins: int,
+    mode_preset: str = "all",
+    rho_delta_by_mode: dict[str, float] | None = None,
+    rho_baseline_label: str | None = None,
+):
     os.makedirs(out_dir, exist_ok=True)
     metrics = sorted(disp["metric"].unique())
     present_modes = list(dict.fromkeys(disp["mode"].astype(str).dropna().tolist()))
@@ -3073,30 +3397,51 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
         ]
     extras = [m for m in present_modes if m not in mode_order]
     modes = list(mode_order) + extras
-    # Keep these exact colors per request.
-    preserved_colors = {
-        "real": "#32a2f2",
-        "local_sign+binary": "#7488FF",
-        "binary_base": "#78dee5",
-    }
-    # Colorblind-safe fallback palette for remaining modes.
-    cb_palette = [
-        "#E69F00",  # orange
-        "#009E73",  # bluish green
-        "#D55E00",  # vermillion
-        "#CC79A7",  # reddish purple
-        "#56B4E9",  # sky blue
-        "#F0E442",  # yellow
-        "#0072B2",  # blue
-        "#000000",  # black
-    ]
-    color_map = dict(preserved_colors)
-    palette_idx = 0
-    for mode_name in modes:
-        if mode_name in color_map:
-            continue
-        color_map[mode_name] = cb_palette[palette_idx % len(cb_palette)]
-        palette_idx += 1
+    rho_delta_by_mode = rho_delta_by_mode or {}
+    use_rho_colors = any(np.isfinite(v) for v in rho_delta_by_mode.values())
+    color_norm = color_cmap = color_scalar = None
+    if use_rho_colors:
+        finite_delta = np.array(
+            [rho_delta_by_mode[m] for m in modes if np.isfinite(rho_delta_by_mode.get(m, np.nan))],
+            dtype=float,
+        )
+        max_abs = float(np.nanmax(np.abs(finite_delta))) if finite_delta.size else 1.0
+        if not np.isfinite(max_abs) or max_abs <= 0:
+            max_abs = 1.0
+        color_norm = mpl.colors.TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
+        color_cmap = mpl.colormaps["coolwarm"]
+        color_scalar = mpl.cm.ScalarMappable(norm=color_norm, cmap=color_cmap)
+        color_scalar.set_array([])
+        color_map = {
+            mode_name: mpl.colors.to_hex(color_cmap(color_norm(rho_delta_by_mode[mode_name])))
+            for mode_name in modes
+            if np.isfinite(rho_delta_by_mode.get(mode_name, np.nan))
+        }
+    else:
+        # Keep these exact colors per request when rho diagnostics are unavailable.
+        preserved_colors = {
+            "real": "#32a2f2",
+            "local_sign+binary": "#7488FF",
+            "binary_base": "#78dee5",
+        }
+        # Colorblind-safe fallback palette for remaining modes.
+        cb_palette = [
+            "#E69F00",  # orange
+            "#009E73",  # bluish green
+            "#D55E00",  # vermillion
+            "#CC79A7",  # reddish purple
+            "#56B4E9",  # sky blue
+            "#F0E442",  # yellow
+            "#0072B2",  # blue
+            "#000000",  # black
+        ]
+        color_map = dict(preserved_colors)
+        palette_idx = 0
+        for mode_name in modes:
+            if mode_name in color_map:
+                continue
+            color_map[mode_name] = cb_palette[palette_idx % len(cb_palette)]
+            palette_idx += 1
 
     if not metrics:
         return
@@ -3214,14 +3559,27 @@ def plot_overlaid_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int, m
                 bbox_to_anchor=(0.5, 0.01),
                 ncol=3,
                 frameon=True,
-                fontsize=18,
+                fontsize=16,
                 columnspacing=1.0,
                 handlelength=1.8,
                 handletextpad=0.5,
                 borderaxespad=0.2,
             )
             leg.get_frame().set_alpha(0.9)
-        fig.subplots_adjust(left=0.09, right=0.995, top=0.965, bottom=0.20, wspace=0.03, hspace=0.18)
+        right_margin = 0.88 if use_rho_colors and color_scalar is not None else 0.995
+        fig.subplots_adjust(left=0.09, right=right_margin, top=0.965, bottom=0.30, wspace=0.08, hspace=0.20)
+        if use_rho_colors and color_scalar is not None:
+            cax = fig.add_axes([0.905, 0.38, 0.022, 0.42])
+            cbar = fig.colorbar(color_scalar, cax=cax, orientation="vertical")
+            baseline_text = rho_baseline_label or "baseline"
+            cbar.set_label(
+                rf"$\Delta\rho_{{\mathrm{{raw}}}}$ from {baseline_text}",
+                fontsize=15,
+                rotation=270,
+                labelpad=22,
+            )
+            cbar.ax.tick_params(labelsize=13, width=0.7, length=3)
+            cbar.outline.set_linewidth(0.6)
         page = start // per_fig + 1
         suffix = "" if len(metrics) <= per_fig else f"_p{page}"
         name_root = "all_arch_hist_grid_all_shuf" if mode_preset == "all_shuf" else "all_arch_hist_grid"
@@ -3322,6 +3680,8 @@ def _resolve_cv_baseline_mode(modes: set[str], requested: str) -> str | None:
     """Resolve an explicit or experiment-appropriate CV baseline."""
     requested = str(requested or "auto").strip()
     if requested.lower() != "auto":
+        if requested.lower() in {"pm1", "pm1_base", "local_pm1"}:
+            return "local_sign+binary" if "local_sign+binary" in modes else None
         if requested in modes:
             return requested
         if requested == "real" and "CE-real" in modes:
@@ -3331,6 +3691,12 @@ def _resolve_cv_baseline_mode(modes: set[str], requested: str) -> str | None:
     for candidate in ("real", "CE-real"):
         if candidate in modes:
             return candidate
+    if "local_sign+binary" in modes and (
+        "global_sign_pres" in modes
+        or "binary+shuffle" in modes
+        or "binary+conshuffle+wshuffle" in modes
+    ):
+        return "local_sign+binary"
     if {"binary_base", "binary_base_topology_shuffle"}.issubset(modes):
         return "binary_base"
     if "binary_base" in modes:
@@ -3450,22 +3816,18 @@ def print_cv_difference_tables(
     baseline_is_ce = baseline_mode in {"real", "CE-real"}
     baseline_tag = "ce" if baseline_is_ce else re.sub(r"[^A-Za-z0-9._-]+", "_", baseline_mode)
     baseline_label = _short_thesis_name(baseline_mode)
-    for name, selected_metrics in (
-        ("memory", ("MC", "IPC")),
-        ("kernel", ("KR", "GR")),
-    ):
-        latex = _cv_difference_latex_table(table, selected_metrics, baseline_label)
-        tex_name = (
-            f"cv_mean_differences_{name}_table.tex"
-            if baseline_is_ce
-            else f"cv_mean_differences_{name}_vs_{baseline_tag}_table.tex"
-        )
-        out_tex = _safe_path(os.path.join(out_dir, tex_name))
-        with open(out_tex, "w", encoding="utf-8") as handle:
-            handle.write(latex + "\n")
-        print(f"\n=== Mean CV differences vs {baseline_label}: {name} metrics ===")
-        print(latex)
-        print(f"[saved] {out_tex}")
+    latex = _cv_difference_latex_table(table, tuple(metrics), baseline_label)
+    tex_name = (
+        "cv_mean_differences_table.tex"
+        if baseline_is_ce
+        else f"cv_mean_differences_vs_{baseline_tag}_table.tex"
+    )
+    out_tex = _safe_path(os.path.join(out_dir, tex_name))
+    with open(out_tex, "w", encoding="utf-8") as handle:
+        handle.write(latex + "\n")
+    print(f"\n=== Mean CV differences vs {baseline_label} ===")
+    print(latex)
+    print(f"[saved] {out_tex}")
     print()
     return table
 
@@ -3713,45 +4075,8 @@ def plot_cv_performance_hills_3d(
         return None
 
     present_modes = list(dict.fromkeys(joint["mode"].astype(str)))
-    preferred_order = [
-        "real",
-        "cel+randN",
-        "er+randN",
-        "ws_p0.1+randN",
-        "local_sign",
-        "local_sign+flat",
-        "local_sign+binary",
-        "global_sign_pres",
-        "global_sign_pres_real_w",
-        "global_sign_pres_real_weight",
-        "binary_base",
-    ]
-    modes = [mode for mode in preferred_order if mode in present_modes]
-    modes.extend(mode for mode in present_modes if mode not in modes)
-    fixed_colors = {
-        "real": "#111111",
-        "CE-real": "#111111",
-        "cel+randN": "#E69F00",
-        "cel_randN": "#E69F00",
-        "er+randN": "#009E73",
-        "er_randN": "#009E73",
-        "ws_p0.1+randN": "#D55E00",
-        "ws_p01_randN": "#D55E00",
-        "local_sign": "#CC79A7",
-        "local_sign+flat": "#56B4E9",
-        "local_sign+binary": "#7B61C9",
-        "global_sign_pres": "#B79F00",
-        "global_sign_pres_real_w": "#0072B2",
-        "global_sign_pres_real_weight": "#0072B2",
-        "binary_base": "#00A6A6",
-    }
-    fallback_palette = mpl.colormaps["tab20"]
-    color_map = dict(fixed_colors)
-    palette_idx = 0
-    for mode in modes:
-        if mode not in color_map:
-            color_map[mode] = fallback_palette(palette_idx % 20)
-            palette_idx += 1
+    modes, color_map, label_map, style_meta = _mode_styles_for_cv_performance(present_modes)
+    marker_map = style_meta.get("marker_map", _mode_marker_map(modes))
 
     metrics = [
         metric for metric in ("GR", "IPC", "KR", "MC")
@@ -3850,7 +4175,16 @@ def plot_cv_performance_hills_3d(
         return None
 
     legend_handles = [
-        Line2D([0], [0], color=color_map[mode], linewidth=4, label=_short_legend_name(mode))
+        Line2D(
+            [0],
+            [0],
+            color=color_map[mode],
+            linewidth=4,
+            marker=marker_map.get(mode, "o"),
+            markersize=8,
+            markeredgecolor="#222222",
+            label=label_map.get(mode, _short_legend_name(mode)),
+        )
         for mode in modes
     ]
     fig.legend(
@@ -3872,7 +4206,8 @@ def plot_cv_performance_hills_3d(
         ha="center",
         fontsize=11,
     )
-
+    if style_meta.get("sign_balance_colorbar"):
+        _add_sign_balance_colorbar(fig, style_meta.get("ce_frac"), bottom=0.074)
     os.makedirs(out_dir, exist_ok=True)
     out_png = _replace_path(os.path.join(out_dir, "cv_performance_hills_3d.png"))
     fig.savefig(out_png, dpi=300, facecolor="white")
@@ -3891,6 +4226,9 @@ def plot_cv_performance_contours_2d(
     bins: int = 36,
     show: bool = True,
     contour_percent: float = 50.0,
+    rho_delta_by_mode: dict[str, float] | None = None,
+    rho_baseline_label: str | None = None,
+    baseline_mode: str | None = None,
 ) -> str | None:
     """Plot top-down highest-density contours of joint CV/performance trials."""
     contour_percent = float(contour_percent)
@@ -3923,38 +4261,31 @@ def plot_cv_performance_contours_2d(
         return None
 
     present_modes = list(dict.fromkeys(joint["mode"].astype(str)))
-    preferred_order = [
-        "real", "cel+randN", "er+randN", "ws_p0.1+randN",
-        "local_sign", "local_sign+flat", "local_sign+binary",
-        "global_sign_pres", "global_sign_pres_real_w",
-        "global_sign_pres_real_weight", "binary_base",
-    ]
-    modes = [mode for mode in preferred_order if mode in present_modes]
-    modes.extend(mode for mode in present_modes if mode not in modes)
-    fixed_colors = {
-        "real": "#111111",
-        "CE-real": "#111111",
-        "cel+randN": "#E69F00",
-        "cel_randN": "#E69F00",
-        "er+randN": "#009E73",
-        "er_randN": "#009E73",
-        "ws_p0.1+randN": "#D55E00",
-        "ws_p01_randN": "#D55E00",
-        "local_sign": "#CC79A7",
-        "local_sign+flat": "#56B4E9",
-        "local_sign+binary": "#7B61C9",
-        "global_sign_pres": "#B79F00",
-        "global_sign_pres_real_w": "#0072B2",
-        "global_sign_pres_real_weight": "#0072B2",
-        "binary_base": "#00A6A6",
-    }
-    fallback_palette = mpl.colormaps["tab20"]
-    color_map = dict(fixed_colors)
-    palette_idx = 0
-    for mode in modes:
-        if mode not in color_map:
-            color_map[mode] = fallback_palette(palette_idx % 20)
-            palette_idx += 1
+    modes, color_map, label_map, style_meta = _mode_styles_for_cv_performance(present_modes)
+    marker_map = style_meta.get("marker_map", _mode_marker_map(modes))
+    plot_baseline_mode = baseline_mode if baseline_mode in modes else None
+    if plot_baseline_mode is None:
+        plot_baseline_mode = "real" if "real" in modes else ("CE-real" if "CE-real" in modes else None)
+
+    rho_delta_by_mode = rho_delta_by_mode or {}
+    finite_rho_delta = np.array(
+        [rho_delta_by_mode[mode] for mode in modes if np.isfinite(rho_delta_by_mode.get(mode, np.nan))],
+        dtype=float,
+    )
+    rho_color_scalar = None
+    use_rho_colors = finite_rho_delta.size > 0
+    if use_rho_colors:
+        max_abs = float(np.nanmax(np.abs(finite_rho_delta)))
+        if not np.isfinite(max_abs) or max_abs <= 0:
+            max_abs = 1.0
+        rho_norm = mpl.colors.TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
+        rho_cmap = mpl.colormaps["coolwarm"]
+        rho_color_scalar = mpl.cm.ScalarMappable(norm=rho_norm, cmap=rho_cmap)
+        rho_color_scalar.set_array([])
+        for mode in modes:
+            delta = rho_delta_by_mode.get(mode, np.nan)
+            if np.isfinite(delta):
+                color_map[mode] = mpl.colors.to_hex(rho_cmap(rho_norm(delta)))
 
     metrics = [
         metric for metric in ("GR", "IPC", "KR", "MC")
@@ -3965,16 +4296,16 @@ def plot_cv_performance_contours_2d(
         return None
 
     bins = max(24, min(int(bins), 52))
-    fig = plt.figure(figsize=(13.2, 10.0), dpi=140)
+    fig = plt.figure(figsize=(7.2, 4.7), dpi=300)
     grid = fig.add_gridspec(
         2,
         2,
-        left=0.075,
-        right=0.985,
-        bottom=0.200,
-        top=0.945,
-        wspace=0.16,
-        hspace=0.20,
+        left=0.105,
+        right=0.875,
+        bottom=0.155,
+        top=0.955,
+        wspace=0.18,
+        hspace=0.22,
     )
     flat_axes = np.array(
         [
@@ -4002,10 +4333,9 @@ def plot_cv_performance_contours_2d(
         perf_centers = 0.5 * (perf_edges[:-1] + perf_edges[1:])
         grid_cv, grid_perf = np.meshgrid(cv_centers, perf_centers, indexing="ij")
 
-        baseline_mode = "real" if "real" in modes else ("CE-real" if "CE-real" in modes else None)
-        draw_modes = [mode for mode in modes if mode != baseline_mode]
-        if baseline_mode is not None:
-            draw_modes.append(baseline_mode)
+        draw_modes = [mode for mode in modes if mode != plot_baseline_mode]
+        if plot_baseline_mode is not None:
+            draw_modes.append(plot_baseline_mode)
 
         for mode in draw_modes:
             sub = metric_df[metric_df["mode"] == mode]
@@ -4025,16 +4355,16 @@ def plot_cv_performance_contours_2d(
             contour_level = float(ordered[idx])
             levels = [contour_level] if contour_level > 0 else []
             if levels:
-                if mode == baseline_mode:
+                if mode == plot_baseline_mode:
                     baseline_levels = [levels[-1]]
-                    baseline_widths = [3.4]
+                    baseline_widths = [1.8]
                     ax.contour(
                         grid_cv,
                         grid_perf,
                         density,
                         levels=baseline_levels,
                         colors=["white"],
-                        linewidths=[width + 2.4 for width in baseline_widths],
+                        linewidths=[width + 1.25 for width in baseline_widths],
                         alpha=0.96,
                         zorder=8,
                     )
@@ -4055,38 +4385,33 @@ def plot_cv_performance_contours_2d(
                         density,
                         levels=[levels[-1]],
                         colors=[color_map[mode]],
-                        linewidths=1.5,
-                        alpha=0.84,
+                        linewidths=0.9,
+                        alpha=0.86,
                         zorder=4,
                     )
-            is_baseline = mode == baseline_mode
-            ax.scatter(
-                x,
-                y,
-                s=8 if is_baseline else 6,
-                color=color_map[mode],
-                alpha=0.10 if is_baseline else 0.035,
-                linewidths=0,
-                zorder=3,
-            )
+            is_baseline = mode == plot_baseline_mode
+            mean_marker = marker_map.get(mode, "o")
             ax.scatter(
                 [float(np.mean(x))],
                 [float(np.mean(y))],
-                s=115 if is_baseline else 34,
+                s=46 if mean_marker == "*" else 22,
                 color=color_map[mode],
-                marker="*" if is_baseline else "o",
-                edgecolor="#222222" if is_baseline else "white",
-                linewidth=0.9 if is_baseline else 0.7,
+                marker=mean_marker,
+                edgecolor="#222222",
+                linewidth=0.45,
                 zorder=10 if is_baseline else 6,
             )
             plotted_any = True
 
-        ax.set_title(metric, fontsize=24, fontweight="semibold", pad=8)
+        ax.set_title(metric, fontsize=12.5, fontweight="semibold", pad=3)
         ax.set_xlabel("")
         ax.set_ylabel("")
-        ax.tick_params(axis="both", labelsize=15)
-        ax.grid(True, color="#bdbdbd", alpha=0.24, linewidth=0.7)
+        ax.tick_params(axis="both", labelsize=8.5, length=3.0, width=0.6, pad=1.5)
+        ax.grid(True, color="#cfcfcf", alpha=0.22, linewidth=0.45)
         ax.margins(x=0.015, y=0.025)
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.65)
+            spine.set_color("#303030")
 
     for idx in range(len(metrics), len(flat_axes)):
         flat_axes[idx].set_axis_off()
@@ -4097,34 +4422,432 @@ def plot_cv_performance_contours_2d(
 
     legend_handles = []
     for mode in modes:
-        is_baseline = mode in {"real", "CE-real"}
+        is_baseline = mode == plot_baseline_mode
+        marker = marker_map.get(mode, "o")
         legend_handles.append(
             Line2D(
                 [0],
                 [0],
                 color=color_map[mode],
-                linewidth=3.5 if is_baseline else 2.5,
-                marker="*" if is_baseline else None,
-                markersize=10 if is_baseline else 0,
-                markeredgecolor="#222222" if is_baseline else color_map[mode],
-                label=_short_legend_name(mode),
+                linewidth=1.8 if is_baseline else 1.3,
+                marker=marker,
+                markersize=6.3 if marker == "*" else 4.7,
+                markeredgecolor="#222222",
+                markeredgewidth=0.45,
+                label=label_map.get(mode, _short_legend_name(mode)),
             )
         )
     fig.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.012),
+        bbox_to_anchor=(0.5, 0.020),
         ncol=min(5, max(1, len(legend_handles))),
-        frameon=True,
-        fontsize=13,
-        columnspacing=1.15,
-        handlelength=2.5,
+        frameon=False,
+        fontsize=7.2,
+        columnspacing=0.85,
+        handlelength=1.45,
+        handletextpad=0.45,
+        borderaxespad=0.0,
     )
-    fig.text(0.53, 0.135, "Coefficient of variation", fontsize=21, ha="center")
-    fig.text(0.012, 0.565, "Mean performance", fontsize=21, va="center", rotation=90)
+    fig.text(0.515, 0.095, "Coefficient of variation", fontsize=10.8, ha="center")
+    fig.text(0.030, 0.555, "Mean performance", fontsize=10.8, va="center", rotation=90)
+    if use_rho_colors and rho_color_scalar is not None:
+        cax = fig.add_axes([0.895, 0.195, 0.016, 0.70])
+        cbar = fig.colorbar(rho_color_scalar, cax=cax, orientation="vertical")
+        baseline_text = rho_baseline_label or "baseline"
+        cbar.set_label(
+            r"$\Delta \rho_{\mathrm{raw}}$ from " + baseline_text,
+            fontsize=9.2,
+            rotation=270,
+            labelpad=10,
+        )
+        cbar.ax.tick_params(labelsize=8.4, length=2.4, width=0.6, pad=1.5)
+        cbar.outline.set_linewidth(0.45)
+        cbar.outline.set_edgecolor("#333333")
+    elif style_meta.get("sign_balance_colorbar"):
+        _add_sign_balance_colorbar(
+            fig,
+            style_meta.get("ce_frac"),
+            bottom=0.175,
+            left=0.915,
+            width=0.016,
+            height=0.75,
+            labelsize=9,
+            orientation="vertical",
+        )
 
     os.makedirs(out_dir, exist_ok=True)
     out_png = _replace_path(os.path.join(out_dir, "cv_performance_density_contours.png"))
+    fig.savefig(out_png, dpi=300, facecolor="white")
+    print(f"[saved] {out_png}")
+    if show:
+        plt.show()
+    plt.close(fig)
+    return out_png
+
+
+def plot_cv_performance_contour_triptych(
+    disp: pd.DataFrame,
+    mean_tbl: pd.DataFrame,
+    combined: pd.DataFrame,
+    out_dir: str,
+    bins: int = 36,
+    show: bool = True,
+    contour_percent: float = 50.0,
+) -> str | None:
+    """Plot the three shuffle-control contour comparisons in one 3x4 figure."""
+    contour_percent = float(contour_percent)
+    if not (0.0 < contour_percent < 100.0):
+        raise ValueError("contour_percent must be greater than 0 and less than 100.")
+    contour_mass = contour_percent / 100.0
+    print(f"[info] CV/performance triptych contour coverage: {contour_percent:g}%")
+
+    required_disp = {"mode", "metric", "dispersion"}
+    required_mean = {"mode", "metric", "mean"}
+    if not required_disp.issubset(disp.columns) or not required_mean.issubset(mean_tbl.columns):
+        print("[warn] contour triptych requires mode, metric, CV dispersion, and mean performance.")
+        return None
+
+    join_keys = ["mode", "metric"] + [
+        key for key in ("src", "group_id")
+        if key in disp.columns and key in mean_tbl.columns
+    ]
+    left = disp[join_keys + ["dispersion"]].copy()
+    right = mean_tbl[join_keys + ["mean"]].copy()
+    for key in ("mode", "metric", "src", "group_id"):
+        if key in join_keys:
+            left[key] = left[key].astype(str)
+            right[key] = right[key].astype(str)
+    joint = left.merge(right, on=join_keys, how="inner")
+    joint["dispersion"] = pd.to_numeric(joint["dispersion"], errors="coerce")
+    joint["mean"] = pd.to_numeric(joint["mean"], errors="coerce")
+    joint = joint[np.isfinite(joint["dispersion"]) & np.isfinite(joint["mean"])].copy()
+    if joint.empty:
+        print("[warn] contour triptych: CV and performance trials did not match.")
+        return None
+
+    comparison_specs = [
+        {
+            "row_label": "Binary controls",
+            "baseline": "binary_base",
+            "modes": ["binary_base", "binary_base_topology_shuffle"],
+        },
+        {
+            "row_label": "Sign-preserving controls",
+            "baseline": "local_sign+binary",
+            "modes": [
+                "local_sign+binary",
+                "binary+shuffle",
+                "global_sign_pres",
+                "binary+conshuffle+wshuffle",
+            ],
+        },
+        {
+            "row_label": "C. elegans controls",
+            "baseline": "real",
+            "modes": ["real", "shuffle", "celW+connShuf", "conn_shuf_only"],
+        },
+    ]
+    available_modes = set(joint["mode"].astype(str))
+    row_specs = []
+    for spec in comparison_specs:
+        modes = [mode for mode in spec["modes"] if mode in available_modes]
+        baseline = spec["baseline"] if spec["baseline"] in modes else None
+        if len(modes) < 2 or baseline is None:
+            print(f"[warn] contour triptych: skipping {spec['row_label']} because required modes are absent.")
+            continue
+        row_specs.append({**spec, "modes": modes, "baseline": baseline})
+    if not row_specs:
+        print("[warn] contour triptych: no complete comparison rows were available.")
+        return None
+
+    metrics = [metric for metric in ("GR", "IPC", "KR", "MC") if metric in set(joint["metric"])]
+    if not metrics:
+        print("[warn] contour triptych: none of GR/IPC/KR/MC were available.")
+        return None
+
+    rho_delta_lookup: dict[tuple[str, str], float] = {}
+    finite_delta = []
+    if "raw_rho" in combined.columns:
+        rho_src = combined[["mode", "raw_rho"]].copy()
+        rho_src["mode"] = rho_src["mode"].astype(str)
+        rho_src["raw_rho"] = pd.to_numeric(rho_src["raw_rho"], errors="coerce")
+        mean_rho = rho_src.groupby("mode", sort=False)["raw_rho"].mean()
+        for spec in row_specs:
+            baseline = spec["baseline"]
+            if baseline not in mean_rho.index or not np.isfinite(mean_rho.loc[baseline]):
+                continue
+            baseline_rho = float(mean_rho.loc[baseline])
+            denom = max(abs(baseline_rho), 1e-12)
+            for mode in spec["modes"]:
+                if mode in mean_rho.index and np.isfinite(mean_rho.loc[mode]):
+                    delta = float((mean_rho.loc[mode] - baseline_rho) / denom * 100.0)
+                    rho_delta_lookup[(baseline, mode)] = delta
+                    finite_delta.append(delta)
+
+    use_rho_colors = len(finite_delta) > 0
+    if use_rho_colors:
+        max_abs = float(np.nanmax(np.abs(np.asarray(finite_delta, dtype=float))))
+        if not np.isfinite(max_abs) or max_abs <= 0:
+            max_abs = 1.0
+        color_norm = mpl.colors.TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
+        color_cmap = mpl.colormaps["coolwarm"]
+        color_scalar = mpl.cm.ScalarMappable(norm=color_norm, cmap=color_cmap)
+        color_scalar.set_array([])
+    else:
+        color_norm = None
+        color_cmap = None
+        color_scalar = None
+
+    marker_map = _mode_marker_map([mode for spec in row_specs for mode in spec["modes"]])
+    fallback_palette = mpl.colormaps["tab20"]
+    fallback_colors = {
+        mode: mpl.colors.to_hex(fallback_palette(idx % 20))
+        for idx, mode in enumerate(dict.fromkeys(mode for spec in row_specs for mode in spec["modes"]))
+    }
+
+    all_triptych_modes = {
+        mode
+        for spec in row_specs
+        for mode in spec["modes"]
+    }
+    metric_limits: dict[str, tuple[float, float, float, float]] = {}
+    axis_quantiles = (0.02, 0.98)
+
+    def _robust_axis_limits(values: np.ndarray, pad_frac: float = 0.06) -> tuple[float, float] | None:
+        values = np.asarray(values, dtype=float)
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            return None
+        if values.size >= 12:
+            lo, hi = np.nanquantile(values, axis_quantiles)
+        else:
+            lo, hi = np.nanmin(values), np.nanmax(values)
+        if not np.isfinite(lo) or not np.isfinite(hi):
+            return None
+        if hi <= lo:
+            center = float(lo)
+            spread = max(abs(center) * 0.02, 1e-3)
+            return center - spread, center + spread
+        pad = max(pad_frac * float(hi - lo), 1e-9)
+        return float(lo - pad), float(hi + pad)
+
+    def _clean_contour_components(contour_set, min_area_frac: float = 0.10) -> None:
+        if not getattr(contour_set, "allsegs", None):
+            return
+        segments = [
+            np.asarray(seg, dtype=float)
+            for seg in contour_set.allsegs[0]
+            if len(seg) >= 4 and np.all(np.isfinite(seg))
+        ]
+        if len(segments) <= 1:
+            return
+        areas = []
+        for seg in segments:
+            x = seg[:, 0]
+            y = seg[:, 1]
+            areas.append(abs(0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))))
+        max_area = max(areas) if areas else 0.0
+        if max_area <= 0:
+            return
+        kept = [
+            seg
+            for seg, area in zip(segments, areas)
+            if area >= min_area_frac * max_area
+        ]
+        if not kept:
+            kept = [segments[int(np.argmax(areas))]]
+        contour_set.set_paths([mpl.path.Path.make_compound_path(*(mpl.path.Path(seg) for seg in kept))])
+
+    for metric in metrics:
+        metric_all = joint[
+            (joint["metric"] == metric)
+            & (joint["mode"].isin(all_triptych_modes))
+        ]
+        if metric_all.empty:
+            continue
+        cv_limits = _robust_axis_limits(metric_all["dispersion"].to_numpy(float))
+        perf_limits = _robust_axis_limits(metric_all["mean"].to_numpy(float))
+        if cv_limits is None or perf_limits is None:
+            continue
+        metric_limits[metric] = (*cv_limits, *perf_limits)
+
+    bins = max(24, min(int(bins), 52))
+    fig = plt.figure(figsize=(10.8, 7.15), dpi=300)
+    grid = fig.add_gridspec(
+        len(row_specs),
+        len(metrics),
+        left=0.075,
+        right=0.895 if use_rho_colors else 0.975,
+        bottom=0.145,
+        top=0.925,
+        wspace=0.22,
+        hspace=0.32,
+    )
+
+    plotted_any = False
+    legend_handles_by_mode: dict[str, Line2D] = {}
+
+    for row_idx, spec in enumerate(row_specs):
+        row_modes = spec["modes"]
+        baseline = spec["baseline"]
+        row_df = joint[joint["mode"].isin(row_modes)].copy()
+        for col_idx, metric in enumerate(metrics):
+            ax = fig.add_subplot(grid[row_idx, col_idx])
+            metric_df = row_df[row_df["metric"] == metric]
+            if metric_df.empty:
+                ax.set_axis_off()
+                continue
+
+            if metric not in metric_limits:
+                ax.set_axis_off()
+                continue
+            cv_lo, cv_hi, perf_lo, perf_hi = metric_limits[metric]
+            cv_edges = np.linspace(cv_lo, cv_hi, bins + 1)
+            perf_edges = np.linspace(perf_lo, perf_hi, bins + 1)
+            cv_centers = 0.5 * (cv_edges[:-1] + cv_edges[1:])
+            perf_centers = 0.5 * (perf_edges[:-1] + perf_edges[1:])
+            grid_cv, grid_perf = np.meshgrid(cv_centers, perf_centers, indexing="ij")
+
+            draw_modes = [mode for mode in row_modes if mode != baseline] + [baseline]
+            for mode in draw_modes:
+                sub = metric_df[metric_df["mode"] == mode]
+                if len(sub) < 2:
+                    continue
+                x = sub["dispersion"].to_numpy(float)
+                y = sub["mean"].to_numpy(float)
+                hist, _, _ = np.histogram2d(x, y, bins=(cv_edges, perf_edges))
+                density = gaussian_filter(hist, sigma=1.35, mode="constant")
+                total = float(density.sum())
+                if total <= 0:
+                    continue
+                ordered = np.sort(density.ravel())[::-1]
+                cumulative = np.cumsum(ordered) / total
+                idx = min(int(np.searchsorted(cumulative, contour_mass)), len(ordered) - 1)
+                contour_level = float(ordered[idx])
+                if contour_level <= 0:
+                    continue
+
+                delta = rho_delta_lookup.get((baseline, mode), np.nan)
+                if use_rho_colors and np.isfinite(delta):
+                    color = mpl.colors.to_hex(color_cmap(color_norm(delta)))
+                else:
+                    color = fallback_colors[mode]
+                is_baseline = mode == baseline
+                if is_baseline:
+                    baseline_contour = ax.contour(
+                        grid_cv,
+                        grid_perf,
+                        density,
+                        levels=[contour_level],
+                        colors=["white"],
+                        linewidths=[3.0],
+                        alpha=0.96,
+                        zorder=8,
+                    )
+                    _clean_contour_components(baseline_contour)
+                main_contour = ax.contour(
+                    grid_cv,
+                    grid_perf,
+                    density,
+                    levels=[contour_level],
+                    colors=[color],
+                    linewidths=[1.65 if is_baseline else 0.9],
+                    alpha=1.0 if is_baseline else 0.86,
+                    zorder=9 if is_baseline else 4,
+                )
+                _clean_contour_components(main_contour)
+                marker = marker_map.get(mode, "o")
+                ax.scatter(
+                    [float(np.mean(x))],
+                    [float(np.mean(y))],
+                    s=44 if marker == "*" else 20,
+                    color=color,
+                    marker=marker,
+                    edgecolor="#222222",
+                    linewidth=0.42,
+                    zorder=10 if is_baseline else 6,
+                )
+                plotted_any = True
+                if mode not in legend_handles_by_mode:
+                    legend_handles_by_mode[mode] = Line2D(
+                        [0],
+                        [0],
+                        color=color,
+                        linewidth=1.7 if is_baseline else 1.2,
+                        marker=marker,
+                        markersize=5.8 if marker == "*" else 4.4,
+                        markeredgecolor="#222222",
+                        markeredgewidth=0.42,
+                        label=_short_legend_name(mode),
+                    )
+
+            if row_idx == 0:
+                ax.set_title(metric, fontsize=12.0, fontweight="semibold", pad=3)
+            if col_idx == 0:
+                ax.text(
+                    -0.33,
+                    0.5,
+                    spec["row_label"],
+                    transform=ax.transAxes,
+                    rotation=90,
+                    ha="center",
+                    va="center",
+                    fontsize=9.4,
+                    fontweight="semibold",
+                )
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+            ax.set_xlim(cv_lo, cv_hi)
+            ax.set_ylim(perf_lo, perf_hi)
+            ax.tick_params(axis="both", labelsize=7.5, length=2.6, width=0.55, pad=1.2)
+            ax.grid(True, color="#cfcfcf", alpha=0.21, linewidth=0.42)
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.6)
+                spine.set_color("#303030")
+
+    if not plotted_any:
+        plt.close(fig)
+        print("[warn] contour triptych: no finite contours could be drawn.")
+        return None
+
+    fig.text(0.485, 0.092, "Coefficient of variation", fontsize=10.2, ha="center")
+    fig.text(0.022, 0.540, "Mean performance", fontsize=10.2, va="center", rotation=90)
+
+    if use_rho_colors and color_scalar is not None:
+        cax = fig.add_axes([0.915, 0.235, 0.014, 0.58])
+        cbar = fig.colorbar(color_scalar, cax=cax, orientation="vertical")
+        cbar.set_label(
+            r"$\Delta \rho_{\mathrm{raw}}$ from row baseline (%)",
+            fontsize=8.7,
+            rotation=270,
+            labelpad=10,
+        )
+        cbar.ax.tick_params(labelsize=7.8, length=2.2, width=0.55, pad=1.4)
+        cbar.outline.set_linewidth(0.45)
+        cbar.outline.set_edgecolor("#333333")
+
+    legend_handles = [
+        legend_handles_by_mode[mode]
+        for mode in dict.fromkeys(mode for spec in row_specs for mode in spec["modes"])
+        if mode in legend_handles_by_mode
+    ]
+    if legend_handles:
+        fig.legend(
+            handles=legend_handles,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.018),
+            ncol=5,
+            frameon=False,
+            fontsize=6.8,
+            columnspacing=0.8,
+            handlelength=1.45,
+            handletextpad=0.42,
+            borderaxespad=0.0,
+        )
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_png = _replace_path(os.path.join(out_dir, "cv_performance_density_contours_triptych.png"))
     fig.savefig(out_png, dpi=300, facecolor="white")
     print(f"[saved] {out_png}")
     if show:
@@ -4263,10 +4986,21 @@ def main():
     #        local_sign_binary_csv=args.local_sign_binary_csv,
     #    )
     #plot_rho_cv_other_perf( combined, args.out_dir, show=True, model=args.model, drop_kr_gr=args.rho_cv_drop_kr_gr,)
-    plot_overlaid_arch_histograms(disp, args.out_dir, args.bins)
+    resolved_rho_baseline = _resolve_cv_baseline_mode(
+        set(combined["mode"].astype(str).dropna()),
+        args.cv_baseline_mode,
+    )
+    rho_delta = _rho_delta_by_mode(combined, resolved_rho_baseline, rho_col="raw_rho")
+    plot_overlaid_arch_histograms(
+        disp,
+        args.out_dir,
+        args.bins,
+        rho_delta_by_mode=rho_delta,
+        rho_baseline_label=_short_thesis_name(resolved_rho_baseline) if resolved_rho_baseline else None,
+    )
     #plot_mc_vs_gr_all_arch(combined, args.out_dir, args.scatter_alpha)
     print_cv_difference_tables(disp, args.out_dir, baseline_mode=args.cv_baseline_mode)
-    if args.show_cv_performance_3d or args.show_cv_performance_contours:
+    if args.show_cv_performance_3d or args.show_cv_performance_contours or args.show_cv_performance_contour_triptych:
         mean_tbl = _compute_mean_table(combined)
     if args.show_cv_performance_contours:
         plot_cv_performance_contours_2d(
@@ -4276,6 +5010,9 @@ def main():
             bins=max(args.bins, 36),
             show=True,
             contour_percent=args.cv_performance_contour_percent,
+            rho_delta_by_mode=rho_delta,
+            rho_baseline_label=_short_thesis_name(resolved_rho_baseline) if resolved_rho_baseline else None,
+            baseline_mode=resolved_rho_baseline,
         )
     if args.show_cv_performance_3d:
         plot_cv_performance_hills_3d(
@@ -4284,6 +5021,16 @@ def main():
             args.out_dir,
             bins=min(args.bins, 22),
             show=True,
+        )
+    if args.show_cv_performance_contour_triptych:
+        plot_cv_performance_contour_triptych(
+            disp,
+            mean_tbl,
+            combined,
+            args.out_dir,
+            bins=max(args.bins, 36),
+            show=True,
+            contour_percent=args.cv_performance_contour_percent,
         )
 
 

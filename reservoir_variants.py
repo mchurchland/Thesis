@@ -194,7 +194,7 @@ def _run_variant_row(
             per_neg=ctx.per_neg,
             alpha=ctx.alpha,
             normalization_mode=ctx.normalization_mode,
-            normalization_ref=ctx.ce_W_bio,
+            normalization_ref=_family_baseline_ref(ctx, mode_label),
             return_info=True,
         )
         Win = _apply_input_subset(Win, ctx.input_idx)
@@ -386,6 +386,20 @@ def _weight_test_feature_conn(key: str) -> str:
 def _require_ce(ctx: VariantContext):
     if ctx.ce_W_bio is None:
         raise ValueError("This variant requires ce_W_bio (CE adjacency).")
+
+
+def _family_baseline_ref(ctx: VariantContext, mode_label: str) -> np.ndarray:
+    """Reference matrix for baseline-radius normalization within a shuffle family."""
+    if mode_label in {"binary_base", "binary_base_topology_shuffle"}:
+        return _cel_to_bin(ctx.ce_W_bio)
+    if mode_label in {
+        "local_sign+binary",
+        "global_sign_pres",
+        "binary+shuffle",
+        "binary+conshuffle+wshuffle",
+    }:
+        return _signed_binary_from_cel(ctx.ce_W_bio)
+    return ctx.ce_W_bio
 
 
 def run_variant(key: str, ctx: VariantContext) -> list[tuple]:
