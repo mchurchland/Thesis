@@ -50,18 +50,18 @@ from util.graph_utils import (
 # Optional hard filter for analysis modes.
 # Leave empty to analyze all modes, or populate with exact mode names.
 ANALYSIS_MODE_FILTER = [
-    "binary_base_topology_shuffle",
-    "binary_base",
+    #"binary_base_topology_shuffle",
+    #"binary_base",
+    ##------------------------------
+    #"binary+shuffle", 
+    #"local_sign+binary",
+    #"global_sign_pres",
+    #"binary+conshuffle+wshuffle",
     #------------------------------
-    "binary+shuffle", 
-    "local_sign+binary",
-    "global_sign_pres",
-    "binary+conshuffle+wshuffle",
-    #------------------------------
-    "real",
-    "shuffle",
-    "celW+connShuf",
-    "conn_shuf_only",
+    #"real",
+    #"shuffle",
+    #"celW+connShuf",
+    #"conn_shuf_only",
     #-------- main experiment above was shuffle experiment
       #          "real",
       #      "cel+randN",
@@ -1261,6 +1261,7 @@ def _style_3d_axis(
     ax,
     tick_labelsize: int = 11,
     tick_pad: int = 2,
+    z_tick_pad: int = 2,
     pane_fill: bool = True,
     pane_facecolor=(1.0, 1.0, 1.0, 1.0),
     pane_edgecolor=(0.85, 0.85, 0.85, 1.0),
@@ -1269,7 +1270,7 @@ def _style_3d_axis(
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
     ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=-2)
     ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=-2)
-    ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=0)
+    ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=z_tick_pad)
     y_formatter = ax.yaxis.get_major_formatter()
     if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
         y_formatter.set_useOffset(False)
@@ -1378,6 +1379,7 @@ def _save_3d_front_back(
     dpi: int = 600,
     tick_labelsize: int = 11,
     tick_pad: int = 2,
+    z_tick_pad: int = 2,
     pane_fill: bool = True,
     pane_facecolor=(1.0, 1.0, 1.0, 1.0),
     pane_edgecolor=(0.85, 0.85, 0.85, 1.0),
@@ -1393,6 +1395,7 @@ def _save_3d_front_back(
             ax,
             tick_labelsize=tick_labelsize,
             tick_pad=tick_pad,
+            z_tick_pad=z_tick_pad,
             pane_fill=pane_fill,
             pane_facecolor=pane_facecolor,
             pane_edgecolor=pane_edgecolor,
@@ -2333,7 +2336,7 @@ def plot_frac_cv_meanline(
     ax = fig.add_subplot(111, projection="3d")
 
     colors = mpl.colormaps["tab10"]
-    highlight_frac = 0.06113256113256113
+    highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.22058823529411764
     highlight_atol = 1e-12
     plotted_any = False
     for idx, metric in enumerate(metrics):
@@ -2383,7 +2386,7 @@ def plot_frac_cv_meanline(
 
     ax.set_xlabel(x_label, fontsize=18, labelpad=4)
     ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
-    ax.set_zlabel("mean Performance", fontsize=18, labelpad=2)
+    ax.set_zlabel("mean Performance", fontsize=18, labelpad=12)
     ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
     _tight_layout_quiet(fig)
@@ -2398,6 +2401,7 @@ def plot_frac_cv_meanline(
        dpi=600,
         tick_labelsize=16,
         tick_pad=-4,
+        z_tick_pad=4,
     )
     if show:
         plt.show()

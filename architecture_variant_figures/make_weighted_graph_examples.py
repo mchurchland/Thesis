@@ -158,7 +158,7 @@ def variant_alters_connectivity(key: str) -> bool:
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate CE-reference vs variant weighted graph figures.")
     p.add_argument("--outdir", default="architecture_variant_figures/graph_examples", help="Output directory for PNGs.")
-    p.add_argument("--ce-adj", default="Connectome/ce_adj.npy", help="Path to CE adjacency/weight matrix (.npy).")
+    p.add_argument("--ce-adj", default="Connectome/ce_adj_unk41.npy", help="Path to CE adjacency/weight matrix (.npy).")
     p.add_argument("--ce-ei", default="Connectome/ce_ei.npy", help="Path to CE E/I labels (.npy).")
     p.add_argument("--seed", type=int, default=7, help="Base random seed.")
     p.add_argument("--er-p", type=float, default=0.1, help="ER probability for er_randN.")
