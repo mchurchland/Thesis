@@ -31,8 +31,10 @@ from util.util import (  # noqa: E402
     _count_edges,
     _sample_from_cel,
     _shuffle_ce_weights,
+    assign_random_unknown_signs,
     build_reservoir,
     load_connectome,
+    load_unknown_sign_weights,
 )
 from graph_hist import _short_legend_name  # noqa: E402
 
@@ -160,6 +162,43 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--outdir", default="architecture_variant_figures/graph_examples", help="Output directory for PNGs.")
     p.add_argument("--ce-adj", default="Connectome/ce_adj_unk41.npy", help="Path to CE adjacency/weight matrix (.npy).")
     p.add_argument("--ce-ei", default="Connectome/ce_ei.npy", help="Path to CE E/I labels (.npy).")
+    p.add_argument(
+        "--removed-adj",
+        default="Connectome/ce_adj_removed.npy",
+        help="Known-sign connectome with complex/no-pred edges removed, for --new-4to1-four-panel.",
+    )
+    p.add_argument(
+        "--ce-unknown-sign-weights",
+        default=None,
+        help=(
+            "Optional .npy matrix with magnitudes for complex/no-pred edges. "
+            "If omitted, inferred from --ce-adj when building the 4:1 unknown-sign connectome."
+        ),
+    )
+    p.add_argument(
+        "--unknown-sign-inhibitory-frac",
+        type=float,
+        default=0.2,
+        help="Fraction of complex/no-pred edges assigned negative signs in the 4:1 new connectome.",
+    )
+    p.add_argument(
+        "--new-4to1-four-panel",
+        action="store_true",
+        help=(
+            "Write only a 2x2 comparison: new 4:1 connectome, removed-edge connectome, "
+            "ER matched to the 4:1 edge/sign ratio, and 4:1 connection shuffle."
+        ),
+    )
+    p.add_argument(
+        "--new-4to1-four-panel-out",
+        default="new_4to1_four_panel.png",
+        help="Output filename for --new-4to1-four-panel, relative to --outdir unless absolute.",
+    )
+    p.add_argument(
+        "--known-only",
+        action="store_true",
+        help="Use --ce-adj as loaded for the standard grid/individual figures instead of adding 4:1 unknown signs.",
+    )
     p.add_argument("--seed", type=int, default=7, help="Base random seed.")
     p.add_argument("--er-p", type=float, default=0.1, help="ER probability for er_randN.")
     p.add_argument("--ws-p", type=float, default=0.1, help="WS rewiring probability for ws_p01_randN.")
@@ -240,7 +279,7 @@ def _build_from_feature_conn(
     alpha: float | None = None,
 ) -> np.ndarray:
     nnz_target = None
-    if feature_conn.startswith("er_p=") or feature_conn.startswith("ws_p="):
+    if feature_conn.startswith("er_p=") or feature_conn.startswith("ws_p=") or feature_conn == "sign_test_er":
         nnz_target = _count_edges(ce_W_bio)
 
     Wt, _Win = build_reservoir(
@@ -378,6 +417,54 @@ def build_variant_panel_data(
         )
     return W_var, panel_pos
 
+
+def _build_er_matched_4to1(
+    ce_4to1: np.ndarray,
+    seed: int,
+    inhibitory_fraction: float,
+) -> np.ndarray:
+    return _build_from_feature_conn(
+        "sign_test_er",
+        ce_4to1,
+        seed,
+        per_neg=inhibitory_fraction,
+    )
+
+
+def _resolve_out_path(outdir: Path, value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return outdir / path
+
+
+def build_4to1_unknown_connectome(
+    ce_known: np.ndarray,
+    ce_adj_path: str,
+    unknown_sign_weights_path: str | None,
+    seed: int,
+    inhibitory_fraction: float,
+) -> np.ndarray:
+    if not (0.0 <= inhibitory_fraction <= 1.0):
+        raise ValueError("--unknown-sign-inhibitory-frac must be between 0 and 1.")
+
+    unknown_weights = load_unknown_sign_weights(
+        ce_adj_path,
+        unknown_sign_weights_path,
+        n_nodes=ce_known.shape[0],
+    )
+    if unknown_weights is None:
+        raise FileNotFoundError(
+            "Could not find unknown-sign weights for the 4:1 connectome. "
+            "Pass --ce-unknown-sign-weights explicitly or use --known-only."
+        )
+
+    return assign_random_unknown_signs(
+        ce_known,
+        unknown_weights,
+        np.random.default_rng(seed),
+        inhibitory_fraction=inhibitory_fraction,
+    )
 
 
 
@@ -821,19 +908,162 @@ def make_index_figure(
     plt.close(fig)
 
 
+def make_new_4to1_four_panel(
+    *,
+    ce_known: np.ndarray,
+    ce_removed: np.ndarray,
+    ce_labels: list[str] | None,
+    ce_adj_path: str,
+    unknown_sign_weights_path: str | None,
+    out_path: Path,
+    seed: int,
+    inhibitory_fraction: float,
+    max_edges: int,
+    layout_iters: int,
+    layout_scale: float,
+    keep_all_negatives: bool,
+    show_node_labels: bool,
+    label_fontsize: int,
+    panel_title_fontsize: int,
+    show_direction: bool,
+    figure_dpi: int,
+) -> None:
+    if ce_known.shape != ce_removed.shape:
+        raise ValueError(
+            "The 4:1 base adjacency and removed adjacency must have the same shape: "
+            f"{ce_known.shape} vs {ce_removed.shape}."
+        )
+    ce_4to1 = build_4to1_unknown_connectome(
+        ce_known,
+        ce_adj_path,
+        unknown_sign_weights_path,
+        seed,
+        inhibitory_fraction,
+    )
+    er_4to1 = _build_er_matched_4to1(
+        ce_4to1,
+        seed=seed + 10_000,
+        inhibitory_fraction=inhibitory_fraction,
+    )
+    conn_shuffle_4to1 = _conn_shuffle_ce(ce_4to1, np.random.default_rng(seed + 20_000)).astype(np.float32)
+
+    layout_kwargs = {
+        "fallback_iters": layout_iters,
+        "layout_scale": layout_scale,
+    }
+    ce_pos = compute_ce_kamada_layout(ce_4to1, seed=seed, **layout_kwargs)
+    er_pos = compute_ce_kamada_layout(er_4to1, seed=seed + 30_000, **layout_kwargs)
+    shuffle_pos = compute_ce_kamada_layout(conn_shuffle_4to1, seed=seed + 40_000, **layout_kwargs)
+
+    panels = [
+        ("4:1 new connectome", ce_4to1, ce_pos),
+        ("Complex connections removed", ce_removed.astype(np.float32, copy=False), ce_pos),
+        ("ER random, 4:1 matched", er_4to1, er_pos),
+        ("New 4:1, connection shuffle", conn_shuffle_4to1, shuffle_pos),
+    ]
+
+    scale_values = []
+    for _title, W, _pos in panels:
+        _edge_idx, w, _absw = _edge_subset(W, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
+        if w.size:
+            scale_values.append(w)
+    if scale_values:
+        pos_map, neg_map = build_dual_colormap_norms(np.concatenate(scale_values))
+    else:
+        pos_map, neg_map = build_dual_colormap_norms(np.array([], dtype=np.float32))
+
+    title_size = min(panel_title_fontsize, 18)
+    fig, axes = plt.subplots(2, 2, figsize=(11.0, 9.2), squeeze=False)
+    for idx, (ax, (title, W, pos)) in enumerate(zip(axes.flat, panels)):
+        draw_weighted_panel(
+            ax,
+            W,
+            pos,
+            title="",
+            panel_title_fontsize=title_size,
+            node_colors=["#666666"] * W.shape[0],
+            node_labels=ce_labels if show_node_labels else None,
+            label_fontsize=label_fontsize,
+            node_size=11,
+            max_edges=max_edges,
+            keep_all_negatives=keep_all_negatives,
+            show_direction=show_direction,
+            pos_norm=None if pos_map is None else pos_map["norm"],
+            pos_cmap=None if pos_map is None else pos_map["cmap"],
+            neg_norm=None if neg_map is None else neg_map["norm"],
+            neg_cmap=None if neg_map is None else neg_map["cmap"],
+        )
+        ax.set_title("")
+        ax.text(
+            0.018,
+            0.982,
+            _panel_letter(idx),
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=24,
+            fontweight="bold",
+            color="#111111",
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.86, "pad": 0.25},
+            zorder=20,
+        )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.925, bottom=0.01, wspace=0.015, hspace=0.20)
+    fig.savefig(out_path, dpi=figure_dpi)
+    plt.close(fig)
+
+
 def main() -> None:
     args = parse_args()
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    ce_base, _ce_ei, ce_labels = load_ce_with_project_code(args.ce_adj, args.ce_ei)
+    ce_known, _ce_ei, ce_labels = load_ce_with_project_code(args.ce_adj, args.ce_ei)
+    keep_all_negatives = not args.truncate_drops_negatives
+
+    if args.new_4to1_four_panel:
+        ce_removed, _removed_ei, _removed_labels = load_ce_with_project_code(args.removed_adj, args.ce_ei)
+        out_path = _resolve_out_path(outdir, args.new_4to1_four_panel_out)
+        make_new_4to1_four_panel(
+            ce_known=ce_known,
+            ce_removed=ce_removed,
+            ce_labels=ce_labels,
+            ce_adj_path=args.ce_adj,
+            unknown_sign_weights_path=args.ce_unknown_sign_weights,
+            out_path=out_path,
+            seed=args.seed,
+            inhibitory_fraction=args.unknown_sign_inhibitory_frac,
+            max_edges=args.max_edges,
+            layout_iters=args.layout_iters,
+            layout_scale=args.layout_scale,
+            keep_all_negatives=keep_all_negatives,
+            show_node_labels=args.show_node_labels,
+            label_fontsize=args.label_fontsize,
+            panel_title_fontsize=args.panel_title_fontsize,
+            show_direction=args.show_direction,
+            figure_dpi=args.figure_dpi,
+        )
+        print(f"Wrote 1 file to: {out_path.resolve()}")
+        return
+
+    if args.known_only:
+        ce_base = ce_known
+    else:
+        ce_base = build_4to1_unknown_connectome(
+            ce_known,
+            args.ce_adj,
+            args.ce_unknown_sign_weights,
+            args.seed,
+            args.unknown_sign_inhibitory_frac,
+        )
+
     ce_pos = compute_ce_kamada_layout(
         ce_base,
         seed=args.seed,
         fallback_iters=args.layout_iters,
         layout_scale=args.layout_scale,
     )
-    keep_all_negatives = not args.truncate_drops_negatives
     paper_variants = _paper_variants()
 
     make_index_figure(

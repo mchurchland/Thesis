@@ -241,18 +241,18 @@ def plot_summary(
     mpl.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "axes.linewidth": 0.65,
+            "axes.linewidth": 0.8,
             "axes.labelsize": 9.2,
-            "axes.titlesize": 10.8,
-            "xtick.labelsize": 7.8,
-            "ytick.labelsize": 7.8,
-            "legend.fontsize": 7.4,
+            "axes.titlesize": 11.2,
+            "xtick.labelsize": 7.9,
+            "ytick.labelsize": 7.9,
+            "legend.fontsize": 7.9,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
     )
 
-    fig, axes = plt.subplots(2, 4, figsize=(13.2, 6.35), dpi=300, sharex=True)
+    fig, axes = plt.subplots(2, 4, figsize=(7.35, 5.15), dpi=300, sharex=True)
     panel_specs = [
         ("GR", "performance", "GR"),
         ("IPC", "performance", "IPC"),
@@ -281,12 +281,12 @@ def plot_summary(
                 fam["raw_rho"],
                 fam[value_col],
                 color=color,
-                linewidth=1.55,
+                linewidth=1.75,
                 marker=marker,
-                markersize=4.9,
+                markersize=4.7,
                 markerfacecolor="white",
                 markeredgecolor=color,
-                markeredgewidth=0.95,
+                markeredgewidth=1.05,
                 alpha=0.94,
                 zorder=3,
             )
@@ -299,7 +299,7 @@ def plot_summary(
                 sub[value_col],
                 color=color,
                 linestyle="-",
-                linewidth=1.45,
+                linewidth=1.70,
                 alpha=0.90,
                 zorder=2,
             )
@@ -308,9 +308,9 @@ def plot_summary(
                 sub[value_col],
                 color="white",
                 marker="o",
-                s=24,
+                s=25,
                 edgecolor=color,
-                linewidth=0.90,
+                linewidth=1.00,
                 zorder=4,
             )
 
@@ -322,27 +322,27 @@ def plot_summary(
             transform=ax.transAxes,
             ha="left",
             va="bottom",
-            fontsize=8.6,
+            fontsize=9.4,
             fontweight="bold",
             clip_on=False,
         )
         ax.set_xscale("log")
         ax.set_yscale(y_scale if value_col == "performance" else "linear")
         ax.set_xlim(2.8, 110.0)
-        ax.xaxis.set_major_locator(FixedLocator([3, 5, 10, 20, 40, 70, 100]))
+        ax.xaxis.set_major_locator(FixedLocator([3, 10, 40, 100]))
         ax.xaxis.set_major_formatter(FuncFormatter(_format_rho_tick))
         if y_scale == "log" and value_col == "performance":
             ax.yaxis.set_major_formatter(FuncFormatter(_format_rho_tick))
-        ax.grid(True, axis="y", which="major", color="#d9d9d9", linewidth=0.42, alpha=0.52)
-        ax.grid(True, axis="x", which="major", color="#e5e5e5", linewidth=0.34, alpha=0.38)
+        ax.grid(True, axis="y", which="major", color="#d9d9d9", linewidth=0.48, alpha=0.52)
+        ax.grid(True, axis="x", which="major", color="#e5e5e5", linewidth=0.38, alpha=0.38)
         if y_scale == "log" and value_col == "performance":
             ax.grid(True, which="minor", axis="y", color="#e8e8e8", linewidth=0.30, alpha=0.30)
-        ax.tick_params(length=2.8, width=0.65, pad=1.4, direction="out")
+        ax.tick_params(length=3.0, width=0.75, pad=1.4, direction="out")
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         for spine in ax.spines.values():
             spine.set_color("#333333")
-            spine.set_linewidth(0.65)
+            spine.set_linewidth(0.8)
 
         finite_y = metric_df[value_col].to_numpy(float)
         finite_y = finite_y[np.isfinite(finite_y)]
@@ -365,9 +365,9 @@ def plot_summary(
                     pad = max(0.10 * (y_hi - y_lo), 0.025)
                 ax.set_ylim(y_lo, y_hi + pad)
 
-    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=10.2, y=0.103)
-    fig.text(0.018, 0.665, "Mean performance", rotation=90, va="center", ha="center", fontsize=10.2)
-    fig.text(0.018, 0.335, "Coefficient of variation", rotation=90, va="center", ha="center", fontsize=10.2)
+    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=10.4, y=0.106)
+    fig.text(0.018, 0.665, "Mean performance", rotation=90, va="center", ha="center", fontsize=10.4)
+    fig.text(0.018, 0.335, "Coefficient of variation", rotation=90, va="center", ha="center", fontsize=10.4)
 
     family_handles = [
         Line2D(
@@ -377,8 +377,8 @@ def plot_summary(
             marker=marker,
             markerfacecolor="white",
             markeredgecolor=color,
-            linewidth=1.55,
-            markersize=4.9,
+            linewidth=1.75,
+            markersize=4.7,
             label=label,
         )
         for label, _modes, color, marker in SHUFFLE_FAMILIES
@@ -391,8 +391,8 @@ def plot_summary(
             marker="o",
             markerfacecolor="#d9d9d9",
             markeredgecolor=color,
-            linewidth=1.45,
-            markersize=4.8,
+            linewidth=1.70,
+            markersize=4.7,
             label=label,
         )
         for label, _key, _path, _prefix, color in SIGN_SWEEPS
@@ -401,14 +401,14 @@ def plot_summary(
         handles=family_handles + dataset_handles,
         loc="lower center",
         bbox_to_anchor=(0.50, 0.018),
-        ncol=6,
+        ncol=3,
         frameon=False,
-        columnspacing=0.95,
-        handlelength=1.7,
-        handletextpad=0.42,
+        columnspacing=0.70,
+        handlelength=1.35,
+        handletextpad=0.35,
     )
 
-    fig.subplots_adjust(left=0.062, right=0.992, bottom=0.178, top=0.905, wspace=0.24, hspace=0.34)
+    fig.subplots_adjust(left=0.070, right=0.995, bottom=0.245, top=0.900, wspace=0.26, hspace=0.36)
 
     paths = []
     for ext, dpi in (("png", 450), ("pdf", 450)):

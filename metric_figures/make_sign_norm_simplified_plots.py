@@ -42,9 +42,33 @@ DATASETS = {
 
 PRIMARY_DENSE = {
     "label": "C. elegans 4:1",
-    "path": ROOT / "depreciated" / "norm_final_new_50" / "cel_4to1_norm",
+    "path": ROOT / "good_results" / "good_cel_new" / "matched_cel",
     "marker_frac": 0.22058823529411764,
     "marker_label": r"$q_{\mathrm{orig}}$",
+}
+
+DENSE_OPTION8_DATASETS = {
+    "cel_4to1": {
+        "label": "C. elegans 4:1",
+        "path": ROOT / "good_results" / "good_cel_new" / "matched_cel",
+        "marker_frac": 0.22058823529411764,
+        "marker_label": r"$q_{\mathrm{orig}}$",
+        "stem": "option_8_average_perf_cv",
+    },
+    "er_matched": {
+        "label": "ER matched 4:1",
+        "path": ROOT / "good_results" / "good_cel_new" / "matched_er",
+        "marker_frac": 0.2,
+        "marker_label": r"$q_{\mathrm{4:1}}$",
+        "stem": "option_8_average_perf_cv_er_matched",
+    },
+    "removed": {
+        "label": "Removed connectome",
+        "path": ROOT / "good_results" / "good_cel_new" / "removed_cel",
+        "marker_frac": 0.2425287356321839,
+        "marker_label": r"$q_{\mathrm{orig}}$",
+        "stem": "option_8_average_perf_cv_removed",
+    },
 }
 
 METRICS = ("MC", "IPC", "KR", "GR")
@@ -219,13 +243,13 @@ def _setup_axis(ax: plt.Axes) -> None:
 def _setup_paper_axis(ax: plt.Axes) -> None:
     ax.set_xlim(-0.02, 1.02)
     ax.set_xticks(np.linspace(0, 1, 6))
-    ax.grid(True, alpha=0.18, linewidth=0.7)
+    ax.grid(True, alpha=0.18, linewidth=0.8)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
     for spine in ("left", "bottom"):
-        ax.spines[spine].set_linewidth(0.8)
+        ax.spines[spine].set_linewidth(1.0)
         ax.spines[spine].set_color("#333333")
-    ax.tick_params(axis="both", labelsize=8.5, width=0.8, length=3.5, color="#333333")
+    ax.tick_params(axis="both", labelsize=10.5, width=1.0, length=4.2, color="#333333")
 
 
 def _radius_regions(info: dict[str, object], ratio: pd.DataFrame) -> tuple[float, float]:
@@ -246,11 +270,16 @@ def _shade_radius_regions(ax: plt.Axes, left: float, right: float) -> None:
 
 def _draw_q_reference_lines(ax: plt.Axes, info: dict[str, object]) -> None:
     q_orig = float(info["marker_frac"])
+    q_label = str(info.get("marker_label", r"$q_{\mathrm{orig}}$"))
+    if q_label.startswith("$") and q_label.endswith("$"):
+        opposite_label = "$1-" + q_label[1:]
+    else:
+        opposite_label = f"1 - {q_label}"
     for xpos, label, ha in (
-        (q_orig, r"$q_{\mathrm{orig}}$", "left"),
-        (1.0 - q_orig, r"$1-q_{\mathrm{orig}}$", "right"),
+        (q_orig, q_label, "left"),
+        (1.0 - q_orig, opposite_label, "right"),
     ):
-        ax.axvline(xpos, color="#A77C00", linewidth=1.0, linestyle="--", alpha=0.70)
+        ax.axvline(xpos, color="#A77C00", linewidth=1.25, linestyle="--", alpha=0.72)
         ax.text(
             xpos,
             0.97,
@@ -258,7 +287,7 @@ def _draw_q_reference_lines(ax: plt.Axes, info: dict[str, object]) -> None:
             transform=ax.get_xaxis_transform(),
             ha=ha,
             va="top",
-            fontsize=8,
+            fontsize=10.5,
             color="#6C5200",
         )
 
@@ -477,7 +506,7 @@ def save_radius_mechanism_only(primary: tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     )
     ax.set_xlabel("Negative edge fraction, $q$", fontsize=9.5)
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=9.5)
-    ax.set_ylim(0.58, 1.56)
+    #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)
     fig.tight_layout()
     _save_figure(fig, "option_4_radius_mechanism_only")
@@ -596,7 +625,7 @@ def save_compact_mechanism_response(primary: tuple[pd.DataFrame, pd.DataFrame, p
     _draw_q_reference_lines(ax, info)
     ax.set_title("C. elegans 4:1 sign-normalization response", loc="left", fontsize=9.6, pad=4)
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=9)
-    ax.set_ylim(0.58, 1.56)
+    #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)
 
     for ax, group_name in ((axes[1], "Memory"), (axes[2], "Kernel")):
@@ -694,7 +723,7 @@ def save_mechanism_plus_effect(primary: tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     _draw_q_reference_lines(ax, info)
     ax.set_xlabel("Negative edge fraction, $q$", fontsize=9.2)
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=9.2)
-    ax.set_ylim(0.58, 1.56)
+    #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)
 
     ax = axes[1]
@@ -782,6 +811,7 @@ def _draw_group_average_raw_panel(
     panel_label: str,
     ylabel: str,
 ) -> None:
+    endpoint_labels: list[tuple[str, float]] = []
     for group_name in ("Memory", "Kernel"):
         grouped = (
             source_df[source_df["metric"].isin(GROUPS[group_name])]
@@ -799,53 +829,82 @@ def _draw_group_average_raw_panel(
                 color=GROUP_COLORS[group_name],
                 linestyle=NORM_STYLES[norm],
                 marker="o",
-                markersize=2.8,
-                linewidth=1.55,
+                markersize=4.5,
+                linewidth=2.35,
                 alpha=0.94,
             )
         own = grouped[grouped["normalization"] == "spectral_radius"].sort_values("sign_frac")
         if not own.empty:
             last = own.iloc[-1]
+            endpoint_labels.append((group_name, float(last["mean"])))
+    ax.set_title(panel_label, loc="left", fontsize=12.0, fontweight="semibold", pad=3)
+    ax.set_ylabel(ylabel, fontsize=11.4)
+    ax.margins(y=0.08)
+    _setup_paper_axis(ax)
+    if endpoint_labels:
+        y0, y1 = ax.get_ylim()
+        yrange = max(y1 - y0, 1e-12)
+        min_sep = 0.070 * yrange
+        adjusted = sorted(endpoint_labels, key=lambda item: item[1])
+        if len(adjusted) == 2 and adjusted[1][1] - adjusted[0][1] < min_sep:
+            center = 0.5 * (adjusted[0][1] + adjusted[1][1])
+            lo = max(y0 + 0.035 * yrange, center - 0.5 * min_sep)
+            hi = min(y1 - 0.035 * yrange, center + 0.5 * min_sep)
+            adjusted = [(adjusted[0][0], lo), (adjusted[1][0], hi)]
+        for group_name, y_pos in adjusted:
             ax.text(
                 1.012,
-                float(last["mean"]),
+                y_pos,
                 group_name,
                 transform=ax.get_yaxis_transform(),
                 ha="left",
                 va="center",
-                fontsize=7.4,
+                fontsize=10.5,
                 color=GROUP_COLORS[group_name],
                 clip_on=False,
             )
-    ax.set_title(panel_label, loc="left", fontsize=8.6, pad=2)
-    ax.set_ylabel(ylabel, fontsize=8.4)
-    ax.margins(y=0.08)
-    _setup_paper_axis(ax)
 
 
-def save_option_8_average_perf_cv(primary: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]) -> None:
+def save_option_8_average_perf_cv(
+    primary: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    info: dict[str, object] | None = None,
+    stem: str = "option_8_average_perf_cv",
+) -> None:
     perf, cv, scaling = primary
-    info = PRIMARY_DENSE
+    info = info or PRIMARY_DENSE
     ratio = _rho_ratio(scaling)
     left, right = _radius_regions(info, ratio)
 
     fig, axes = plt.subplots(
         3,
         1,
-        figsize=(4.85, 5.75),
+        figsize=(7.35, 7.0),
         dpi=300,
         sharex=True,
-        gridspec_kw={"height_ratios": [1.05, 1.0, 1.0], "hspace": 0.22},
+        gridspec_kw={"height_ratios": [1.0, 1.0, 1.0], "hspace": 0.24},
     )
 
     ax = axes[0]
     _shade_radius_regions(ax, left, right)
-    ax.axhline(1.0, color="#222222", linewidth=0.95, linestyle="--", alpha=0.85)
-    ax.plot(ratio["sign_frac"], ratio["rho_ratio"], color="#4B5563", marker="o", markersize=2.9, linewidth=1.65)
+    ax.axhline(1.0, color="#222222", linewidth=1.35, linestyle="--", alpha=0.85)
+    ax.plot(
+        ratio["sign_frac"],
+        ratio["rho_ratio"],
+        color="#4B5563",
+        marker="o",
+        markersize=4.6,
+        linewidth=2.45,
+    )
     _draw_q_reference_lines(ax, info)
-    ax.set_title("C. elegans 4:1 sign-normalization sweep", loc="left", fontsize=8.8, pad=3)
-    ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=8.4)
-    ax.set_ylim(0.58, 1.56)
+    ax.set_title(
+        f"{info['label']} sign-normalization sweep",
+        loc="left",
+        fontsize=13.2,
+        fontweight="semibold",
+        pad=4,
+    )
+    ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=11.4)
+    #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)
 
     _shade_radius_regions(axes[1], left, right)
@@ -855,32 +914,38 @@ def save_option_8_average_perf_cv(primary: tuple[pd.DataFrame, pd.DataFrame, pd.
     _draw_group_average_raw_panel(axes[2], cv, panel_label="Mean coefficient of variation", ylabel="CV")
 
     axes[1].set_xlabel("")
-    axes[2].set_xlabel("Negative edge fraction, $q$", fontsize=8.8)
+    axes[2].set_xlabel("Negative edge fraction, $q$", fontsize=12.5, labelpad=7)
 
     norm_handles = [
-        Line2D([0], [0], color="#333333", linestyle="-", linewidth=1.55, label=r"scale by $\rho(W)$"),
+        Line2D([0], [0], color="#333333", linestyle="-", linewidth=2.4, label=r"scale by $\rho(W)$"),
         Line2D(
             [0],
             [0],
             color="#333333",
             linestyle="--",
-            linewidth=1.55,
+            linewidth=2.4,
             label=r"scale by $\rho(W_{\mathrm{orig}})$",
         ),
     ]
     fig.legend(
         handles=norm_handles,
         loc="lower center",
-        bbox_to_anchor=(0.52, 0.005),
+        bbox_to_anchor=(0.52, 0.020),
         ncol=2,
         frameon=False,
-        fontsize=6.7,
-        handlelength=2.4,
-        columnspacing=1.2,
+        fontsize=10.2,
+        handlelength=2.8,
+        columnspacing=1.6,
     )
 
-    fig.tight_layout(rect=[0, 0.035, 1, 1])
-    _save_figure(fig, "option_8_average_perf_cv")
+    fig.subplots_adjust(
+        left=0.105,
+        right=0.890,
+        bottom=0.165,
+        top=0.955,
+        hspace=0.285,
+    )
+    _save_figure(fig, stem)
 
 
 def save_companion_summary(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]) -> None:
@@ -927,6 +992,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     datasets = {key: _load_dataset(info) for key, info in DATASETS.items()}
     primary_dense = _load_dataset(PRIMARY_DENSE)
+    dense_option8 = {
+        key: _load_dataset(info)
+        for key, info in DENSE_OPTION8_DATASETS.items()
+    }
     save_mechanism_overlay(datasets)
     save_normalization_delta(datasets)
     save_grouped_perf_cv(datasets)
@@ -934,7 +1003,12 @@ def main() -> None:
     save_compact_mechanism_response(primary_dense)
     save_metric_delta_panels(primary_dense)
     save_mechanism_plus_effect(primary_dense)
-    save_option_8_average_perf_cv(primary_dense)
+    for key, info in DENSE_OPTION8_DATASETS.items():
+        save_option_8_average_perf_cv(
+            dense_option8[key],
+            info=info,
+            stem=str(info["stem"]),
+        )
     save_companion_summary(datasets)
     print(f"saved simplified sign-normalization plots to {OUT_DIR}")
 

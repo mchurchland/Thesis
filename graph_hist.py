@@ -76,19 +76,19 @@ ANALYSIS_MODE_FILTER = [
 
 SHORT_THESIS_NAMES = {
     "real": "C. elegans",
-    "shuffle": "Weight shuffle",
-    "shuffle_weights": "Weight shuffle",
-    "celW+connShuf": "Conn. + wt. shuffle",
-    "conn_shuf": "Conn. + wt. shuffle",
-    "conn_shuf_only": "Connection shuffle",
-    "local_sign+binary": "Sign-pres. pm1 wt.",
-    "global_sign_pres": "Sign-pres. pm1 + wt. shuf.",
+    "shuffle": "Wt. shuffle",
+    "shuffle_weights": "Wt. shuffle",
+    "celW+connShuf": "Conn. + wt. shuf.",
+    "conn_shuf": "Conn. + wt. shuf.",
+    "conn_shuf_only": "Conn. shuffle",
+    "local_sign+binary": "Sign-pres. pm1",
+    "global_sign_pres": "pm1 + wt. shuf.",
     "global_sign_pres_real_w": "Sign-pres. real wt.",
     "global_sign_pres_real_weight": "Sign-pres. real wt.",
-    "binary+conshuffle+wshuffle": "pm1 sign-pres. Conn + wt. shuf.",
+    "binary+conshuffle+wshuffle": "pm1 sign/conn/wt shuf.",
     "binary_base": "Binary wt.",
-    "binary_base_topology_shuffle": "Binary wt. + shuf.",
-    "binary+shuffle": "pm1 + conn. shuffle",
+    "binary_base_topology_shuffle": "Binary wt. shuf.",
+    "binary+shuffle": "pm1 + conn. shuf.",
     "cel_randN": "CE Gaussian wt.",
     "er_randN": "ER Gaussian wt.",
     "ws_p0.1+randN": "WS Gaussian wt.",
@@ -1268,8 +1268,8 @@ def _style_3d_axis(
 ):
     """Apply a cleaner, publication-friendly 3D style."""
     ax.grid(True, which="major", linestyle=":", alpha=0.28)
-    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=-2)
-    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=-2)
+    ax.tick_params(axis="x", which="major", labelsize=tick_labelsize, pad=tick_pad)
+    ax.tick_params(axis="y", which="major", labelsize=tick_labelsize, pad=tick_pad)
     ax.tick_params(axis="z", which="major", labelsize=tick_labelsize, pad=z_tick_pad)
     y_formatter = ax.yaxis.get_major_formatter()
     if isinstance(y_formatter, mpl.ticker.ScalarFormatter):
@@ -1401,7 +1401,7 @@ def _save_3d_front_back(
             pane_edgecolor=pane_edgecolor,
         )
 
-    front_png = _safe_path(out_png)
+    front_png = _replace_path(out_png)
     front_root, front_ext = os.path.splitext(front_png)
     if not front_ext:
         front_ext = ".png"
@@ -2332,7 +2332,7 @@ def plot_frac_cv_meanline(
     mean_perf = comb_long.groupby(["mode", "metric"])["value"].mean()
     mean_cv = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
-    fig = plt.figure(figsize=(8, 6), dpi=300)
+    fig = plt.figure(figsize=(3.9, 3.45), dpi=300)
     ax = fig.add_subplot(111, projection="3d")
 
     colors = mpl.colormaps["tab10"]
@@ -2352,7 +2352,7 @@ def plot_frac_cv_meanline(
             continue
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
-        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), label=metric)
+        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), linewidth=2.0, markersize=4.8, label=metric)
         highlight_mask = np.isclose(xs, highlight_frac, rtol=0.0, atol=highlight_atol)
         if np.any(highlight_mask):
             ax.scatter(
@@ -2360,7 +2360,7 @@ def plot_frac_cv_meanline(
                 ys[highlight_mask],
                 zs[highlight_mask],
                 color="black",
-                s=36,
+                s=42,
                 depthshade=False,
                 zorder=6,
             )
@@ -2384,11 +2384,13 @@ def plot_frac_cv_meanline(
     span = x_max - x_min
     pad = 0.05 * span if span > 0 else 1.0
 
-    ax.set_xlabel(x_label, fontsize=18, labelpad=4)
-    ax.set_ylabel("mean CV", fontsize=18, labelpad=2)
-    ax.set_zlabel("mean Performance", fontsize=18, labelpad=12)
+    ax.set_xlabel("Neg. sign fraction" if x_label == "Negative Sign %" else x_label, fontsize=9.5, labelpad=2)
+    ax.set_ylabel("Mean CV", fontsize=10.5, labelpad=3)
+    ax.set_zlabel("")
     ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
+    ax.set_proj_type("ortho")
+    ax.set_box_aspect((1.18, 1.0, 0.78), zoom=1.03)
     _tight_layout_quiet(fig)
 
     out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
@@ -2399,9 +2401,9 @@ def plot_frac_cv_meanline(
         front_view=(20, -25),
         back_view=(20, 145),
        dpi=600,
-        tick_labelsize=16,
-        tick_pad=-4,
-        z_tick_pad=4,
+        tick_labelsize=8,
+        tick_pad=0,
+        z_tick_pad=2,
     )
     if show:
         plt.show()
@@ -4308,16 +4310,16 @@ def plot_cv_performance_contours_2d(
         return None
 
     bins = max(24, min(int(bins), 52))
-    fig = plt.figure(figsize=(7.2, 4.7), dpi=300)
+    fig = plt.figure(figsize=(7.35, 5.80), dpi=300)
     grid = fig.add_gridspec(
         2,
         2,
-        left=0.105,
-        right=0.875,
-        bottom=0.155,
-        top=0.955,
-        wspace=0.18,
-        hspace=0.22,
+        left=0.095,
+        right=0.865,
+        bottom=0.285,
+        top=0.940,
+        wspace=0.20,
+        hspace=0.28,
     )
     flat_axes = np.array(
         [
@@ -4369,7 +4371,7 @@ def plot_cv_performance_contours_2d(
             if levels:
                 if mode == plot_baseline_mode:
                     baseline_levels = [levels[-1]]
-                    baseline_widths = [1.8]
+                    baseline_widths = [2.25]
                     ax.contour(
                         grid_cv,
                         grid_perf,
@@ -4397,7 +4399,7 @@ def plot_cv_performance_contours_2d(
                         density,
                         levels=[levels[-1]],
                         colors=[color_map[mode]],
-                        linewidths=0.9,
+                        linewidths=1.25,
                         alpha=0.86,
                         zorder=4,
                     )
@@ -4406,23 +4408,23 @@ def plot_cv_performance_contours_2d(
             ax.scatter(
                 [float(np.mean(x))],
                 [float(np.mean(y))],
-                s=46 if mean_marker == "*" else 22,
+                s=82 if mean_marker == "*" else 42,
                 color=color_map[mode],
                 marker=mean_marker,
                 edgecolor="#222222",
-                linewidth=0.45,
+                linewidth=0.70,
                 zorder=10 if is_baseline else 6,
             )
             plotted_any = True
 
-        ax.set_title(metric, fontsize=12.5, fontweight="semibold", pad=3)
+        ax.set_title(metric, fontsize=16.0, fontweight="semibold", pad=4)
         ax.set_xlabel("")
         ax.set_ylabel("")
-        ax.tick_params(axis="both", labelsize=8.5, length=3.0, width=0.6, pad=1.5)
-        ax.grid(True, color="#cfcfcf", alpha=0.22, linewidth=0.45)
+        ax.tick_params(axis="both", labelsize=11.0, length=3.6, width=0.8, pad=2.0)
+        ax.grid(True, color="#cfcfcf", alpha=0.22, linewidth=0.55)
         ax.margins(x=0.015, y=0.025)
         for spine in ax.spines.values():
-            spine.set_linewidth(0.65)
+            spine.set_linewidth(0.85)
             spine.set_color("#303030")
 
     for idx in range(len(metrics), len(flat_axes)):
@@ -4441,39 +4443,39 @@ def plot_cv_performance_contours_2d(
                 [0],
                 [0],
                 color=color_map[mode],
-                linewidth=1.8 if is_baseline else 1.3,
+                linewidth=2.2 if is_baseline else 1.6,
                 marker=marker,
-                markersize=6.3 if marker == "*" else 4.7,
+                markersize=8.2 if marker == "*" else 6.0,
                 markeredgecolor="#222222",
-                markeredgewidth=0.45,
+                markeredgewidth=0.70,
                 label=label_map.get(mode, _short_legend_name(mode)),
             )
         )
     fig.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.020),
-        ncol=min(5, max(1, len(legend_handles))),
+        bbox_to_anchor=(0.5, 0.030),
+        ncol=min(3, max(1, len(legend_handles))),
         frameon=False,
-        fontsize=7.2,
+        fontsize=8.8,
         columnspacing=0.85,
-        handlelength=1.45,
-        handletextpad=0.45,
+        handlelength=1.55,
+        handletextpad=0.50,
         borderaxespad=0.0,
     )
-    fig.text(0.515, 0.095, "Coefficient of variation", fontsize=10.8, ha="center")
-    fig.text(0.030, 0.555, "Mean performance", fontsize=10.8, va="center", rotation=90)
+    fig.text(0.500, 0.180, "Coefficient of variation", fontsize=13.5, ha="center")
+    fig.text(0.028, 0.610, "Mean performance", fontsize=13.5, va="center", rotation=90)
     if use_rho_colors and rho_color_scalar is not None:
         cax = fig.add_axes([0.895, 0.195, 0.016, 0.70])
         cbar = fig.colorbar(rho_color_scalar, cax=cax, orientation="vertical")
         baseline_text = rho_baseline_label or "baseline"
         cbar.set_label(
             r"$\Delta \rho_{\mathrm{raw}}$ from " + baseline_text,
-            fontsize=9.2,
+            fontsize=11.0,
             rotation=270,
             labelpad=10,
         )
-        cbar.ax.tick_params(labelsize=8.4, length=2.4, width=0.6, pad=1.5)
+        cbar.ax.tick_params(labelsize=10.5, length=3.0, width=0.7, pad=1.8)
         cbar.outline.set_linewidth(0.45)
         cbar.outline.set_edgecolor("#333333")
     elif style_meta.get("sign_balance_colorbar"):
@@ -4484,7 +4486,7 @@ def plot_cv_performance_contours_2d(
             left=0.915,
             width=0.016,
             height=0.75,
-            labelsize=9,
+            labelsize=11,
             orientation="vertical",
         )
 
@@ -4560,12 +4562,12 @@ def plot_cv_performance_contour_triptych(
 
     comparison_specs = [
         {
-            "row_label": "Binary controls",
+            "row_label": "Binary",
             "baseline": "binary_base",
             "modes": ["binary_base", "binary_base_topology_shuffle"],
         },
         {
-            "row_label": "Sign-preserving controls",
+            "row_label": "Sign-pres.",
             "baseline": "local_sign+binary",
             "modes": [
                 "local_sign+binary",
@@ -4575,7 +4577,7 @@ def plot_cv_performance_contour_triptych(
             ],
         },
         {
-            "row_label": "C. elegans controls",
+            "row_label": "C. elegans",
             "baseline": "real",
             "modes": ["real", "shuffle", "celW+connShuf", "conn_shuf_only"],
         },
@@ -4710,16 +4712,16 @@ def plot_cv_performance_contour_triptych(
         metric_limits[metric] = (*cv_limits, *perf_limits)
 
     bins = max(24, min(int(bins), 52))
-    fig = plt.figure(figsize=(10.8, 7.15), dpi=300)
+    fig = plt.figure(figsize=(7.35, 6.55), dpi=300)
     grid = fig.add_gridspec(
         len(row_specs),
         len(metrics),
-        left=0.075,
-        right=0.895 if use_rho_colors else 0.975,
-        bottom=0.145,
-        top=0.925,
-        wspace=0.22,
-        hspace=0.32,
+        left=0.105,
+        right=0.865 if use_rho_colors else 0.980,
+        bottom=0.220,
+        top=0.940,
+        wspace=0.28,
+        hspace=0.36,
     )
 
     plotted_any = False
@@ -4778,7 +4780,7 @@ def plot_cv_performance_contour_triptych(
                         density,
                         levels=[contour_level],
                         colors=["white"],
-                        linewidths=[3.0],
+                    linewidths=[3.35],
                         alpha=0.96,
                         zorder=8,
                     )
@@ -4789,7 +4791,7 @@ def plot_cv_performance_contour_triptych(
                     density,
                     levels=[contour_level],
                     colors=[color],
-                    linewidths=[1.65 if is_baseline else 0.9],
+                    linewidths=[1.85 if is_baseline else 1.05],
                     alpha=1.0 if is_baseline else 0.86,
                     zorder=9 if is_baseline else 4,
                 )
@@ -4798,11 +4800,11 @@ def plot_cv_performance_contour_triptych(
                 ax.scatter(
                     [float(np.mean(x))],
                     [float(np.mean(y))],
-                    s=44 if marker == "*" else 20,
+                    s=62 if marker == "*" else 30,
                     color=color,
                     marker=marker,
                     edgecolor="#222222",
-                    linewidth=0.42,
+                    linewidth=0.50,
                     zorder=10 if is_baseline else 6,
                 )
                 plotted_any = True
@@ -4811,36 +4813,36 @@ def plot_cv_performance_contour_triptych(
                         [0],
                         [0],
                         color=color,
-                        linewidth=1.7 if is_baseline else 1.2,
+                        linewidth=1.9 if is_baseline else 1.35,
                         marker=marker,
-                        markersize=5.8 if marker == "*" else 4.4,
+                        markersize=6.8 if marker == "*" else 5.2,
                         markeredgecolor="#222222",
-                        markeredgewidth=0.42,
+                        markeredgewidth=0.50,
                         label=_short_legend_name(mode),
                     )
 
             if row_idx == 0:
-                ax.set_title(metric, fontsize=12.0, fontweight="semibold", pad=3)
+                ax.set_title(metric, fontsize=13.0, fontweight="semibold", pad=4)
             if col_idx == 0:
                 ax.text(
-                    -0.33,
+                    -0.30,
                     0.5,
                     spec["row_label"],
                     transform=ax.transAxes,
                     rotation=90,
                     ha="center",
                     va="center",
-                    fontsize=9.4,
+                    fontsize=9.8,
                     fontweight="semibold",
                 )
             ax.set_xlabel("")
             ax.set_ylabel("")
             ax.set_xlim(cv_lo, cv_hi)
             ax.set_ylim(perf_lo, perf_hi)
-            ax.tick_params(axis="both", labelsize=7.5, length=2.6, width=0.55, pad=1.2)
-            ax.grid(True, color="#cfcfcf", alpha=0.21, linewidth=0.42)
+            ax.tick_params(axis="both", labelsize=8.2, length=2.8, width=0.60, pad=1.4)
+            ax.grid(True, color="#cfcfcf", alpha=0.21, linewidth=0.45)
             for spine in ax.spines.values():
-                spine.set_linewidth(0.6)
+                spine.set_linewidth(0.65)
                 spine.set_color("#303030")
 
     if not plotted_any:
@@ -4848,19 +4850,19 @@ def plot_cv_performance_contour_triptych(
         print("[warn] contour triptych: no finite contours could be drawn.")
         return None
 
-    fig.text(0.485, 0.092, "Coefficient of variation", fontsize=10.2, ha="center")
-    fig.text(0.022, 0.540, "Mean performance", fontsize=10.2, va="center", rotation=90)
+    fig.text(0.485, 0.148, "Coefficient of variation", fontsize=11.4, ha="center")
+    fig.text(0.012, 0.575, "Mean performance", fontsize=11.4, va="center", rotation=90)
 
     if use_rho_colors and color_scalar is not None:
-        cax = fig.add_axes([0.915, 0.235, 0.014, 0.58])
+        cax = fig.add_axes([0.900, 0.310, 0.017, 0.510])
         cbar = fig.colorbar(color_scalar, cax=cax, orientation="vertical")
         cbar.set_label(
             r"$\Delta \rho_{\mathrm{raw}}$ from row baseline (%)",
-            fontsize=8.7,
+            fontsize=9.2,
             rotation=270,
-            labelpad=10,
+            labelpad=11,
         )
-        cbar.ax.tick_params(labelsize=7.8, length=2.2, width=0.55, pad=1.4)
+        cbar.ax.tick_params(labelsize=8.2, length=2.4, width=0.60, pad=1.5)
         cbar.outline.set_linewidth(0.45)
         cbar.outline.set_edgecolor("#333333")
 
@@ -4873,13 +4875,13 @@ def plot_cv_performance_contour_triptych(
         fig.legend(
             handles=legend_handles,
             loc="lower center",
-            bbox_to_anchor=(0.5, 0.018),
-            ncol=5,
+            bbox_to_anchor=(0.5, 0.030),
+            ncol=4,
             frameon=False,
-            fontsize=6.8,
-            columnspacing=0.8,
-            handlelength=1.45,
-            handletextpad=0.42,
+            fontsize=7.8,
+            columnspacing=0.95,
+            handlelength=1.55,
+            handletextpad=0.48,
             borderaxespad=0.0,
         )
 
@@ -5064,8 +5066,8 @@ def main():
             bins=max(args.bins, 36),
             show=True,
             contour_percent=args.cv_performance_contour_percent,
-            rho_delta_by_mode=rho_delta,
-            rho_baseline_label=_short_thesis_name(resolved_rho_baseline) if resolved_rho_baseline else None,
+            rho_delta_by_mode=None,
+            rho_baseline_label=None,
             baseline_mode=resolved_rho_baseline,
         )
     if args.show_cv_performance_3d:

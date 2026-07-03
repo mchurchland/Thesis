@@ -75,12 +75,12 @@ def main() -> None:
     mpl.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "axes.linewidth": 0.7,
-            "axes.labelsize": 9.5,
-            "axes.titlesize": 10.5,
-            "xtick.labelsize": 8.0,
-            "ytick.labelsize": 8.0,
-            "legend.fontsize": 8.0,
+            "axes.linewidth": 0.9,
+            "axes.labelsize": 11.5,
+            "axes.titlesize": 12.5,
+            "xtick.labelsize": 10.0,
+            "ytick.labelsize": 10.0,
+            "legend.fontsize": 10.0,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
@@ -108,7 +108,7 @@ def main() -> None:
     fig, (ax_hi, ax_lo) = plt.subplots(
         2,
         1,
-        figsize=(8.6, 6.8),
+        figsize=(7.35, 4.95),
         dpi=300,
         sharex=True,
         gridspec_kw={"height_ratios": [2.2, 1.0], "hspace": 0.06},
@@ -122,21 +122,21 @@ def main() -> None:
                 sub["sign_frac"],
                 sub["raw_rho"],
                 color=color,
-                linewidth=2.0,
+                linewidth=2.4,
                 marker="o",
-                markersize=5.4,
+                markersize=6.2,
                 markerfacecolor="white",
                 markeredgecolor=color,
-                markeredgewidth=1.0,
+                markeredgewidth=1.2,
                 label=dataset,
                 zorder=3,
             )
-        ax.axvline(REF_SIGN_FRAC, color="#444444", linestyle="--", linewidth=1.0, alpha=0.9, zorder=2)
-        ax.grid(True, axis="y", color="#dfdfdf", linewidth=0.5, alpha=0.7)
+        ax.axvline(REF_SIGN_FRAC, color="#444444", linestyle="--", linewidth=1.2, alpha=0.9, zorder=2)
+        ax.grid(True, axis="y", color="#dfdfdf", linewidth=0.65, alpha=0.7)
         ax.spines["right"].set_visible(False)
         for spine in ax.spines.values():
             spine.set_color("#333333")
-            spine.set_linewidth(0.7)
+            spine.set_linewidth(0.9)
 
     ax_hi.spines["bottom"].set_visible(False)
     ax_lo.spines["top"].set_visible(False)
@@ -149,10 +149,10 @@ def main() -> None:
     ax_lo.set_xlabel("sign fraction")
     ax_lo.set_ylabel(r"raw $\rho(W)$")
     ax_hi.set_ylabel(r"raw $\rho(W)$")
-    ax_hi.set_title("Mean raw spectral radius", fontweight="semibold", pad=4)
+    ax_hi.set_title("Mean raw spectral radius", fontweight="semibold", pad=5)
 
-    ax_hi.axhline(ce_original_rho, color="#d55e00", linestyle="--", linewidth=1.5, alpha=0.95, zorder=2)
-    ax_lo.axhline(er_at_ce_rho, color="#56b4e9", linestyle=":", linewidth=1.6, alpha=0.95, zorder=2)
+    ax_hi.axhline(ce_original_rho, color="#d55e00", linestyle="--", linewidth=1.8, alpha=0.95, zorder=2)
+    ax_lo.axhline(er_at_ce_rho, color="#56b4e9", linestyle=":", linewidth=1.9, alpha=0.95, zorder=2)
 
     d = 0.008
     kwargs_hi = dict(transform=ax_hi.transAxes, color="k", clip_on=False, linewidth=1.0)
@@ -162,9 +162,17 @@ def main() -> None:
     ax_lo.plot((-d, +d), (1 - d, 1 + d), **kwargs_lo)
     ax_lo.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs_lo)
 
-    ax_hi.text(1.005, ce_original_rho, "C. elegans original", color="#d55e00", fontsize=8.0, va="center", ha="left", transform=ax_hi.get_yaxis_transform())
-    ax_lo.text(1.005, er_at_ce_rho, "ER at CE fraction", color="#56b4e9", fontsize=8.0, va="center", ha="left", transform=ax_lo.get_yaxis_transform())
-    ax_lo.text(REF_SIGN_FRAC + 0.008, lower_max * 0.12, "empirical sign fraction", fontsize=8.0, color="#444444", va="bottom")
+    ax_hi.text(1.005, ce_original_rho, "C. elegans original", color="#d55e00", fontsize=9.4, va="center", ha="left", transform=ax_hi.get_yaxis_transform())
+    ax_lo.text(1.005, er_at_ce_rho, "ER at CE fraction", color="#56b4e9", fontsize=9.4, va="center", ha="left", transform=ax_lo.get_yaxis_transform())
+    ax_lo.text(
+        REF_SIGN_FRAC + 0.012,
+        lower_max * 0.94,
+        "empirical sign fraction",
+        fontsize=9.4,
+        color="#444444",
+        va="top",
+        ha="left",
+    )
 
     c_curve = agg[(agg["dataset"] == "Matched C. elegans sweep")].sort_values("sign_frac")
     drop_point = c_curve.loc[c_curve["sign_frac"].astype(float).sub(REF_SIGN_FRAC).abs().idxmin()]
@@ -174,18 +182,35 @@ def main() -> None:
         xytext=(0.34, min(14.0, lower_max * 0.8)),
         textcoords="data",
         arrowprops=dict(arrowstyle="->", color="#d55e00", lw=1.3),
-        fontsize=8.2,
+        fontsize=9.2,
         color="#d55e00",
         ha="left",
         va="center",
     )
 
-    ax_hi.legend(frameon=False, loc="upper right")
-    fig.suptitle(
-        "Sign-sweep quick look: the C. elegans sweep can cross below the original raw spectral radius before the empirical sign fraction",
-        y=0.98,
+    ax_hi.text(
+        0.70,
+        0.92,
+        "C. elegans sweep",
+        color="#d55e00",
+        fontsize=10.6,
+        fontweight="semibold",
+        transform=ax_hi.transAxes,
+        ha="left",
+        va="center",
     )
-    fig.subplots_adjust(top=0.905, bottom=0.11, left=0.085, right=0.975, hspace=0.08)
+    ax_lo.text(
+        0.70,
+        0.74,
+        "ER sweep",
+        color="#56b4e9",
+        fontsize=10.6,
+        fontweight="semibold",
+        transform=ax_lo.transAxes,
+        ha="left",
+        va="center",
+    )
+    fig.subplots_adjust(top=0.925, bottom=0.125, left=0.095, right=0.945, hspace=0.08)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     png = OUT_DIR / f"{OUT_STEM}.png"
