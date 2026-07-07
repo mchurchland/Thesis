@@ -55,6 +55,16 @@ def _load_connectome_names(adj_path: str, n_nodes: int) -> np.ndarray | None:
     return None
 
 
+def load_connectome_node_names(adj_path: str, n_nodes: int) -> list[str]:
+    names = _load_connectome_names(adj_path, n_nodes)
+    if names is None:
+        return [str(i) for i in range(n_nodes)]
+    out = [str(name) if str(name) else str(i) for i, name in enumerate(names)]
+    if len(out) < n_nodes:
+        out.extend(str(i) for i in range(len(out), n_nodes))
+    return out[:n_nodes]
+
+
 def load_unknown_sign_weights(
     adj_path: str | None,
     unknown_path: str | None = None,
@@ -130,6 +140,13 @@ def _count_edges(A: np.ndarray) -> int:
     M = np.abs(A) > 0
     #np.fill_diagonal(M, False) I want to include self edges
     return int(M.sum())
+
+
+def negative_edge_fraction(W: np.ndarray) -> float:
+    nz = int(np.count_nonzero(W))
+    if nz == 0:
+        return 0.0
+    return float(np.count_nonzero(W < 0)) / float(nz)
 
 
 def _shuffle_ce_weights(Wbio: np.ndarray, rng: np.random.Generator) -> np.ndarray:

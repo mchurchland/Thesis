@@ -174,6 +174,57 @@ def _rho_ratio(scaling: pd.DataFrame) -> pd.DataFrame:
     return base
 
 
+def _group_average_values(source_df: pd.DataFrame) -> pd.Series:
+    parts = []
+    for group_name in ("Memory", "Kernel"):
+        grouped = (
+            source_df[source_df["metric"].isin(GROUPS[group_name])]
+            .groupby(["normalization", "sign_frac"], as_index=False)
+            .agg(mean=("mean", "mean"))
+        )
+        if not grouped.empty:
+            parts.append(grouped["mean"])
+    if not parts:
+        return pd.Series(dtype=float)
+    return pd.concat(parts, ignore_index=True)
+
+
+def _padded_limits(values, pad_frac: float = 0.06, floor: float | None = None) -> tuple[float, float]:
+    arr = pd.to_numeric(pd.Series(values), errors="coerce").to_numpy(float)
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return (0.0, 1.0)
+    lo = float(np.nanmin(arr))
+    hi = float(np.nanmax(arr))
+    if hi <= lo:
+        spread = max(abs(lo) * 0.05, 1e-3)
+        lo -= spread
+        hi += spread
+    pad = pad_frac * (hi - lo)
+    lo -= pad
+    hi += pad
+    if floor is not None:
+        lo = min(float(floor), lo)
+    return lo, hi
+
+
+def option8_shared_axis_limits(
+    datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]
+) -> dict[str, tuple[float, float]]:
+    ratio_values = []
+    perf_values = []
+    cv_values = []
+    for perf, cv, scaling in datasets.values():
+        ratio_values.append(_rho_ratio(scaling)["rho_ratio"])
+        perf_values.append(_group_average_values(perf))
+        cv_values.append(_group_average_values(cv))
+    return {
+        "ratio": _padded_limits(pd.concat(ratio_values, ignore_index=True), pad_frac=0.05),
+        "performance": _padded_limits(pd.concat(perf_values, ignore_index=True), pad_frac=0.06, floor=0.0),
+        "cv": _padded_limits(pd.concat(cv_values, ignore_index=True), pad_frac=0.08),
+    }
+
+
 def _crossings(xs: np.ndarray, ys: np.ndarray, level: float = 1.0) -> list[float]:
     xs = np.asarray(xs, dtype=float)
     ys = np.asarray(ys, dtype=float) - float(level)
@@ -810,6 +861,7 @@ def _draw_group_average_raw_panel(
     *,
     panel_label: str,
     ylabel: str,
+    y_limits: tuple[float, float] | None = None,
 ) -> None:
     endpoint_labels: list[tuple[str, float]] = []
     for group_name in ("Memory", "Kernel"):
@@ -840,6 +892,8 @@ def _draw_group_average_raw_panel(
     ax.set_title(panel_label, loc="left", fontsize=12.0, fontweight="semibold", pad=3)
     ax.set_ylabel(ylabel, fontsize=11.4)
     ax.margins(y=0.08)
+    if y_limits is not None:
+        ax.set_ylim(*y_limits)
     _setup_paper_axis(ax)
     if endpoint_labels:
         y0, y1 = ax.get_ylim()
@@ -869,6 +923,7 @@ def save_option_8_average_perf_cv(
     primary: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
     info: dict[str, object] | None = None,
     stem: str = "option_8_average_perf_cv",
+    axis_limits: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     perf, cv, scaling = primary
     info = info or PRIMARY_DENSE
@@ -904,14 +959,27 @@ def save_option_8_average_perf_cv(
         pad=4,
     )
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=11.4)
-    #ax.set_ylim(0.58, 1.56)
+    if axis_limits and "ratio" in axis_limits:
+        ax.set_ylim(*axis_limits["ratio"])
     _setup_paper_axis(ax)
 
     _shade_radius_regions(axes[1], left, right)
-    _draw_group_average_raw_panel(axes[1], perf, panel_label="Mean performance", ylabel="Performance")
+    _draw_group_average_raw_panel(
+        axes[1],
+        perf,
+        panel_label="Mean performance",
+        ylabel="Performance",
+        y_limits=axis_limits.get("performance") if axis_limits else None,
+    )
 
     _shade_radius_regions(axes[2], left, right)
-    _draw_group_average_raw_panel(axes[2], cv, panel_label="Mean coefficient of variation", ylabel="CV")
+    _draw_group_average_raw_panel(
+        axes[2],
+        cv,
+        panel_label="Mean coefficient of variation",
+        ylabel="CV",
+        y_limits=axis_limits.get("cv") if axis_limits else None,
+    )
 
     axes[1].set_xlabel("")
     axes[2].set_xlabel("Negative edge fraction, $q$", fontsize=12.5, labelpad=7)
@@ -996,6 +1064,7 @@ def main() -> None:
         key: _load_dataset(info)
         for key, info in DENSE_OPTION8_DATASETS.items()
     }
+    option8_axis_limits = option8_shared_axis_limits(dense_option8)
     save_mechanism_overlay(datasets)
     save_normalization_delta(datasets)
     save_grouped_perf_cv(datasets)
@@ -1008,6 +1077,7 @@ def main() -> None:
             dense_option8[key],
             info=info,
             stem=str(info["stem"]),
+            axis_limits=option8_axis_limits,
         )
     save_companion_summary(datasets)
     print(f"saved simplified sign-normalization plots to {OUT_DIR}")

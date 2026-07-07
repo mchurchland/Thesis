@@ -34,7 +34,9 @@ from util.util import (  # noqa: E402
     assign_random_unknown_signs,
     build_reservoir,
     load_connectome,
+    load_connectome_node_names,
     load_unknown_sign_weights,
+    negative_edge_fraction,
 )
 from graph_hist import _short_legend_name  # noqa: E402
 
@@ -254,20 +256,13 @@ def load_ce_with_project_code(ce_adj: str, ce_ei: str) -> tuple[np.ndarray, np.n
     if W_bio is None:
         raise RuntimeError("Could not load CE adjacency via util.util.load_connectome.")
 
-    labels = None
-    if name2idx is not None:
-        labels = [""] * W_bio.shape[0]
-        for name, idx in name2idx.items():
-            labels[int(idx)] = str(name)
+    labels = load_connectome_node_names(ce_adj, W_bio.shape[0]) if name2idx is not None else None
 
     return W_bio.astype(np.float32), None if ei_labels is None else ei_labels.astype(np.float32), labels
 
 
 def _ce_negative_fraction(W: np.ndarray) -> float:
-    nz = int((W != 0).sum())
-    if nz == 0:
-        return 0.0
-    return float((W < 0).sum()) / float(nz)
+    return negative_edge_fraction(W)
 
 
 def _build_from_feature_conn(
