@@ -19,6 +19,7 @@ import os
 import sys
 import argparse
 import csv
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
 import numpy as np
 import pandas as pd
 import itertools
@@ -521,6 +522,40 @@ def parse_args():
         "--sign-norm-prefix",
         default="sign_test_og_cel",
         help="Mode prefix used to identify sign-normalization ablation rows.",
+    )
+    ap.add_argument(
+        "--triad-sign-fraction-plot",
+        action="store_true",
+        help=(
+            "Plot triad sign-fraction results and exit. Reads the grouped triad summary CSV "
+            "and plots sign_frac on x versus triad_avg_abs_w_mean_mean on y."
+        ),
+    )
+    ap.add_argument(
+        "--triad-summary-csv",
+        default="network_stats/triad_sign_fraction_results/triad_sign_fraction_group_summary.ALL.csv",
+        help="Grouped triad summary CSV produced by triad_sign_fraction_experiment.py --merge-chunks.",
+    )
+    ap.add_argument(
+        "--triad-plot-out",
+        default="",
+        help="Optional output path for --triad-sign-fraction-plot.",
+    )
+    ap.add_argument(
+        "--triad-normalization",
+        default="spectral_radius",
+        help="Normalization filter for triad plot. Use 'all' to plot every normalization present.",
+    )
+    ap.add_argument(
+        "--triad-scope",
+        default="closed",
+        help="Triad scope filter for triad plot. Use 'all' to facet every scope present.",
+    )
+    ap.add_argument(
+        "--triad-rho-target",
+        type=float,
+        default=None,
+        help="Optional rho_target filter for triad plot. Default facets all rho_target values.",
     )
     ap.add_argument(
         "--show-cv-performance-3d",
@@ -2100,6 +2135,138 @@ def plot_sign_norm_ablation(combined: pd.DataFrame, out_dir: str, prefix: str = 
     )
 
 
+def plot_triad_sign_fraction_summary(
+    summary_csv: str,
+    out_dir: str,
+    *,
+    out_path: str = "",
+    normalization: str = "spectral_radius",
+    triad_scope: str = "closed",
+    rho_target: float | None = None,
+) -> str | None:
+    if not os.path.isfile(summary_csv):
+        raise FileNotFoundError(f"Triad grouped summary CSV not found: {summary_csv}")
+
+    df = pd.read_csv(summary_csv)
+    required = {"dataset", "normalization", "rho_target", "sign_frac", "triad_scope", "triad_avg_abs_w_mean_mean"}
+    missing = sorted(required - set(df.columns))
+    if missing:
+        raise ValueError(f"Triad summary is missing required columns: {missing}")
+
+    for col in ("rho_target", "sign_frac", "triad_avg_abs_w_mean_mean", "triad_avg_abs_w_mean_std"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df[np.isfinite(df["sign_frac"]) & np.isfinite(df["triad_avg_abs_w_mean_mean"])].copy()
+
+    if normalization and str(normalization).lower() != "all":
+        df = df[df["normalization"].astype(str) == str(normalization)].copy()
+    if triad_scope and str(triad_scope).lower() != "all":
+        df = df[df["triad_scope"].astype(str) == str(triad_scope)].copy()
+    if rho_target is not None:
+        df = df[np.isclose(df["rho_target"].astype(float), float(rho_target))].copy()
+
+    if df.empty:
+        print("[warn] triad sign-fraction plot: no rows after filters.")
+        return None
+
+    datasets = sorted(df["dataset"].astype(str).unique())
+    scopes = sorted(df["triad_scope"].astype(str).unique())
+    rhos = sorted(df["rho_target"].dropna().unique())
+    if not rhos:
+        rhos = [np.nan]
+
+    n_rows = len(scopes)
+    n_cols = len(rhos)
+    fig_w = max(5.0, 3.9 * n_cols)
+    fig_h = max(3.6, 3.1 * n_rows)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), dpi=300, squeeze=False)
+
+    colors = dict(zip(datasets, plt.cm.tab10(np.linspace(0, 1, max(len(datasets), 1)))))
+    handles = []
+    labels = []
+
+    for row_idx, scope in enumerate(scopes):
+        for col_idx, rho in enumerate(rhos):
+            ax = axes[row_idx, col_idx]
+            if np.isfinite(rho):
+                panel = df[
+                    (df["triad_scope"].astype(str) == scope)
+                    & np.isclose(df["rho_target"].astype(float), float(rho))
+                ].copy()
+            else:
+                panel = df[df["triad_scope"].astype(str) == scope].copy()
+            if panel.empty:
+                ax.set_axis_off()
+                continue
+
+            for dataset in datasets:
+                sub = panel[panel["dataset"].astype(str) == dataset].sort_values("sign_frac")
+                if sub.empty:
+                    continue
+                xs = sub["sign_frac"].to_numpy(float)
+                ys = sub["triad_avg_abs_w_mean_mean"].to_numpy(float)
+                yerr = None
+                if "triad_avg_abs_w_mean_std" in sub.columns:
+                    yerr_vals = sub["triad_avg_abs_w_mean_std"].to_numpy(float)
+                    if np.isfinite(yerr_vals).any():
+                        yerr = np.nan_to_num(yerr_vals, nan=0.0)
+                line = ax.errorbar(
+                    xs,
+                    ys,
+                    yerr=yerr,
+                    marker="o",
+                    linewidth=2.0,
+                    markersize=4.2,
+                    capsize=2.4 if yerr is not None else 0.0,
+                    color=colors[dataset],
+                    label=dataset,
+                )
+                if row_idx == 0 and col_idx == 0:
+                    handles.append(line)
+                    labels.append(dataset)
+
+            title_bits = []
+            if len(scopes) > 1:
+                title_bits.append(scope)
+            if np.isfinite(rho):
+                title_bits.append(rf"$\rho={rho:g}$")
+            ax.set_title(" | ".join(title_bits) if title_bits else "Triad |w|")
+            ax.set_xlabel("sign flip fraction")
+            ax.set_ylabel(r"Mean triad average $|w|$")
+            ax.set_xlim(-0.02, 1.02)
+            ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
+            ax.grid(True, alpha=0.24)
+            ax.margins(y=0.08)
+
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.98),
+            ncol=min(len(handles), 4),
+            frameon=False,
+        )
+
+    norm_label = "all normalizations" if str(normalization).lower() == "all" else _sign_norm_label(normalization)
+    scope_label = "all scopes" if str(triad_scope).lower() == "all" else str(triad_scope)
+    fig.suptitle(
+        rf"Triad average $|w|$ by sign fraction ({norm_label}, {scope_label})",
+        y=1.02 if handles else 0.99,
+        fontsize=15,
+    )
+    fig.tight_layout(rect=[0.02, 0.02, 1.0, 0.92 if handles else 0.95])
+
+    os.makedirs(out_dir, exist_ok=True)
+    if not out_path:
+        out_path = os.path.join(out_dir, "triad_avg_abs_w_by_sign_fraction.png")
+    out_path = _replace_path(out_path)
+    fig.savefig(out_path, dpi=300, facecolor="white", bbox_inches="tight")
+    plt.close(fig)
+    print(f"[saved] {out_path}")
+    return out_path
+
+
 
 # --------------------------- plots ---------------------------
 def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
@@ -2332,13 +2499,15 @@ def plot_frac_cv_meanline(
     mean_perf = comb_long.groupby(["mode", "metric"])["value"].mean()
     mean_cv = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
-    fig = plt.figure(figsize=(3.9, 3.45), dpi=300)
+    fig = plt.figure(figsize=(4.0, 3.2), dpi=300)
     ax = fig.add_subplot(111, projection="3d")
 
     colors = mpl.colormaps["tab10"]
     highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.22058823529411764
+    highlight_label = "C. elegans\nsign frac"
     highlight_atol = 1e-12
     plotted_any = False
+    highlight_labeled = False
     for idx, metric in enumerate(metrics):
         rows = []
         for mode in modes:
@@ -2363,7 +2532,9 @@ def plot_frac_cv_meanline(
                 s=42,
                 depthshade=False,
                 zorder=6,
+                label=highlight_label if not highlight_labeled else "_nolegend_",
             )
+            highlight_labeled = True
         plotted_any = True
 
     if not plotted_any:
@@ -2384,32 +2555,73 @@ def plot_frac_cv_meanline(
     span = x_max - x_min
     pad = 0.05 * span if span > 0 else 1.0
 
-    ax.set_xlabel("Neg. sign fraction" if x_label == "Negative Sign %" else x_label, fontsize=9.5, labelpad=2)
-    ax.set_ylabel("Mean CV", fontsize=10.5, labelpad=3)
+    axis_x_label = "Neg. Sign Frac" if x_label == "Negative Sign %" else x_label
+    ax.set_xlabel(axis_x_label, fontsize=10.2, labelpad=0)
+    ax.set_ylabel("Mean CV", fontsize=10.5, labelpad=-3)
     ax.set_zlabel("")
     ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
     ax.set_proj_type("ortho")
-    ax.set_box_aspect((1.18, 1.0, 0.78), zoom=1.03)
+    ax.set_box_aspect((1.18, 1.0, 0.78), zoom=1.16)
+    ax.xaxis.label.set_clip_on(False)
+    ax.yaxis.label.set_clip_on(False)
+    ax.zaxis.label.set_clip_on(False)
+    _style_3d_axis(ax, tick_labelsize=8, tick_pad=-3, z_tick_pad=-2)
+    ax.view_init(elev=20, azim=-18)
+    fig.text(
+        1.035,
+        0.52,
+        "Mean Performance",
+        fontsize=9.8,
+        rotation=90,
+        ha="center",
+        va="center",
+    )
+    handles, labels = ax.get_legend_handles_labels()
+    reference_entries = [
+        (handle, label)
+        for handle, label in zip(handles, labels)
+        if label == highlight_label
+    ]
+    curve_entries = [
+        (handle, label)
+        for handle, label in zip(handles, labels)
+        if label != highlight_label
+    ]
+    handles, labels = zip(*(curve_entries + reference_entries))
+    fig.legend(
+        handles,
+        labels,
+        frameon=True,
+        fancybox=False,
+        facecolor="white",
+        edgecolor="0.86",
+        framealpha=1.0,
+        fontsize=8.5,
+        loc="upper left",
+        bbox_to_anchor=(0.05, 1.1),
+        borderaxespad=0.0,
+        handlelength=2.0,
+        borderpad=0.42,
+        labelspacing=0.5,
+        markerscale=1.1,
+    )
     _tight_layout_quiet(fig)
 
-    out_fig = os.path.join(out_dir, "meanpoint_frac_cv_lines.png")
-    saved_paths = _save_3d_front_back(
-        fig,
-        ax,
+    out_fig = _replace_path(os.path.join(out_dir, "meanpoint_frac_cv_lines.png"))
+    fig.subplots_adjust(left=0.02, right=0.98, bottom=-0.04, top=1.18)
+    fig.savefig(
         out_fig,
-        front_view=(20, -25),
-        back_view=(20, 145),
-       dpi=600,
-        tick_labelsize=8,
-        tick_pad=0,
-        z_tick_pad=2,
+        dpi=600,
+        bbox_inches="tight",
+        pad_inches=0.005,
+        facecolor="white",
+        edgecolor="white",
     )
     if show:
         plt.show()
     plt.close(fig)
-    for out_path in saved_paths:
-        print(f"[saved] {out_path}")
+    print(f"[saved] {out_fig}")
 
 
 def plot_weight_gauss_mean_cv(
@@ -4900,6 +5112,17 @@ def plot_cv_performance_contour_triptych(
 def main():
     args = parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
+
+    if args.triad_sign_fraction_plot:
+        plot_triad_sign_fraction_summary(
+            args.triad_summary_csv,
+            args.out_dir,
+            out_path=args.triad_plot_out,
+            normalization=args.triad_normalization,
+            triad_scope=args.triad_scope,
+            rho_target=args.triad_rho_target,
+        )
+        return
 
     wants_compare = bool(args.compare_mean_a or args.compare_mean_b or args.compare_only)
     if wants_compare:

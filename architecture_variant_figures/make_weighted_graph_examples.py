@@ -10,9 +10,34 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import math
+import os
 from pathlib import Path
 import re
 import sys
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
+import matplotlib as mpl
+
+INTERACTIVE_BACKENDS = ("Qt5Agg", "QtAgg", "TkAgg")
+
+
+def select_interactive_backend() -> str | None:
+    for backend in INTERACTIVE_BACKENDS:
+        try:
+            mpl.use(backend, force=True)
+            return backend
+        except Exception:
+            continue
+    return None
+
+if not os.environ.get("MPLBACKEND"):
+    show_requested = "--show" in sys.argv
+    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    if show_requested and has_display:
+        if select_interactive_backend() is None:
+            mpl.use("Agg")
+    else:
+        mpl.use("Agg")
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -20,6 +45,9 @@ import numpy as np
 import torch
 from matplotlib import colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
+
+if "--show" in sys.argv:
+    print(f"[show] Matplotlib backend: {mpl.get_backend()}")
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -239,6 +267,11 @@ def parse_args() -> argparse.Namespace:
         help="Draw arrowheads to indicate edge direction (can be visually dense).",
     )
     p.add_argument(
+        "--show",
+        action="store_true",
+        help="Show generated figures interactively after saving, when a display backend is available.",
+    )
+    p.add_argument(
         "--truncate-drops-negatives",
         action="store_true",
         help="If set, truncation by --max-edges may drop negative edges. Default keeps all negative edges visible.",
@@ -249,6 +282,22 @@ def parse_args() -> argparse.Namespace:
         help="Write the index and composite grid figures only; do not regenerate one-model PNGs.",
     )
     return p.parse_args()
+
+
+def maybe_show(show: bool) -> None:
+    if show:
+        if mpl.get_backend().lower() == "agg":
+            selected = select_interactive_backend()
+            if selected is not None:
+                plt.switch_backend(selected)
+        backend = mpl.get_backend()
+        if backend.lower() == "agg":
+            if not getattr(maybe_show, "_warned_no_backend", False):
+                print(f"[warn] --show requested, but Matplotlib is still on backend: {backend}")
+                maybe_show._warned_no_backend = True
+            return
+        print(f"[show] Displaying with backend: {backend}")
+        plt.show()
 
 
 def load_ce_with_project_code(ce_adj: str, ce_ei: str) -> tuple[np.ndarray, np.ndarray | None, list[str] | None]:
@@ -714,6 +763,7 @@ def make_variant_figure(
     cbar_tick_fontsize: int,
     show_direction: bool,
     figure_dpi: int,
+    show: bool,
 ) -> None:
     W_ref = ce_base
     W_var, panel_pos = build_variant_panel_data(
@@ -770,6 +820,7 @@ def make_variant_figure(
     #fig.suptitle(f"{variant.slug}: {variant.title}", fontsize=suptitle_fontsize, y=1.02)
     fig.subplots_adjust(left=0.00, right=1.0, top=1.0, bottom=0.00, wspace=0.00)
     fig.savefig(outdir / f"{variant.slug}.png", dpi=figure_dpi)
+    maybe_show(show)
     plt.close(fig)
 
 
@@ -792,6 +843,7 @@ def make_variant_grid_figures(
     show_grid_titles: bool,
     show_direction: bool,
     figure_dpi: int,
+    show: bool,
 ) -> list[Path]:
     lettered = [(idx, _panel_letter(idx), variant) for idx, variant in enumerate(variants)]
     ncols = 2
@@ -872,6 +924,7 @@ def make_variant_grid_figures(
         else:
             fig.subplots_adjust(left=0.01, right=0.99, top=0.995, bottom=0.005, wspace=0.01, hspace=0.03)
         fig.savefig(out_path, dpi=figure_dpi)
+        maybe_show(show)
         plt.close(fig)
         written.append(out_path)
 
@@ -883,6 +936,7 @@ def make_index_figure(
     outdir: Path,
     index_fontsize: int,
     figure_dpi: int,
+    show: bool,
 ) -> None:
     lines = [
         "Architecture variant graph files:",
@@ -900,6 +954,7 @@ def make_index_figure(
     ax.text(0.01, 0.98, "\n".join(lines), va="top", family="monospace", fontsize=index_fontsize)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
     fig.savefig(outdir / "00_file_index.png", dpi=figure_dpi)
+    maybe_show(show)
     plt.close(fig)
 
 
@@ -922,6 +977,7 @@ def make_new_4to1_four_panel(
     panel_title_fontsize: int,
     show_direction: bool,
     figure_dpi: int,
+    show: bool,
 ) -> None:
     if ce_known.shape != ce_removed.shape:
         raise ValueError(
@@ -1006,6 +1062,7 @@ def make_new_4to1_four_panel(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.subplots_adjust(left=0.01, right=0.99, top=0.925, bottom=0.01, wspace=0.015, hspace=0.20)
     fig.savefig(out_path, dpi=figure_dpi)
+    maybe_show(show)
     plt.close(fig)
 
 
@@ -1038,6 +1095,7 @@ def main() -> None:
             panel_title_fontsize=args.panel_title_fontsize,
             show_direction=args.show_direction,
             figure_dpi=args.figure_dpi,
+            show=args.show,
         )
         print(f"Wrote 1 file to: {out_path.resolve()}")
         return
@@ -1066,6 +1124,7 @@ def main() -> None:
         outdir,
         index_fontsize=args.index_fontsize,
         figure_dpi=args.figure_dpi,
+        show=args.show,
     )
     grid_paths = make_variant_grid_figures(
         variants=paper_variants,
@@ -1086,6 +1145,7 @@ def main() -> None:
         show_grid_titles=args.grid_titles,
         show_direction=args.show_direction,
         figure_dpi=args.figure_dpi,
+        show=args.show,
     )
     single_count = 0
     if not args.skip_individual:
@@ -1113,6 +1173,7 @@ def main() -> None:
                 cbar_tick_fontsize=args.cbar_tick_fontsize,
                 show_direction=args.show_direction,
                 figure_dpi=args.figure_dpi,
+                show=args.show,
             )
             single_count += 1
 
