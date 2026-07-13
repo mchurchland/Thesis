@@ -4774,9 +4774,9 @@ def plot_cv_performance_contour_triptych(
 
     comparison_specs = [
         {
-            "row_label": "Binary",
-            "baseline": "binary_base",
-            "modes": ["binary_base", "binary_base_topology_shuffle"],
+            "row_label": "C. elegans",
+            "baseline": "real",
+            "modes": ["real", "shuffle", "celW+connShuf", "conn_shuf_only"],
         },
         {
             "row_label": "Sign-pres.",
@@ -4789,9 +4789,9 @@ def plot_cv_performance_contour_triptych(
             ],
         },
         {
-            "row_label": "C. elegans",
-            "baseline": "real",
-            "modes": ["real", "shuffle", "celW+connShuf", "conn_shuf_only"],
+            "row_label": "Binary",
+            "baseline": "binary_base",
+            "modes": ["binary_base", "binary_base_topology_shuffle"],
         },
     ]
     available_modes = set(joint["mode"].astype(str))

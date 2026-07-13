@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
 
 from inv_arc_test import NORMALIZATION_MODES, SWEEP_SR, _split_indices
+from network_stats.run_one import run_reservoir_with_pre
 from util.util import (
     _count_edges,
     assign_random_unknown_signs,
@@ -200,6 +201,83 @@ def triad_weight_summaries(
     return [row], details
 
 
+@torch.no_grad()
+def activation_summaries(
+    W: torch.Tensor,
+    Win: torch.Tensor,
+    *,
+    node_names: list[str],
+    n_steps: int,
+    washout: int,
+    threshold: float,
+    leak: float,
+    seed: int,
+) -> tuple[dict[str, float | int], list[dict[str, float | int | str]]]:
+    """Count thresholded reservoir-state activations for every neuron.
+
+    The reservoir uses a continuous tanh state, rather than discrete biological
+    spikes.  Here an activation is therefore one sampled time point with
+    ``abs(state) >= threshold``; an onset is a transition into that active
+    state.  Both are recorded so the results distinguish sustained activity
+    from separate activation events.
+    """
+    if n_steps <= 0 or washout < 0:
+        raise ValueError("activation n_steps must be positive and washout must be non-negative.")
+    if not (0.0 <= threshold <= 1.0):
+        raise ValueError("activation threshold must be between 0 and 1 for tanh states.")
+    if not (0.0 < leak <= 1.0):
+        raise ValueError("activation leak must be in (0, 1].")
+
+    generator = torch.Generator(device=W.device)
+    generator.manual_seed(int(seed))
+    u = torch.rand(
+        (washout + n_steps, 1),
+        generator=generator,
+        device=W.device,
+        dtype=W.dtype,
+    ).mul_(2.0).sub_(1.0)
+    states, _ = run_reservoir_with_pre(W, Win, u, leak=leak)
+    active = states[washout:].abs() >= threshold
+    active_counts = active.sum(dim=0).cpu().numpy().astype(np.int64, copy=False)
+
+    if washout:
+        prior_active = (states[washout - 1].abs() >= threshold).unsqueeze(0)
+    else:
+        prior_active = torch.zeros((1, W.shape[0]), dtype=torch.bool, device=W.device)
+    activation_onsets = active & ~torch.cat((prior_active, active[:-1]), dim=0)
+    onset_counts = activation_onsets.sum(dim=0).cpu().numpy().astype(np.int64, copy=False)
+
+    n_nodes = int(W.shape[0])
+    total_active = int(active_counts.sum())
+    total_onsets = int(onset_counts.sum())
+    active_per_step = active.sum(dim=1).cpu().numpy().astype(np.float64, copy=False)
+    summary: dict[str, float | int] = {
+        "activation_steps": int(n_steps),
+        "activation_washout": int(washout),
+        "activation_threshold_abs_state": float(threshold),
+        "activation_leak": float(leak),
+        "active_state_count": total_active,
+        "active_state_fraction": float(total_active / (n_steps * n_nodes)),
+        "active_neurons_per_step_mean": float(np.mean(active_per_step)),
+        "active_neurons_per_step_std": float(np.std(active_per_step, ddof=1)) if n_steps > 1 else 0.0,
+        "neurons_active_at_least_once": int(np.count_nonzero(active_counts)),
+        "activation_onset_count": total_onsets,
+        "activation_onset_rate": float(total_onsets / (n_steps * n_nodes)),
+    }
+    detail_rows: list[dict[str, float | int | str]] = []
+    for node_idx, (active_count, onset_count) in enumerate(zip(active_counts, onset_counts)):
+        detail_rows.append(
+            {
+                "node_index": node_idx,
+                "node_name": node_names[node_idx],
+                "active_state_count": int(active_count),
+                "active_state_fraction": float(active_count / n_steps),
+                "activation_onset_count": int(onset_count),
+            }
+        )
+    return summary, detail_rows
+
+
 def _append_rows(path: Path, rows: list[dict[str, object]]) -> None:
     if not rows:
         return
@@ -254,13 +332,19 @@ def _summarize_repeats(summary_csv: Path, grouped_csv: Path) -> None:
     if df.empty:
         return
     group_cols = ["dataset", "job", "normalization", "rho_target", "sign_frac", "triad_scope"]
-    value_cols = [
+    requested_value_cols = [
         "n_edges",
         "negative_edge_fraction",
         "raw_rho",
         "ref_rho",
         "post_rho",
         "scale_factor",
+        "active_state_count",
+        "active_state_fraction",
+        "active_neurons_per_step_mean",
+        "neurons_active_at_least_once",
+        "activation_onset_count",
+        "activation_onset_rate",
         "triad_count",
         "triad_edge_count_mean",
         "triad_avg_abs_w_mean",
@@ -270,6 +354,7 @@ def _summarize_repeats(summary_csv: Path, grouped_csv: Path) -> None:
         "triad_cv_abs_w_mean",
         "triad_cv_abs_w_std",
     ]
+    value_cols = [column for column in requested_value_cols if column in df.columns]
     agg = (
         df.groupby(group_cols, dropna=False)[value_cols]
         .agg(["mean", "std", "min", "max", "count"])
@@ -320,6 +405,7 @@ def merge_chunk_outputs(
     summary_csv_name: str,
     grouped_csv_name: str,
     detail_csv_name: str,
+    activation_detail_csv_name: str,
     merge_details: bool = False,
 ) -> None:
     merged_summary_name = _all_csv_name(summary_csv_name)
@@ -345,6 +431,14 @@ def merge_chunk_outputs(
         )
         print(f"[info] merged {n_detail_files} detail chunk files")
         print(f"[info] wrote {merged_detail} ({n_detail_rows} rows)")
+        merged_activation_name = _all_csv_name(activation_detail_csv_name)
+        merged_activation, n_activation_files, n_activation_rows = _merge_chunk_csvs(
+            out_dir,
+            activation_detail_csv_name,
+            merged_activation_name,
+        )
+        print(f"[info] merged {n_activation_files} activation-detail chunk files")
+        print(f"[info] wrote {merged_activation} ({n_activation_rows} rows)")
 
 
 def parse_args() -> argparse.Namespace:
@@ -358,6 +452,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--summary-csv", default="triad_sign_fraction_summary.csv")
     p.add_argument("--grouped-csv", default="triad_sign_fraction_group_summary.csv")
     p.add_argument("--detail-csv", default="triad_sign_fraction_details.csv")
+    p.add_argument("--activation-detail-csv", default="triad_sign_fraction_activation_details.csv")
     p.add_argument(
         "--merge-chunks",
         action="store_true",
@@ -405,6 +500,26 @@ def parse_args() -> argparse.Namespace:
         help="Write one row per closed triad, including node indices/names. This can be large.",
     )
     p.add_argument(
+        "--activation-steps",
+        type=int,
+        default=1000,
+        help="Post-washout time steps used to count thresholded neuron activations.",
+    )
+    p.add_argument("--activation-washout", type=int, default=100)
+    p.add_argument(
+        "--activation-threshold",
+        type=float,
+        default=0.5,
+        help="A neuron is active when abs(tanh state) is at least this value.",
+    )
+    p.add_argument("--activation-leak", type=float, default=1.0)
+    p.add_argument(
+        "--activation-seed-offset",
+        type=int,
+        default=41_000_000,
+        help="Offset for the reproducible input stream used for activation counts.",
+    )
+    p.add_argument(
         "--append-existing",
         action="store_true",
         help="Append to existing CSVs instead of replacing them before this run.",
@@ -421,6 +536,7 @@ def main() -> None:
             summary_csv_name=args.summary_csv,
             grouped_csv_name=args.grouped_csv,
             detail_csv_name=args.detail_csv,
+            activation_detail_csv_name=args.activation_detail_csv,
             merge_details=args.merge_details,
         )
         return
@@ -431,12 +547,19 @@ def main() -> None:
         raise ValueError("--rho-values must be positive.")
     if not (0.0 <= args.unknown_sign_inhibitory_frac <= 1.0):
         raise ValueError("--unknown-sign-inhibitory-frac must be in [0, 1].")
+    if args.activation_steps <= 0 or args.activation_washout < 0:
+        raise ValueError("--activation-steps must be positive and --activation-washout non-negative.")
+    if not (0.0 <= args.activation_threshold <= 1.0):
+        raise ValueError("--activation-threshold must be in [0, 1].")
+    if not (0.0 < args.activation_leak <= 1.0):
+        raise ValueError("--activation-leak must be in (0, 1].")
 
     summary_csv = out_dir / args.summary_csv
     grouped_csv = out_dir / args.grouped_csv
     detail_csv = out_dir / args.detail_csv
+    activation_detail_csv = out_dir / args.activation_detail_csv
     if not args.append_existing:
-        for path in (summary_csv, grouped_csv, detail_csv):
+        for path in (summary_csv, grouped_csv, detail_csv, activation_detail_csv):
             if path.exists():
                 path.unlink()
 
@@ -495,7 +618,7 @@ def main() -> None:
                 else:
                     raise ValueError(f"Unsupported sign-fraction job: {spec.job}")
 
-                Wt, _, norm_info = build_reservoir(
+                Wt, Win, norm_info = build_reservoir(
                     feature_conn=feature_conn,
                     target_sr=float(rho_target),
                     N=ce_W_trial.shape[0],
@@ -531,6 +654,17 @@ def main() -> None:
                     "post_rho": float(norm_info["post_rho"]),
                     "scale_factor": float(norm_info["scale_factor"]),
                 }
+                activation_row, activation_details = activation_summaries(
+                    Wt,
+                    Win,
+                    node_names=node_names,
+                    n_steps=args.activation_steps,
+                    washout=args.activation_washout,
+                    threshold=args.activation_threshold,
+                    leak=args.activation_leak,
+                    seed=seed_base + args.activation_seed_offset,
+                )
+                base_row.update(activation_row)
 
                 triad_rows, details = triad_weight_summaries(W_post)
                 rows = []
@@ -542,6 +676,10 @@ def main() -> None:
                         }
                     )
                 _append_rows(summary_csv, rows)
+                _append_rows(
+                    activation_detail_csv,
+                    [{**base_row, **detail_row} for detail_row in activation_details],
+                )
                 if args.write_triad_details:
                     _write_detail_rows(
                         detail_csv,
@@ -555,6 +693,7 @@ def main() -> None:
     print(f"[info] wrote {grouped_csv}")
     if args.write_triad_details:
         print(f"[info] wrote {detail_csv}")
+    print(f"[info] wrote {activation_detail_csv}")
 
 
 if __name__ == "__main__":

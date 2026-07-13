@@ -22,7 +22,7 @@ REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
 REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE="${REPEAT_SEED_STRIDE:-100000}"
 
-SIGN_FRACS=(0.0 0.2 0.4 0.6 0.8 1.0)
+SIGN_FRACS=(0.0 0.5)
 RHO_VALUES=(0.6 0.8 0.95 1.05)
 NORMALIZATION_MODES=(spectral_radius)
 
@@ -35,5 +35,6 @@ conda run -n cel python network_stats/triad_sign_fraction_experiment.py \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
   --datasets new_cel_4to1 \
   --sign-fracs "${SIGN_FRACS[@]}" \
+  --no-include-empirical-cel-fraction \
   --rho-values "${RHO_VALUES[@]}" \
   --normalization-modes "${NORMALIZATION_MODES[@]}"

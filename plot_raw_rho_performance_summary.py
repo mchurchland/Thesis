@@ -244,15 +244,15 @@ def plot_summary(
             "axes.linewidth": 0.8,
             "axes.labelsize": 9.2,
             "axes.titlesize": 11.2,
-            "xtick.labelsize": 7.9,
-            "ytick.labelsize": 7.9,
-            "legend.fontsize": 7.9,
+            "xtick.labelsize": 13.5,
+            "ytick.labelsize": 13.5,
+            "legend.fontsize": 15.8,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
     )
 
-    fig, axes = plt.subplots(2, 4, figsize=(7.35, 5.15), dpi=300, sharex=True)
+    fig, axes = plt.subplots(2, 4, figsize=(10.8, 7.6), dpi=300, sharex=True)
     panel_specs = [
         ("GR", "performance", "GR"),
         ("IPC", "performance", "IPC"),
@@ -365,9 +365,9 @@ def plot_summary(
                     pad = max(0.10 * (y_hi - y_lo), 0.025)
                 ax.set_ylim(y_lo, y_hi + pad)
 
-    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=10.4, y=0.106)
-    fig.text(0.018, 0.665, "Mean performance", rotation=90, va="center", ha="center", fontsize=10.4)
-    fig.text(0.018, 0.335, "Coefficient of variation", rotation=90, va="center", ha="center", fontsize=10.4)
+    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=15.5, y=0.180)
+    fig.text(0.020, 0.78, "Mean performance", rotation=90, va="center", ha="center", fontsize=15.5)
+    fig.text(0.020, 0.43, "CV", rotation=90, va="center", ha="center", fontsize=15.5)
 
     family_handles = [
         Line2D(
@@ -400,15 +400,16 @@ def plot_summary(
     fig.legend(
         handles=family_handles + dataset_handles,
         loc="lower center",
-        bbox_to_anchor=(0.50, 0.018),
+        bbox_to_anchor=(0.50, 0.010),
         ncol=3,
         frameon=False,
         columnspacing=0.70,
         handlelength=1.35,
         handletextpad=0.35,
+        fontsize=15.8,
     )
 
-    fig.subplots_adjust(left=0.070, right=0.995, bottom=0.245, top=0.900, wspace=0.26, hspace=0.36)
+    fig.subplots_adjust(left=0.065, right=0.985, bottom=0.270, top=0.930, wspace=0.26, hspace=0.36)
 
     paths = []
     for ext, dpi in (("png", 450), ("pdf", 450)):
