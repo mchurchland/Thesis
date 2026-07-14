@@ -1,0 +1,27 @@
+MC delay sensitivity report
+D candidates=[30, 50, 80], D_ref=80
+
+[Global capture vs D_ref]
+capture% mean=98.84, std=1.05, min=95.31, p05=96.97
+
+[Across-model capture by D_max]
+D_max=30: mean_capture_across_models=97.86%
+D_max=50: mean_capture_across_models=98.67%
+D_max=80: mean_capture_across_models=100.00%
+
+[Ranking stability vs D_ref]
+D_max=30: pearson=1.0000, spearman=1.0000, n_models=10
+D_max=50: pearson=1.0000, spearman=1.0000, n_models=10
+D_max=80: pearson=1.0000, spearman=1.0000, n_models=10
+
+[Per-model means by D_max]
+C. elegans: D=30: 97.18%±0.66%, D=50: 98.21%±0.61%, D=80: 100.00%±0.00%
+cel+randN: D=30: 98.53%±0.31%, D=50: 99.07%±0.26%, D=80: 100.00%±0.00%
+ER (p=0.1): D=30: 98.79%±0.28%, D=50: 99.19%±0.24%, D=80: 100.00%±0.00%
+ws_p0.1+randN: D=30: 98.89%±0.24%, D=50: 99.36%±0.15%, D=80: 100.00%±0.00%
+local_sign: D=30: 98.15%±0.51%, D=50: 98.89%±0.32%, D=80: 100.00%±0.00%
+local_sign+flat: D=30: 97.85%±0.41%, D=50: 98.68%±0.29%, D=80: 100.00%±0.00%
+local_sign+binary: D=30: 97.53%±0.54%, D=50: 98.52%±0.38%, D=80: 100.00%±0.00%
+global_sign_pres: D=30: 97.26%±0.60%, D=50: 98.28%±0.48%, D=80: 100.00%±0.00%
+global_sign_pres_real_weight: D=30: 97.49%±0.38%, D=50: 98.40%±0.29%, D=80: 100.00%±0.00%
+binary_base: D=30: 96.90%±0.58%, D=50: 98.14%±0.47%, D=80: 100.00%±0.00%
