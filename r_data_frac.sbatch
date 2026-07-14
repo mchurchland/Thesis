@@ -20,9 +20,9 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="sign_test"
-OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
-mkdir -p "${OUTDIR}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTROOT="${OUTROOT:-${RESULTS_ROOT}/sign_fraction}"
+mkdir -p "${OUTROOT}"
 
 # Keep the full parameter grid per task (repeat runs via repeat partition)
 SPLIT=1
@@ -70,7 +70,7 @@ run_fraction_sweep() {
   local job="$2"
   local unknown_policy="$3"
   local ce_adj="$4"
-  local run_out_dir="${label}_${OUTDIR}"
+  local run_out_dir="${OUTROOT}/${label}/chunk_${SLURM_ARRAY_TASK_ID}"
   local unknown_args=(--unknown-sign-policy "${unknown_policy}")
 
   if [[ ! -f "${ce_adj}" ]]; then
