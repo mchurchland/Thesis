@@ -15,7 +15,8 @@ mkdir -p logs
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTDIR="${OUTDIR:-network_stats/triad_sign_fraction_results/chunk_${SLURM_ARRAY_TASK_ID}}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTDIR="${OUTDIR:-${RESULTS_ROOT}/triad_sign_fraction/chunk_${SLURM_ARRAY_TASK_ID}}"
 BASE_SEED="${BASE_SEED:-12345}"
 TOTAL_REPEATS="${TOTAL_REPEATS:-50}"
 REPEAT_SPLIT=$(( SLURM_ARRAY_TASK_MAX - SLURM_ARRAY_TASK_MIN + 1 ))
@@ -33,7 +34,7 @@ conda run -n cel python network_stats/triad_sign_fraction_experiment.py \
   --repeat-split "${REPEAT_SPLIT}" \
   --repeat-rank "${REPEAT_RANK}" \
   --repeat-seed-stride "${REPEAT_SEED_STRIDE}" \
-  --datasets new_cel_4to1 \
+  --datasets new_cel_sign_matched \
   --sign-fracs "${SIGN_FRACS[@]}" \
   --no-include-empirical-cel-fraction \
   --rho-values "${RHO_VALUES[@]}" \

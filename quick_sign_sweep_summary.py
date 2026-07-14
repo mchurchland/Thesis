@@ -22,7 +22,7 @@ from plot_raw_rho_performance_summary import build_summary
 
 OUT_DIR = Path("good_results/summary")
 OUT_STEM = "sign_sweep_quicklook"
-REF_SIGN_FRAC = 0.22058823529411764
+REF_SIGN_FRAC = 0.2425287356321839
 
 
 def _aggregate_sign_sweeps(summary: pd.DataFrame) -> pd.DataFrame:

@@ -20,7 +20,8 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="experiment_full_chunks"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTROOT="${OUTROOT:-${RESULTS_ROOT}/topology_shuffles}"
 OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${OUTDIR}"
 
@@ -33,11 +34,10 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 NEURON_BIASES=(0.0 0.1)
-CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj.npy}"
 CE_EI="${CE_EI:-}"
-UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-OUT_PREFIX="${OUT_PREFIX:-topology_shuffles_new_cel_4to1}"
+UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_sign_matched}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -56,11 +56,11 @@ fi
 
 ensure_unknown_sign_weights() {
   if [[ ! -f "${CE_ADJ}" ]]; then
-    echo "[error] Missing 4:1-completion adjacency: ${CE_ADJ}" >&2
+    echo "[error] Missing sign-matched adjacency: ${CE_ADJ}" >&2
     exit 1
   fi
-  if [[ "${UNKNOWN_SIGN_POLICY}" != "random_unknown_4to1" ]]; then
-    echo "[error] r_data_shuf.sbatch requires UNKNOWN_SIGN_POLICY=random_unknown_4to1" >&2
+  if [[ "${UNKNOWN_SIGN_POLICY}" != "random_unknown_sign_matched" ]]; then
+    echo "[error] r_data_shuf.sbatch requires UNKNOWN_SIGN_POLICY=random_unknown_sign_matched" >&2
     exit 1
   fi
   if [[ -f "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then
@@ -74,7 +74,7 @@ ensure_unknown_sign_weights() {
 ensure_unknown_sign_weights
 
 UNKNOWN_SIGN_ARGS=(--unknown-sign-policy "${UNKNOWN_SIGN_POLICY}")
-if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_4to1" ]]; then
+if [[ "${UNKNOWN_SIGN_POLICY}" == "random_unknown_sign_matched" ]]; then
   UNKNOWN_SIGN_ARGS+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
 fi
 
@@ -83,7 +83,7 @@ JOB_KIND="all_topology_shuffle"
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "${OUT_PREFIX}_${OUTDIR}" \
+  --out-dir "${OUTDIR}" \
   --ce-adj "${CE_ADJ}" \
   --ce-ei  "${CE_EI}" \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \

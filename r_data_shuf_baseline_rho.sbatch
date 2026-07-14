@@ -19,7 +19,8 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="${OUTROOT:-baseline_rho_topology_shuffles}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTROOT="${OUTROOT:-${RESULTS_ROOT}/baseline_rho_topology_shuffles}"
 OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${OUTDIR}"
 
@@ -33,10 +34,10 @@ REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 NEURON_BIASES=(0.0 0.1)
 
-CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj.npy}"
 CE_EI="${CE_EI:-}"
-UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_4to1}"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
+UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_sign_matched}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
 
 RANDOM_NODE_SUBSETS="${RANDOM_NODE_SUBSETS:-0}"
 K_IN="${K_IN:-}"
@@ -57,8 +58,8 @@ if [[ ! -f "${CE_ADJ}" ]]; then
   echo "[error] Missing adjacency: ${CE_ADJ}" >&2
   exit 1
 fi
-if [[ "${UNKNOWN_SIGN_POLICY}" != "random_unknown_4to1" ]]; then
-  echo "[error] This baseline-rho shuffle experiment expects UNKNOWN_SIGN_POLICY=random_unknown_4to1." >&2
+if [[ "${UNKNOWN_SIGN_POLICY}" != "random_unknown_sign_matched" ]]; then
+  echo "[error] This baseline-rho shuffle experiment expects UNKNOWN_SIGN_POLICY=random_unknown_sign_matched." >&2
   exit 1
 fi
 if [[ ! -f "${CE_UNKNOWN_SIGN_WEIGHTS}" ]]; then

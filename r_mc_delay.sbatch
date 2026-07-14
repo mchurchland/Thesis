@@ -21,11 +21,12 @@ mkdir -p logs
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj.npy}"
 CE_EI=""
-UNKNOWN_SIGN_POLICY="random_unknown_4to1"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-OUT_DIR="${OUT_DIR:-mc_delay_sensitivity_new_cel_4to1}"
+UNKNOWN_SIGN_POLICY="random_unknown_sign_matched"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
+OUT_DIR="${OUT_DIR:-${RESULTS_ROOT}/mc_delay}"
 
 # Sweep settings
 D_MAX_LIST="30 50 80"
@@ -37,7 +38,7 @@ CUDA_IDX="${SLURM_LOCALID:-0}"
 for required_file in "${CE_ADJ}" "${CE_UNKNOWN_SIGN_WEIGHTS}"
 do
   if [[ ! -f "${required_file}" ]]; then
-    echo "[error] Missing required 4:1-completion input: ${required_file}" >&2
+    echo "[error] Missing required sign-matched input: ${required_file}" >&2
     exit 1
   fi
 done

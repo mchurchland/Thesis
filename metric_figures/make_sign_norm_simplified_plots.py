@@ -21,16 +21,16 @@ OUT_DIR = ROOT / "metric_figures" / "sign_norm_simplified"
 
 DATASETS = {
     "matched_cel": {
-        "label": "C. elegans 4:1",
+        "label": "C. elegans sign-matched",
         "path": ROOT / "good_results" / "good_cel_new" / "matched_cel",
-        "marker_frac": 0.22058823529411764,
+        "marker_frac": 0.2425287356321839,
         "marker_label": "observed",
     },
     "matched_er": {
         "label": "ER matched",
         "path": ROOT / "good_results" / "good_cel_new" / "matched_er",
-        "marker_frac": 0.2,
-        "marker_label": "4:1",
+        "marker_frac": 0.2425287356321839,
+        "marker_label": "CE rate",
     },
     "removed_cel": {
         "label": "Removed connectome",
@@ -41,25 +41,25 @@ DATASETS = {
 }
 
 PRIMARY_DENSE = {
-    "label": "C. elegans 4:1",
+    "label": "C. elegans sign-matched",
     "path": ROOT / "good_results" / "good_cel_new" / "matched_cel",
-    "marker_frac": 0.22058823529411764,
+    "marker_frac": 0.2425287356321839,
     "marker_label": r"$q_{\mathrm{orig}}$",
 }
 
 DENSE_OPTION8_DATASETS = {
-    "cel_4to1": {
-        "label": "C. elegans 4:1",
+    "cel_sign_matched": {
+        "label": "C. elegans sign-matched",
         "path": ROOT / "good_results" / "good_cel_new" / "matched_cel",
-        "marker_frac": 0.22058823529411764,
+        "marker_frac": 0.2425287356321839,
         "marker_label": r"$q_{\mathrm{orig}}$",
         "stem": "option_8_average_perf_cv",
     },
     "er_matched": {
-        "label": "ER matched 4:1",
+        "label": "ER sign-matched",
         "path": ROOT / "good_results" / "good_cel_new" / "matched_er",
-        "marker_frac": 0.2,
-        "marker_label": r"$q_{\mathrm{4:1}}$",
+        "marker_frac": 0.2425287356321839,
+        "marker_label": r"$q_{\mathrm{CE}}$",
         "stem": "option_8_average_perf_cv_er_matched",
     },
     "removed": {
@@ -674,7 +674,7 @@ def save_compact_mechanism_response(primary: tuple[pd.DataFrame, pd.DataFrame, p
     ax.axhline(1.0, color="#222222", linewidth=0.95, linestyle="--", alpha=0.85)
     ax.plot(ratio["sign_frac"], ratio["rho_ratio"], color="#4B5563", marker="o", markersize=3.3, linewidth=1.9)
     _draw_q_reference_lines(ax, info)
-    ax.set_title("C. elegans 4:1 sign-normalization response", loc="left", fontsize=9.6, pad=4)
+    ax.set_title("C. elegans sign-matched normalization response", loc="left", fontsize=9.6, pad=4)
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=9)
     #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)

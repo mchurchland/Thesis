@@ -30,7 +30,12 @@ import torch
 from reservoir_variants import VARIANT_KEYS, VariantContext, run_variant, save_rows
 
 # ---- repo helpers (reuse your utils/stats) ----
-from util.util import assign_random_unknown_signs, load_connectome, load_unknown_sign_weights
+from util.util import (
+    UNKNOWN_SIGN_INHIBITORY_FRACTION,
+    assign_random_unknown_signs,
+    load_connectome,
+    load_unknown_sign_weights,
+)
 
 # =================== Defaults (match your diagnostics) ===================
 
@@ -263,24 +268,24 @@ def parse_args():
         default=None,
         help=(
             "Optional .npy matrix with magnitudes for new-connectome complex/no-pred edges. "
-            "If omitted, inferred from --ce-adj when --unknown-sign-policy=random_unknown_4to1."
+            "If omitted, inferred from --ce-adj when --unknown-sign-policy=random_unknown_sign_matched."
         ),
     )
     p.add_argument(
         "--unknown-sign-policy",
-        choices=("drop", "random_unknown_4to1"),
+        choices=("drop", "random_unknown_sign_matched"),
         default="drop",
         help=(
             "How to handle new-connectome complex/no-pred signs. 'drop' keeps the signed "
-            "adjacency as loaded; 'random_unknown_4to1' adds those edges back once per "
-            "repeat with a 4:1 excitatory:inhibitory sign ratio."
+            "adjacency as loaded; 'random_unknown_sign_matched' adds those edges back once "
+            "per repeat at the configured negative-sign fraction."
         ),
     )
     p.add_argument(
         "--unknown-sign-inhibitory-frac",
         type=float,
-        default=0.2,
-        help="Fraction of complex/no-pred edges assigned negative signs under random_unknown_4to1.",
+        default=UNKNOWN_SIGN_INHIBITORY_FRACTION,
+        help="Fraction of complex/no-pred edges assigned negative signs.",
     )
     p.add_argument(
         "--unknown-sign-seed-offset",
@@ -494,7 +499,7 @@ def main():
         raise ValueError("--unknown-sign-inhibitory-frac must be between 0 and 1.")
 
     ce_unknown_sign_weights = None
-    if args.unknown_sign_policy == "random_unknown_4to1":
+    if args.unknown_sign_policy == "random_unknown_sign_matched":
         ce_unknown_sign_weights = load_unknown_sign_weights(
             args.ce_adj,
             args.ce_unknown_sign_weights,
@@ -502,16 +507,11 @@ def main():
         )
         if ce_unknown_sign_weights is None:
             raise FileNotFoundError(
-                "random_unknown_4to1 requires an unknown-sign weight matrix. "
+                "random_unknown_sign_matched requires an unknown-sign weight matrix. "
                 "Regenerate the new connectome with util/read_xls.py or pass "
                 "--ce-unknown-sign-weights explicitly."
             )
         n_unknown = int(np.count_nonzero(ce_unknown_sign_weights))
-        print(
-            "[INFO] random_unknown_4to1 enabled: "
-            f"{n_unknown} complex/no-pred edges will be signed once per repeat "
-            f"with inhibitory_fraction={args.unknown_sign_inhibitory_frac:g}."
-        )
 
     k_in = k_out = None
     if args.random_node_subsets:
@@ -576,12 +576,11 @@ def main():
                 seed_base = args.seed + rep_idx * args.repeat_seed_stride
                 set_seed(seed_base)
                 ce_W_trial = ce_W_bio
-                if args.unknown_sign_policy == "random_unknown_4to1":
+                if args.unknown_sign_policy == "random_unknown_sign_matched":
                     ce_W_trial = assign_random_unknown_signs(
                         ce_W_bio,
                         ce_unknown_sign_weights,
                         np.random.default_rng(seed_base + args.unknown_sign_seed_offset),
-                        inhibitory_fraction=args.unknown_sign_inhibitory_frac,
                     )
                 sid_base = _sid_base(rep_idx)
                 input_idx = output_idx = None

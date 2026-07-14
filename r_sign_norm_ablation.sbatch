@@ -19,7 +19,8 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="sign_norm_ablation"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTROOT="${OUTROOT:-${RESULTS_ROOT}/sign_norm_ablation}"
 mkdir -p "${OUTROOT}"
 
 # Keep the full leak/input grid per task; repeat runs are partitioned by array index.
@@ -37,10 +38,10 @@ RHO_VALUES=(0.6 0.8 0.95 1.05)
 NORMALIZATION_MODES=(spectral_radius original_radius)
 SIGN_FLIP_FRACS=(0.0  0.2  0.4  0.6  0.8  1.0)
 
-CE_ADJ_REMOVED="${CE_ADJ_REMOVED:-Connectome/ce_adj_removed.npy}"
-CE_ADJ_UNREMOVED="${CE_ADJ_UNREMOVED:-Connectome/ce_adj_unk41.npy}"
+CE_ADJ_REMOVED="${CE_ADJ_REMOVED:-Connectome/ce_adj.npy}"
+CE_ADJ_UNREMOVED="${CE_ADJ_UNREMOVED:-Connectome/ce_adj.npy}"
 CE_EI="${CE_EI:-}"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -76,7 +77,7 @@ run_normalization_ablation() {
   local run_out_dir="${OUTROOT}/${label}/chunk_${SLURM_ARRAY_TASK_ID}"
   local unknown_args=(--unknown-sign-policy "${unknown_policy}")
 
-  if [[ "${unknown_policy}" == "random_unknown_4to1" ]]; then
+  if [[ "${unknown_policy}" == "random_unknown_sign_matched" ]]; then
     unknown_args+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
   fi
 
@@ -108,6 +109,6 @@ run_normalization_ablation() {
 }
 
 # Main weighted-connectome model, uncertainty control, and matched random topology.
-run_normalization_ablation "new_cel_4to1" "sign_test_og_cel" "random_unknown_4to1" "${CE_ADJ_UNREMOVED}"
+run_normalization_ablation "new_cel_sign_matched" "sign_test_og_cel" "random_unknown_sign_matched" "${CE_ADJ_UNREMOVED}"
 run_normalization_ablation "new_cel_removed" "sign_test_og_cel" "drop" "${CE_ADJ_REMOVED}"
-run_normalization_ablation "matched_er_4to1" "sign_test_er" "random_unknown_4to1" "${CE_ADJ_UNREMOVED}"
+run_normalization_ablation "matched_er_sign_matched" "sign_test_er" "random_unknown_sign_matched" "${CE_ADJ_UNREMOVED}"

@@ -234,7 +234,7 @@ def build_matrix(edge_map: Dict[str, Dict[str, float]], include_nodes: Optional[
                 continue
             j = idx[t]
             if i == j:
-                continue  # drop self-loops
+                continue  # reservoir preprocessing excludes self-loops
             W[i, j] += float(w)
     return W, names
 
@@ -279,7 +279,16 @@ def main():
     if unknown_combined is not None:
         W_unknown, _ = build_matrix(unknown_combined, include_nodes=names)
     num_gt, num_lt = (W>0).sum(),(W<0).sum()
+    mag_pos = W[W > 0].sum()
+    mag_neg = abs(W[W < 0]).sum()
+
+    print(mag_pos, mag_neg)
+
+    p_neg_syn = mag_pos/mag_neg
+    print(f"synapse ratio {p_neg_syn}")
+
     p_neg  = num_lt/(num_gt+num_lt)
+    print(f"connection ratio ratio {p_neg}")
     print(f"P(swap) = {2*p_neg*(1-p_neg)}")
     print(f"E(swap) = {2*p_neg*(1-p_neg)*(num_gt+num_lt)}")
 

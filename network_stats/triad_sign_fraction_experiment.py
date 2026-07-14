@@ -23,6 +23,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
 from inv_arc_test import NORMALIZATION_MODES, SWEEP_SR, _split_indices
 from network_stats.run_one import run_reservoir_with_pre
 from util.util import (
+    UNKNOWN_SIGN_INHIBITORY_FRACTION,
     _count_edges,
     assign_random_unknown_signs,
     build_reservoir,
@@ -48,25 +49,25 @@ class DatasetSpec:
 
 
 DEFAULT_DATASETS = {
-    "new_cel_4to1": DatasetSpec(
-        label="new_cel_4to1",
+    "new_cel_sign_matched": DatasetSpec(
+        label="new_cel_sign_matched",
         job="sign_test_og_cel",
-        unknown_sign_policy="random_unknown_4to1",
-        ce_adj="Connectome/ce_adj_unk41.npy",
-        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights_unk41.npy",
+        unknown_sign_policy="random_unknown_sign_matched",
+        ce_adj="Connectome/ce_adj.npy",
+        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights.npy",
     ),
     "new_cel_removed": DatasetSpec(
         label="new_cel_removed",
         job="sign_test_og_cel",
         unknown_sign_policy="drop",
-        ce_adj="Connectome/ce_adj_removed.npy",
+        ce_adj="Connectome/ce_adj.npy",
     ),
-    "matched_er_4to1": DatasetSpec(
-        label="matched_er_4to1",
+    "matched_er_sign_matched": DatasetSpec(
+        label="matched_er_sign_matched",
         job="sign_test_er",
-        unknown_sign_policy="random_unknown_4to1",
-        ce_adj="Connectome/ce_adj_unk41.npy",
-        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights_unk41.npy",
+        unknown_sign_policy="random_unknown_sign_matched",
+        ce_adj="Connectome/ce_adj.npy",
+        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights.npy",
     ),
 }
 
@@ -423,22 +424,18 @@ def merge_chunk_outputs(
     print(f"[info] wrote {merged_grouped}")
 
     if merge_details:
-        merged_detail_name = _all_csv_name(detail_csv_name)
-        merged_detail, n_detail_files, n_detail_rows = _merge_chunk_csvs(
-            out_dir,
-            detail_csv_name,
-            merged_detail_name,
+        detail_specs = (
+            (detail_csv_name, "triad-detail"),
+            (activation_detail_csv_name, "activation-detail"),
         )
-        print(f"[info] merged {n_detail_files} detail chunk files")
-        print(f"[info] wrote {merged_detail} ({n_detail_rows} rows)")
-        merged_activation_name = _all_csv_name(activation_detail_csv_name)
-        merged_activation, n_activation_files, n_activation_rows = _merge_chunk_csvs(
-            out_dir,
-            activation_detail_csv_name,
-            merged_activation_name,
-        )
-        print(f"[info] merged {n_activation_files} activation-detail chunk files")
-        print(f"[info] wrote {merged_activation} ({n_activation_rows} rows)")
+        for csv_name, label in detail_specs:
+            if not list(out_dir.glob(f"chunk_*/{csv_name}")):
+                print(f"[info] no {label} chunk files found; skipping.")
+                continue
+            merged_name = _all_csv_name(csv_name)
+            merged_path, n_files, n_rows = _merge_chunk_csvs(out_dir, csv_name, merged_name)
+            print(f"[info] merged {n_files} {label} chunk files")
+            print(f"[info] wrote {merged_path} ({n_rows} rows)")
 
 
 def parse_args() -> argparse.Namespace:
@@ -485,7 +482,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--repeat-split", type=int, default=1)
     p.add_argument("--repeat-rank", type=int, default=0)
     p.add_argument("--repeat-seed-stride", type=int, default=100000)
-    p.add_argument("--unknown-sign-inhibitory-frac", type=float, default=0.2)
+    p.add_argument(
+        "--unknown-sign-inhibitory-frac",
+        type=float,
+        default=UNKNOWN_SIGN_INHIBITORY_FRACTION,
+    )
     p.add_argument("--unknown-sign-seed-offset", type=int, default=23_000_000)
     p.add_argument(
         "--include-empirical-cel-fraction",
@@ -510,7 +511,7 @@ def parse_args() -> argparse.Namespace:
         "--activation-threshold",
         type=float,
         default=0.5,
-        help="A neuron is active when abs(tanh state) is at least this value.",
+        help="A neuron is active when abs(tanh state) is at least this value."
     )
     p.add_argument("--activation-leak", type=float, default=1.0)
     p.add_argument(
@@ -574,7 +575,7 @@ def main() -> None:
             raise FileNotFoundError(f"Could not load CE adjacency: {spec.ce_adj}")
         node_names = load_connectome_node_names(spec.ce_adj, ce_W_base.shape[0])
         unknown_weights = None
-        if spec.unknown_sign_policy == "random_unknown_4to1":
+        if spec.unknown_sign_policy == "random_unknown_sign_matched":
             unknown_weights = load_unknown_sign_weights(
                 spec.ce_adj,
                 spec.ce_unknown_sign_weights,
@@ -582,13 +583,13 @@ def main() -> None:
             )
             if unknown_weights is None:
                 raise FileNotFoundError(
-                    f"{spec.label} requires unknown-sign weights for random_unknown_4to1."
+                    f"{spec.label} requires unknown-sign weights for random_unknown_sign_matched."
                 )
 
         for rep_idx in repeat_ids:
             seed_base = args.seed + rep_idx * args.repeat_seed_stride
             ce_W_trial = ce_W_base
-            if spec.unknown_sign_policy == "random_unknown_4to1":
+            if spec.unknown_sign_policy == "random_unknown_sign_matched":
                 ce_W_trial = assign_random_unknown_signs(
                     ce_W_base,
                     unknown_weights,

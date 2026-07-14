@@ -54,15 +54,9 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--unknown-sign-policy",
-        choices=("drop", "random_unknown_4to1"),
+        choices=("drop", "random_unknown_sign_matched"),
         default="drop",
-        help="Use random_unknown_4to1 to add complex/no-pred edges once per seed.",
-    )
-    p.add_argument(
-        "--unknown-sign-inhibitory-frac",
-        type=float,
-        default=0.2,
-        help="Fraction of complex/no-pred edges assigned negative signs under random_unknown_4to1.",
+        help="Use random_unknown_sign_matched to add complex/no-pred edges once per seed.",
     )
     p.add_argument(
         "--unknown-sign-seed-offset",
@@ -659,10 +653,8 @@ def main() -> None:
     ce_W_bio, _, _ = load_connectome(args.ce_adj, args.ce_ei)
     if ce_W_bio is None:
         raise FileNotFoundError(f"Could not load CE adjacency from: {args.ce_adj}")
-    if not (0.0 <= args.unknown_sign_inhibitory_frac <= 1.0):
-        raise ValueError("--unknown-sign-inhibitory-frac must be between 0 and 1.")
     ce_unknown_sign_weights = None
-    if args.unknown_sign_policy == "random_unknown_4to1":
+    if args.unknown_sign_policy == "random_unknown_sign_matched":
         ce_unknown_sign_weights = load_unknown_sign_weights(
             args.ce_adj,
             args.ce_unknown_sign_weights,
@@ -670,7 +662,7 @@ def main() -> None:
         )
         if ce_unknown_sign_weights is None:
             raise FileNotFoundError(
-                "random_unknown_4to1 requires an unknown-sign weight matrix. "
+                "random_unknown_sign_matched requires an unknown-sign weight matrix. "
                 "Regenerate the new connectome with util/read_xls.py or pass "
                 "--ce-unknown-sign-weights explicitly."
             )
@@ -685,12 +677,11 @@ def main() -> None:
     for seed in seeds:
         set_seed(seed)
         ce_W_trial = ce_W_bio
-        if args.unknown_sign_policy == "random_unknown_4to1":
+        if args.unknown_sign_policy == "random_unknown_sign_matched":
             ce_W_trial = assign_random_unknown_signs(
                 ce_W_bio,
                 ce_unknown_sign_weights,
                 np.random.default_rng(seed + args.unknown_sign_seed_offset),
-                inhibitory_fraction=args.unknown_sign_inhibitory_frac,
             )
         nnz_target_ce = int((np.abs(ce_W_trial) > 0).sum())
         for rho in args.rho:

@@ -6,6 +6,9 @@ import networkx as nx
 from pathlib import Path
 
 
+UNKNOWN_SIGN_INHIBITORY_FRACTION = 0.2425287356321839
+
+
 def _connectome_node_path_candidates(adj_path: str) -> list[Path]:
     adj = Path(adj_path)
     stem = adj.stem
@@ -102,13 +105,13 @@ def assign_random_unknown_signs(
     W_unknown_magnitudes: np.ndarray | None,
     rng: np.random.Generator,
     *,
-    inhibitory_fraction: float = 0.2,
+    inhibitory_fraction: float = UNKNOWN_SIGN_INHIBITORY_FRACTION,
 ) -> np.ndarray:
     """
     Add complex/no-pred edges back with random signs once per trial.
 
-    inhibitory_fraction=0.2 gives the requested 4:1 excitatory:inhibitory
-    edge-level ratio among the formerly unknown-sign edges.
+    ``inhibitory_fraction`` controls the edge-level negative-sign fraction
+    among the formerly unknown-sign edges.
     """
     W = W_known.copy().astype(np.float32)
     if W_unknown_magnitudes is None:
@@ -304,42 +307,6 @@ def load_connectome(adj_path: str | None, ei_path: str | None):
 
 
 
-@torch.no_grad()
-def run_reservoir(W: torch.Tensor,
-                  Win: torch.Tensor,
-                  u: torch.Tensor,
-                  leak: float) -> torch.Tensor:
-    """
-    Echo state update for a single-reservoir run (Jaeger, 2002, GMD Report 152).
-    See: https://github.com/cknd/pyESN/blob/master/pyESN.py#L32
-
-    W:   [N, N]
-    Win: [N, 1] or [N]
-    u:   [T, 1] or [T]
-    Returns X: [T, N]
-    """
-    device = W.device
-    N = W.shape[0]
-    T = u.shape[0]
-
-    # normalize shapes once
-    u_flat = u.view(T)                    # [T]
-    win_vec = Win.view(N)                 # [N]
-
-    z = torch.zeros(N, device=device)
-    X = torch.empty(T, N, device=device)  # no need to zero
-
-    one_minus_leak = 1.0 - leak
-
-    for t in range(T):
-        # h = tanh(W z + win * u_t)
-        # use addmv: y + A x  (all vectors) for better BLAS path
-        h = torch.tanh(torch.addmv(win_vec * u_flat[t], W, z))
-        # z = (1 - leak) * z + leak * h, in-place
-        z.mul_(one_minus_leak).add_(h, alpha=leak)
-        X[t].copy_(z)
-
-    return X
 
 #binary base
 #binary + sign shuffle (fixed topology)

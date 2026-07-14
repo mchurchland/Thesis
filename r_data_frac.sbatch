@@ -33,10 +33,10 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 NEURON_BIASES=(0.0 0.1)
-CE_ADJ_REMOVED="${CE_ADJ_REMOVED:-Connectome/ce_adj_removed.npy}"
-CE_ADJ_UNREMOVED="${CE_ADJ_UNREMOVED:-Connectome/ce_adj_unk41.npy}"
+CE_ADJ_REMOVED="${CE_ADJ_REMOVED:-Connectome/ce_adj.npy}"
+CE_ADJ_UNREMOVED="${CE_ADJ_UNREMOVED:-Connectome/ce_adj.npy}"
 CE_EI="${CE_EI:-}"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
 SIGN_FLIP_FRACS=(0.0 0.2 0.4  0.6  0.8 1.0)
 
 RANDOM_NODE_SUBSETS=0
@@ -78,7 +78,7 @@ run_fraction_sweep() {
     exit 1
   fi
 
-  if [[ "${unknown_policy}" == "random_unknown_4to1" ]]; then
+  if [[ "${unknown_policy}" == "random_unknown_sign_matched" ]]; then
     unknown_args+=(--ce-unknown-sign-weights "${CE_UNKNOWN_SIGN_WEIGHTS}")
   fi
 
@@ -106,9 +106,9 @@ run_fraction_sweep() {
 }
 
 # Three new-connectome sign-fraction controls:
-# 1. ER matched to the 4:1-completed new connectome edge count.
-# 2. New connectome with complex/no-pred edges randomly signed 4:1 E:I per trial.
+# 1. ER matched to the sign-matched completed connectome edge count.
+# 2. New connectome with complex/no-pred edges signed at the observed CE rate per trial.
 # 3. New connectome with complex/no-pred edges removed.
-run_fraction_sweep "matched_er_4to1" "sign_test_er" "random_unknown_4to1" "${CE_ADJ_UNREMOVED}"
-run_fraction_sweep "new_cel_4to1" "sign_test_og_cel" "random_unknown_4to1" "${CE_ADJ_UNREMOVED}"
+run_fraction_sweep "matched_er_sign_matched" "sign_test_er" "random_unknown_sign_matched" "${CE_ADJ_UNREMOVED}"
+run_fraction_sweep "new_cel_sign_matched" "sign_test_og_cel" "random_unknown_sign_matched" "${CE_ADJ_UNREMOVED}"
 run_fraction_sweep "new_cel_removed" "sign_test_og_cel" "drop" "${CE_ADJ_REMOVED}"

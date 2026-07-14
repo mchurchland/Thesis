@@ -20,7 +20,8 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="experiment_full_chunks"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTROOT="${OUTROOT:-${RESULTS_ROOT}/main_experiment}"
 OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${OUTDIR}"
 
@@ -33,11 +34,10 @@ REPEAT_RANK="${SLURM_ARRAY_TASK_ID}"
 REPEAT_SEED_STRIDE=100000
 SID_BASE=0
 NEURON_BIASES=(0.0 0.1)
-CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj.npy}"
 CE_EI="${CE_EI:-}"
-UNKNOWN_SIGN_POLICY="random_unknown_4to1"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-OUT_PREFIX="${OUT_PREFIX:-full_v1_new_cel_4to1}"
+UNKNOWN_SIGN_POLICY="random_unknown_sign_matched"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
 
 RANDOM_NODE_SUBSETS=0
 K_IN=""
@@ -57,7 +57,7 @@ fi
 for required_file in "${CE_ADJ}" "${CE_UNKNOWN_SIGN_WEIGHTS}"
 do
   if [[ ! -f "${required_file}" ]]; then
-    echo "[error] Missing required 4:1-completion input: ${required_file}" >&2
+    echo "[error] Missing required sign-matched input: ${required_file}" >&2
     exit 1
   fi
 done
@@ -72,7 +72,7 @@ JOB_KIND="all"   # or all / global_sign_pres_real_weight / local_sign+binary / l
 
 conda run -n cel python inv_arc_test.py \
   --job "${JOB_KIND}" \
-  --out-dir "${OUT_PREFIX}_${OUTDIR}" \
+  --out-dir "${OUTDIR}" \
   --ce-adj "${CE_ADJ}" \
   --ce-ei "${CE_EI}" \
   --src-tag "chunk_${SLURM_ARRAY_TASK_ID}" \

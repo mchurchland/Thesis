@@ -54,6 +54,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from util.util import (  # noqa: E402
+    UNKNOWN_SIGN_INHIBITORY_FRACTION,
     _conn_and_w_shuffle_ce,
     _conn_shuffle_ce,
     _count_edges,
@@ -190,44 +191,44 @@ def variant_alters_connectivity(key: str) -> bool:
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate CE-reference vs variant weighted graph figures.")
     p.add_argument("--outdir", default="architecture_variant_figures/graph_examples", help="Output directory for PNGs.")
-    p.add_argument("--ce-adj", default="Connectome/ce_adj_unk41.npy", help="Path to CE adjacency/weight matrix (.npy).")
+    p.add_argument("--ce-adj", default="Connectome/ce_adj.npy", help="Path to CE adjacency/weight matrix (.npy).")
     p.add_argument("--ce-ei", default="Connectome/ce_ei.npy", help="Path to CE E/I labels (.npy).")
     p.add_argument(
         "--removed-adj",
-        default="Connectome/ce_adj_removed.npy",
-        help="Known-sign connectome with complex/no-pred edges removed, for --new-4to1-four-panel.",
+        default="Connectome/ce_adj.npy",
+        help="Known-sign connectome with complex/no-pred edges removed, for --new-sign-matched-four-panel.",
     )
     p.add_argument(
         "--ce-unknown-sign-weights",
         default=None,
         help=(
             "Optional .npy matrix with magnitudes for complex/no-pred edges. "
-            "If omitted, inferred from --ce-adj when building the 4:1 unknown-sign connectome."
+            "If omitted, inferred from --ce-adj when building the sign-matched connectome."
         ),
     )
     p.add_argument(
         "--unknown-sign-inhibitory-frac",
         type=float,
-        default=0.2,
-        help="Fraction of complex/no-pred edges assigned negative signs in the 4:1 new connectome.",
+        default=UNKNOWN_SIGN_INHIBITORY_FRACTION,
+        help="Fraction of complex/no-pred edges assigned negative signs.",
     )
     p.add_argument(
-        "--new-4to1-four-panel",
+        "--new-sign-matched-four-panel",
         action="store_true",
         help=(
-            "Write only a 2x2 comparison: new 4:1 connectome, removed-edge connectome, "
-            "ER matched to the 4:1 edge/sign ratio, and 4:1 connection shuffle."
+            "Write only a 2x2 comparison: sign-matched connectome, removed-edge connectome, "
+            "ER matched to the CE sign rate, and sign-matched connection shuffle."
         ),
     )
     p.add_argument(
-        "--new-4to1-four-panel-out",
-        default="new_4to1_four_panel.png",
-        help="Output filename for --new-4to1-four-panel, relative to --outdir unless absolute.",
+        "--new-sign-matched-four-panel-out",
+        default="new_sign_matched_four_panel.png",
+        help="Output filename for --new-sign-matched-four-panel, relative to --outdir unless absolute.",
     )
     p.add_argument(
         "--known-only",
         action="store_true",
-        help="Use --ce-adj as loaded for the standard grid/individual figures instead of adding 4:1 unknown signs.",
+        help="Use --ce-adj as loaded instead of adding randomly assigned, sign-matched unknown edges.",
     )
     p.add_argument("--seed", type=int, default=7, help="Base random seed.")
     p.add_argument("--er-p", type=float, default=0.1, help="ER probability for er_randN.")
@@ -462,14 +463,14 @@ def build_variant_panel_data(
     return W_var, panel_pos
 
 
-def _build_er_matched_4to1(
-    ce_4to1: np.ndarray,
+def _build_er_sign_matched(
+    ce_sign_matched: np.ndarray,
     seed: int,
     inhibitory_fraction: float,
 ) -> np.ndarray:
     return _build_from_feature_conn(
         "sign_test_er",
-        ce_4to1,
+        ce_sign_matched,
         seed,
         per_neg=inhibitory_fraction,
     )
@@ -482,7 +483,7 @@ def _resolve_out_path(outdir: Path, value: str) -> Path:
     return outdir / path
 
 
-def build_4to1_unknown_connectome(
+def build_sign_matched_unknown_connectome(
     ce_known: np.ndarray,
     ce_adj_path: str,
     unknown_sign_weights_path: str | None,
@@ -499,7 +500,7 @@ def build_4to1_unknown_connectome(
     )
     if unknown_weights is None:
         raise FileNotFoundError(
-            "Could not find unknown-sign weights for the 4:1 connectome. "
+            "Could not find unknown-sign weights for the sign-matched connectome. "
             "Pass --ce-unknown-sign-weights explicitly or use --known-only."
         )
 
@@ -958,7 +959,7 @@ def make_index_figure(
     plt.close(fig)
 
 
-def make_new_4to1_four_panel(
+def make_new_sign_matched_four_panel(
     *,
     ce_known: np.ndarray,
     ce_removed: np.ndarray,
@@ -981,36 +982,38 @@ def make_new_4to1_four_panel(
 ) -> None:
     if ce_known.shape != ce_removed.shape:
         raise ValueError(
-            "The 4:1 base adjacency and removed adjacency must have the same shape: "
+            "The sign-matched base adjacency and removed adjacency must have the same shape: "
             f"{ce_known.shape} vs {ce_removed.shape}."
         )
-    ce_4to1 = build_4to1_unknown_connectome(
+    ce_sign_matched = build_sign_matched_unknown_connectome(
         ce_known,
         ce_adj_path,
         unknown_sign_weights_path,
         seed,
         inhibitory_fraction,
     )
-    er_4to1 = _build_er_matched_4to1(
-        ce_4to1,
+    er_sign_matched = _build_er_sign_matched(
+        ce_sign_matched,
         seed=seed + 10_000,
         inhibitory_fraction=inhibitory_fraction,
     )
-    conn_shuffle_4to1 = _conn_shuffle_ce(ce_4to1, np.random.default_rng(seed + 20_000)).astype(np.float32)
+    conn_shuffle_sign_matched = _conn_shuffle_ce(
+        ce_sign_matched, np.random.default_rng(seed + 20_000)
+    ).astype(np.float32)
 
     layout_kwargs = {
         "fallback_iters": layout_iters,
         "layout_scale": layout_scale,
     }
-    ce_pos = compute_ce_kamada_layout(ce_4to1, seed=seed, **layout_kwargs)
-    er_pos = compute_ce_kamada_layout(er_4to1, seed=seed + 30_000, **layout_kwargs)
-    shuffle_pos = compute_ce_kamada_layout(conn_shuffle_4to1, seed=seed + 40_000, **layout_kwargs)
+    ce_pos = compute_ce_kamada_layout(ce_sign_matched, seed=seed, **layout_kwargs)
+    er_pos = compute_ce_kamada_layout(er_sign_matched, seed=seed + 30_000, **layout_kwargs)
+    shuffle_pos = compute_ce_kamada_layout(conn_shuffle_sign_matched, seed=seed + 40_000, **layout_kwargs)
 
     panels = [
-        ("4:1 new connectome", ce_4to1, ce_pos),
+        ("Sign-matched connectome", ce_sign_matched, ce_pos),
         ("Complex connections removed", ce_removed.astype(np.float32, copy=False), ce_pos),
-        ("ER random, 4:1 matched", er_4to1, er_pos),
-        ("New 4:1, connection shuffle", conn_shuffle_4to1, shuffle_pos),
+        ("ER random, CE-rate matched", er_sign_matched, er_pos),
+        ("Sign-matched connection shuffle", conn_shuffle_sign_matched, shuffle_pos),
     ]
 
     scale_values = []
@@ -1074,10 +1077,10 @@ def main() -> None:
     ce_known, _ce_ei, ce_labels = load_ce_with_project_code(args.ce_adj, args.ce_ei)
     keep_all_negatives = not args.truncate_drops_negatives
 
-    if args.new_4to1_four_panel:
+    if args.new_sign_matched_four_panel:
         ce_removed, _removed_ei, _removed_labels = load_ce_with_project_code(args.removed_adj, args.ce_ei)
-        out_path = _resolve_out_path(outdir, args.new_4to1_four_panel_out)
-        make_new_4to1_four_panel(
+        out_path = _resolve_out_path(outdir, args.new_sign_matched_four_panel_out)
+        make_new_sign_matched_four_panel(
             ce_known=ce_known,
             ce_removed=ce_removed,
             ce_labels=ce_labels,
@@ -1103,7 +1106,7 @@ def main() -> None:
     if args.known_only:
         ce_base = ce_known
     else:
-        ce_base = build_4to1_unknown_connectome(
+        ce_base = build_sign_matched_unknown_connectome(
             ce_known,
             args.ce_adj,
             args.ce_unknown_sign_weights,

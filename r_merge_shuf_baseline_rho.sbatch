@@ -14,8 +14,9 @@ mkdir -p logs
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-OUTROOT="${OUTROOT:-baseline_rho_topology_shuffles}"
-MERGED_DIR="${MERGED_DIR:-good_results/shuf_baseline_rho}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+OUTROOT="${OUTROOT:-${RESULTS_ROOT}/baseline_rho_topology_shuffles}"
+MERGED_DIR="${MERGED_DIR:-${RESULTS_ROOT}/merged/baseline_rho_topology_shuffles}"
 
 conda run -n cel python util/merge.py \
   --glob-shuf "__NO_SHUF_INPUT__" \

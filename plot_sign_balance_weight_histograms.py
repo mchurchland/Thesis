@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 from util.util import (
+    UNKNOWN_SIGN_INHIBITORY_FRACTION,
     assign_random_unknown_signs,
     build_reservoir,
     load_connectome,
@@ -29,35 +30,35 @@ class DatasetSpec:
     ce_adj: str
     out_dir: str
     title: str
-    use_unknown_4to1: bool = False
+    use_unknown_sign_matched: bool = False
     ce_unknown_sign_weights: str | None = None
 
 
 DATASETS = {
-    "new_4to1": DatasetSpec(
-        label="new_4to1",
+    "new_sign_matched": DatasetSpec(
+        label="new_sign_matched",
         feature_conn="sign_test_og_cel",
-        ce_adj="Connectome/ce_adj_unk41.npy",
-        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights_unk41.npy",
-        out_dir="good_results/signtest_final_new/new_4to1",
-        title="4:1 unknown-random",
-        use_unknown_4to1=True,
+        ce_adj="Connectome/ce_adj.npy",
+        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights.npy",
+        out_dir="good_results/signtest_final_new/new_sign_matched",
+        title="CE-rate unknown-random",
+        use_unknown_sign_matched=True,
     ),
     "new_removed": DatasetSpec(
         label="new_removed",
         feature_conn="sign_test_og_cel",
-        ce_adj="Connectome/ce_adj_removed.npy",
+        ce_adj="Connectome/ce_adj.npy",
         out_dir="good_results/signtest_final_new/new_removed",
         title="Removed-edge",
     ),
-    "matched_er_4to1": DatasetSpec(
-        label="matched_er_4to1",
+    "matched_er_sign_matched": DatasetSpec(
+        label="matched_er_sign_matched",
         feature_conn="sign_test_er",
-        ce_adj="Connectome/ce_adj_unk41.npy",
-        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights_unk41.npy",
+        ce_adj="Connectome/ce_adj.npy",
+        ce_unknown_sign_weights="Connectome/ce_unknown_sign_weights.npy",
         out_dir="good_results/signtest_final_new/er_matched",
-        title="Matched ER, 4:1 unknown-random",
-        use_unknown_4to1=True,
+        title="Matched ER, CE-rate unknown-random",
+        use_unknown_sign_matched=True,
     ),
 }
 
@@ -94,7 +95,7 @@ def _load_trial_connectome(args: argparse.Namespace, spec: DatasetSpec) -> np.nd
     ce_W_base, _, _ = load_connectome(spec.ce_adj, None)
     if ce_W_base is None:
         raise FileNotFoundError(f"Could not load CE adjacency: {spec.ce_adj}")
-    if not spec.use_unknown_4to1:
+    if not spec.use_unknown_sign_matched:
         return ce_W_base
 
     unknown_weights = load_unknown_sign_weights(
@@ -104,7 +105,7 @@ def _load_trial_connectome(args: argparse.Namespace, spec: DatasetSpec) -> np.nd
     )
     if unknown_weights is None:
         raise FileNotFoundError(
-            "Could not load unknown-sign weights for the 4:1 completion. "
+            "Could not load unknown-sign weights for the sign-matched completion. "
             "Pass --ce-unknown-sign-weights."
         )
 
@@ -281,10 +282,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--dataset",
         choices=tuple(DATASETS) + ("all",),
-        default="new_4to1",
+        default="new_sign_matched",
         help="Preset model/dataset to plot. Use 'all' to generate all presets.",
     )
-    p.add_argument("--unknown-sign-inhibitory-frac", type=float, default=0.2)
+    p.add_argument(
+        "--unknown-sign-inhibitory-frac",
+        type=float,
+        default=UNKNOWN_SIGN_INHIBITORY_FRACTION,
+    )
     p.add_argument("--unknown-sign-seed-offset", type=int, default=23_000_000)
     p.add_argument("--seed", type=int, default=12345)
     p.add_argument("--rho-target", type=float, default=1.0)

@@ -20,13 +20,13 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
 # Focused IPC methodology check for the new connectome and bias experiment.
-# ce_adj_unk41.npy has no matching EI file in this repo; passing an empty EI path
+# The sign-matched connectome has no matching EI file; pass an empty EI path.
 # lets load_connectome use the adjacency without trying to load old-size EI labels.
-CE_ADJ="${CE_ADJ:-Connectome/ce_adj_unk41.npy}"
+CE_ADJ="${CE_ADJ:-Connectome/ce_adj.npy}"
 CE_EI=""
-UNKNOWN_SIGN_POLICY="random_unknown_4to1"
-CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights_unk41.npy}"
-BASE_OUT_DIR="${BASE_OUT_DIR:-ipc_methodology_new_cel_4to1}"
+UNKNOWN_SIGN_POLICY="random_unknown_sign_matched"
+CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
+BASE_OUT_DIR="${BASE_OUT_DIR:-ipc_methodology_new_cel_sign_matched}"
 
 # Representative model/hyperparameter set. This is intentionally not the full
 # architecture sweep.
@@ -55,7 +55,7 @@ CUDA_IDX="${SLURM_LOCALID:-0}"
 for required_file in "${CE_ADJ}" "${CE_UNKNOWN_SIGN_WEIGHTS}"
 do
   if [[ ! -f "${required_file}" ]]; then
-    echo "[error] Missing required 4:1-completion input: ${required_file}" >&2
+    echo "[error] Missing required sign-matched input: ${required_file}" >&2
     exit 1
   fi
 done

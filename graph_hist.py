@@ -164,7 +164,7 @@ def _detect_ce_sign_fraction(fractions) -> float | None:
         return min(non_grid, key=lambda v: abs(v - 0.22))
 
     # Known CE-balance points used by the current thesis runs.
-    known = (0.22058823529411764, 0.2425287356321839, 0.2, 0.06113256113256113)
+    known = (0.2425287356321839, 0.06113256113256113)
     for target in known:
         for v in values:
             if abs(v - target) <= 1e-7:
@@ -238,7 +238,7 @@ def _mode_sign_fraction(mode, ce_frac: float | None = None) -> float:
     parsed = _sign_fraction_from_mode(mode)
     if np.isfinite(parsed):
         return parsed
-    ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.22058823529411764
+    ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.2425287356321839
     group = _architecture_sign_balance_group(mode)
     if group == "zero":
         return 0.0
@@ -390,7 +390,7 @@ def _mode_styles_for_cv_performance(present_modes):
     ]
     modes = [mode for mode in preferred_order if mode in present_modes]
     modes.extend(mode for mode in present_modes if mode not in modes)
-    ce_frac = 0.22058823529411764
+    ce_frac = 0.2425287356321839
     mode_fracs = {mode: _mode_sign_fraction(mode, ce_frac) for mode in modes}
     fallback_palette = mpl.colormaps["tab20"]
     color_map = {}
@@ -2503,7 +2503,7 @@ def plot_frac_cv_meanline(
     ax = fig.add_subplot(111, projection="3d")
 
     colors = mpl.colormaps["tab10"]
-    highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.22058823529411764
+    highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.2425287356321839
     highlight_label = "C. elegans\nsign frac"
     highlight_atol = 1e-12
     plotted_any = False
