@@ -13,7 +13,7 @@ import pandas as pd
 
 METRICS = (
     ("active_state_count_mean", "Total active neuron-time samples"),
-    ("activation_onset_count_mean", "Activation onsets"),
+    ("activation_onset_count_mean", "Total activation-threshold crossings"),
 )
 COLORS = {0.0: "#0072B2", 0.5: "#D55E00"}
 
@@ -46,21 +46,18 @@ def plot_comparison(summary_csv: Path, out_path: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9.4, 4.7), dpi=300)
     offsets = np.linspace(-0.11, 0.11, max(df.get("rho_target", pd.Series()).nunique(), 1))
     for ax, (column, ylabel) in zip(axes, METRICS):
-        means, errors, raw_rhos = [], [], []
+        means, raw_rhos = [], []
         for frac in sign_fracs:
             sub = df[np.isclose(df["sign_frac"], frac)].copy()
             values = sub[column].to_numpy(float)
             means.append(float(np.mean(values)))
-            errors.append(float(np.std(values, ddof=1)) if len(values) > 1 else 0.0)
             raw_rhos.append(float(np.mean(sub["raw_rho_mean"])))
 
         xs = np.arange(len(sign_fracs))
         ax.bar(
             xs,
             means,
-            yerr=errors,
             width=0.62,
-            capsize=5,
             color=[COLORS[frac] for frac in sign_fracs],
             edgecolor="white",
             linewidth=1.2,
@@ -86,12 +83,11 @@ def plot_comparison(summary_csv: Path, out_path: Path) -> None:
         ax.spines[["top", "right"]].set_visible(False)
 
     axes[0].set_title("A  Sustained activity", loc="left", fontweight="bold")
-    axes[1].set_title("B  Separate activation events", loc="left", fontweight="bold")
-    fig.suptitle("Higher raw spectral radius is associated with fewer reservoir activations", y=1.02)
+    axes[1].set_title("B  Activation-threshold crossings", loc="left", fontweight="bold")
     fig.text(
         0.5,
-        -0.02,
-        "Bars: mean across spectral-radius targets; error bars: SD across targets; points: individual targets.",
+        -0.035,
+        "Dots: 50-repeat mean at target $\\rho$ = 0.60, 0.80, 0.95, or 1.05; bars: mean of the four dots.",
         ha="center",
         fontsize=9,
     )
