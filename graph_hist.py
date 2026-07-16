@@ -2175,70 +2175,76 @@ def plot_triad_sign_fraction_summary(
     if not rhos:
         rhos = [np.nan]
 
-    n_rows = len(scopes)
-    n_cols = len(rhos)
-    fig_w = max(5.0, 3.9 * n_cols)
-    fig_h = max(3.6, 3.1 * n_rows)
+    panels = [(scope, rho) for scope in scopes for rho in rhos]
+    n_cols = min(2, len(panels))
+    n_rows = int(np.ceil(len(panels) / n_cols))
+    fig_w = 7.0 if n_cols == 2 else 5.2
+    fig_h = 3.45 * n_rows + 1.0
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), dpi=300, squeeze=False)
 
     colors = dict(zip(datasets, plt.cm.tab10(np.linspace(0, 1, max(len(datasets), 1)))))
     handles = []
     labels = []
 
-    for row_idx, scope in enumerate(scopes):
-        for col_idx, rho in enumerate(rhos):
-            ax = axes[row_idx, col_idx]
-            if np.isfinite(rho):
-                panel = df[
-                    (df["triad_scope"].astype(str) == scope)
-                    & np.isclose(df["rho_target"].astype(float), float(rho))
-                ].copy()
-            else:
-                panel = df[df["triad_scope"].astype(str) == scope].copy()
-            if panel.empty:
-                ax.set_axis_off()
+    for panel_idx, (scope, rho) in enumerate(panels):
+        row_idx, col_idx = divmod(panel_idx, n_cols)
+        ax = axes[row_idx, col_idx]
+        if np.isfinite(rho):
+            panel = df[
+                (df["triad_scope"].astype(str) == scope)
+                & np.isclose(df["rho_target"].astype(float), float(rho))
+            ].copy()
+        else:
+            panel = df[df["triad_scope"].astype(str) == scope].copy()
+        if panel.empty:
+            ax.set_axis_off()
+            continue
+
+        for dataset in datasets:
+            sub = panel[panel["dataset"].astype(str) == dataset].sort_values("sign_frac")
+            if sub.empty:
                 continue
+            xs = sub["sign_frac"].to_numpy(float)
+            ys = sub["triad_avg_abs_w_mean_mean"].to_numpy(float)
+            yerr = None
+            if "triad_avg_abs_w_mean_std" in sub.columns:
+                yerr_vals = sub["triad_avg_abs_w_mean_std"].to_numpy(float)
+                if np.isfinite(yerr_vals).any():
+                    yerr = np.nan_to_num(yerr_vals, nan=0.0)
+            line = ax.errorbar(
+                xs,
+                ys,
+                yerr=yerr,
+                marker="o",
+                linewidth=2.0,
+                markersize=4.2,
+                capsize=2.4 if yerr is not None else 0.0,
+                color=colors[dataset],
+                label=dataset,
+            )
+            if panel_idx == 0:
+                handles.append(line)
+                labels.append(dataset)
 
-            for dataset in datasets:
-                sub = panel[panel["dataset"].astype(str) == dataset].sort_values("sign_frac")
-                if sub.empty:
-                    continue
-                xs = sub["sign_frac"].to_numpy(float)
-                ys = sub["triad_avg_abs_w_mean_mean"].to_numpy(float)
-                yerr = None
-                if "triad_avg_abs_w_mean_std" in sub.columns:
-                    yerr_vals = sub["triad_avg_abs_w_mean_std"].to_numpy(float)
-                    if np.isfinite(yerr_vals).any():
-                        yerr = np.nan_to_num(yerr_vals, nan=0.0)
-                line = ax.errorbar(
-                    xs,
-                    ys,
-                    yerr=yerr,
-                    marker="o",
-                    linewidth=2.0,
-                    markersize=4.2,
-                    capsize=2.4 if yerr is not None else 0.0,
-                    color=colors[dataset],
-                    label=dataset,
-                )
-                if row_idx == 0 and col_idx == 0:
-                    handles.append(line)
-                    labels.append(dataset)
+        title_bits = []
+        if len(scopes) > 1:
+            title_bits.append(scope)
+        if np.isfinite(rho):
+            title_bits.append(rf"$\rho={rho:g}$")
+        panel_letter = chr(ord("A") + panel_idx)
+        panel_title = " | ".join(title_bits) if title_bits else "Triad $|w|$"
+        ax.set_title(f"{panel_letter}  {panel_title}", loc="left", fontweight="bold")
+        ax.set_xlabel("Negative-edge fraction")
+        ax.set_ylabel(r"Mean triad-average $|w|$")
+        ax.set_xlim(-0.02, 1.02)
+        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
+        ax.grid(True, alpha=0.24)
+        ax.margins(y=0.08)
 
-            title_bits = []
-            if len(scopes) > 1:
-                title_bits.append(scope)
-            if np.isfinite(rho):
-                title_bits.append(rf"$\rho={rho:g}$")
-            ax.set_title(" | ".join(title_bits) if title_bits else "Triad |w|")
-            ax.set_xlabel("sign flip fraction")
-            ax.set_ylabel(r"Mean triad average $|w|$")
-            ax.set_xlim(-0.02, 1.02)
-            ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
-            ax.grid(True, alpha=0.24)
-            ax.margins(y=0.08)
+    for panel_idx in range(len(panels), n_rows * n_cols):
+        axes.flat[panel_idx].set_axis_off()
 
-    if handles:
+    if handles and len(datasets) > 1:
         fig.legend(
             handles,
             labels,
@@ -2248,14 +2254,8 @@ def plot_triad_sign_fraction_summary(
             frameon=False,
         )
 
-    norm_label = "all normalizations" if str(normalization).lower() == "all" else _sign_norm_label(normalization)
-    scope_label = "all scopes" if str(triad_scope).lower() == "all" else str(triad_scope)
-    fig.suptitle(
-        rf"Triad average $|w|$ by sign fraction ({norm_label}, {scope_label})",
-        y=1.02 if handles else 0.99,
-        fontsize=15,
-    )
-    fig.tight_layout(rect=[0.02, 0.02, 1.0, 0.92 if handles else 0.95])
+    fig.suptitle(r"Triad average $|w|$ by negative-edge fraction", y=0.99, fontsize=15)
+    fig.tight_layout(rect=[0.02, 0.02, 0.98, 0.94], h_pad=2.0, w_pad=1.6)
 
     os.makedirs(out_dir, exist_ok=True)
     if not out_path:

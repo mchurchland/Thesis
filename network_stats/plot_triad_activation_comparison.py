@@ -43,7 +43,7 @@ def plot_comparison(summary_csv: Path, out_path: Path) -> None:
     if len(sign_fracs) != 2:
         raise ValueError("Both sign fractions (0.0 and 0.5) are required for this comparison.")
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.4, 4.7), dpi=300)
+    fig, axes = plt.subplots(2, 1, figsize=(6.4, 8.2), dpi=300)
     offsets = np.linspace(-0.11, 0.11, max(df.get("rho_target", pd.Series()).nunique(), 1))
     for ax, (column, ylabel) in zip(axes, METRICS):
         means, raw_rhos = [], []
@@ -86,12 +86,13 @@ def plot_comparison(summary_csv: Path, out_path: Path) -> None:
     axes[1].set_title("B  Activation-threshold crossings", loc="left", fontweight="bold")
     fig.text(
         0.5,
-        -0.035,
-        "Dots: 50-repeat mean at target $\\rho$ = 0.60, 0.80, 0.95, or 1.05; bars: mean of the four dots.",
+        0.018,
+        "Dots: 50-repeat mean at target $\\rho$ = 0.60, 0.80, 0.95, or 1.05;\n"
+        "bars: mean of the four dots.",
         ha="center",
         fontsize=9,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=[0.02, 0.075, 0.98, 0.99], h_pad=2.2)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=450, bbox_inches="tight", facecolor="white")
     plt.close(fig)
