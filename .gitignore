@@ -1,4 +1,11 @@
+# Python bytecode
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Generated experiment output
 final_results/triad_sign_fraction_experiment/triad_sign_fraction_activation_details.ALL.csv
