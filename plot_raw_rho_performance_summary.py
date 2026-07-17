@@ -242,30 +242,28 @@ def plot_summary(
         {
             "font.family": "DejaVu Sans",
             "axes.linewidth": 0.8,
-            "axes.labelsize": 9.2,
-            "axes.titlesize": 11.2,
-            "xtick.labelsize": 13.5,
-            "ytick.labelsize": 13.5,
-            "legend.fontsize": 15.8,
+            "axes.labelsize": 12.0,
+            "axes.titlesize": 13.0,
+            "xtick.labelsize": 11.0,
+            "ytick.labelsize": 11.0,
+            "legend.fontsize": 10.8,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
     )
 
-    fig, axes = plt.subplots(2, 4, figsize=(10.8, 7.6), dpi=300, sharex=True)
+    # Two panel columns are much more legible in a two-column manuscript than
+    # the former four-across layout. Each metric now occupies one row, making
+    # its mean and CV directly comparable without shrinking either axis.
+    fig, axes = plt.subplots(4, 2, figsize=(7.15, 8.6), dpi=300, sharex=True)
     panel_specs = [
-        ("GR", "performance", "GR"),
-        ("IPC", "performance", "IPC"),
-        ("KR", "performance", "KR"),
-        ("MC", "performance", "MC"),
-        ("GR", "cv", ""),
-        ("IPC", "cv", ""),
-        ("KR", "cv", ""),
-        ("MC", "cv", ""),
+        (metric, value_col)
+        for metric in METRICS
+        for value_col in ("performance", "cv")
     ]
 
     panel_letters = tuple("ABCDEFGH")
-    for panel_idx, (ax, (metric, value_col, title)) in enumerate(zip(axes.ravel(), panel_specs)):
+    for panel_idx, (ax, (metric, value_col)) in enumerate(zip(axes.ravel(), panel_specs)):
         metric_df = summary[summary["metric"] == metric].copy()
         shuffle_df = metric_df[metric_df["series_kind"] == "shuffle"]
         sign_df = metric_df[metric_df["series_kind"] == "sign_sweep"]
@@ -314,15 +312,23 @@ def plot_summary(
                 zorder=4,
             )
 
-        ax.set_title(title, fontweight="semibold", pad=5)
+        row, col = divmod(panel_idx, 2)
+        if row == 0:
+            ax.set_title(
+                "Mean performance" if col == 0 else "Coefficient of variation (CV)",
+                fontweight="semibold",
+                pad=7,
+            )
+        if col == 0:
+            ax.set_ylabel(metric, fontweight="bold", labelpad=7)
         ax.text(
-            -0.048,
-            1.035,
+            -0.110,
+            1.025,
             panel_letters[panel_idx],
             transform=ax.transAxes,
             ha="left",
             va="bottom",
-            fontsize=9.4,
+            fontsize=11.5,
             fontweight="bold",
             clip_on=False,
         )
@@ -365,9 +371,7 @@ def plot_summary(
                     pad = max(0.10 * (y_hi - y_lo), 0.025)
                 ax.set_ylim(y_lo, y_hi + pad)
 
-    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=15.5, y=0.180)
-    fig.text(0.020, 0.78, "Mean performance", rotation=90, va="center", ha="center", fontsize=15.5)
-    fig.text(0.020, 0.43, "CV", rotation=90, va="center", ha="center", fontsize=15.5)
+    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=13.0, y=0.153)
 
     family_handles = [
         Line2D(
@@ -400,16 +404,16 @@ def plot_summary(
     fig.legend(
         handles=family_handles + dataset_handles,
         loc="lower center",
-        bbox_to_anchor=(0.50, 0.010),
-        ncol=3,
+        bbox_to_anchor=(0.50, 0.018),
+        ncol=2,
         frameon=False,
-        columnspacing=0.70,
-        handlelength=1.35,
-        handletextpad=0.35,
-        fontsize=15.8,
+        columnspacing=1.15,
+        handlelength=1.65,
+        handletextpad=0.45,
+        fontsize=10.8,
     )
 
-    fig.subplots_adjust(left=0.065, right=0.985, bottom=0.270, top=0.930, wspace=0.26, hspace=0.36)
+    fig.subplots_adjust(left=0.105, right=0.985, bottom=0.225, top=0.955, wspace=0.24, hspace=0.34)
 
     paths = []
     for ext, dpi in (("png", 450), ("pdf", 450)):

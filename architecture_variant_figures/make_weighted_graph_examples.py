@@ -1055,7 +1055,7 @@ def make_new_sign_matched_four_panel(
             transform=ax.transAxes,
             ha="left",
             va="top",
-            fontsize=24,
+            fontsize=20,
             fontweight="bold",
             color="#111111",
             bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.86, "pad": 0.25},
@@ -1063,7 +1063,7 @@ def make_new_sign_matched_four_panel(
         )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.925, bottom=0.01, wspace=0.015, hspace=0.20)
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.975, bottom=0.01, wspace=0.015, hspace=0.20)
     fig.savefig(out_path, dpi=figure_dpi)
     maybe_show(show)
     plt.close(fig)
