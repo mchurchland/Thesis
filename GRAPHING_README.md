@@ -203,24 +203,36 @@ final_results/graphs/thesis/sign_fraction/matched_er/meanpoint_frac_cv_lines.png
 
 First generate the summary CSVs used by the simplified plotting script:
 
+The commands below calculate CV only at the nominal target
+`rho_target=1.05`; mean performance continues to be averaged over the full
+target grid.
+
+To generate the alternative full-grid CV across spectral radius, leak, input
+scale, and neuron bias, replace `--sign-norm-cv-rho-target 1.05` with
+`--sign-norm-cv-include-rho` and use a separate output directory so both
+summaries remain available.
+
 ```bash
 python graph_hist.py \
   --combined final_results/sign_norm/cel_matched/combined.ALL.csv \
   --out-dir final_results/graphs/thesis/sign_normalization/data/cel_matched \
   --sign-norm-ablation \
-  --sign-norm-prefix sign_test_og_cel
+  --sign-norm-prefix sign_test_og_cel \
+  --sign-norm-cv-rho-target 1.05
 
 python graph_hist.py \
   --combined final_results/sign_norm/cel_removed/combined.ALL.csv \
   --out-dir final_results/graphs/thesis/sign_normalization/data/cel_removed \
   --sign-norm-ablation \
-  --sign-norm-prefix sign_test_og_cel
+  --sign-norm-prefix sign_test_og_cel \
+  --sign-norm-cv-rho-target 1.05
 
 python graph_hist.py \
   --combined final_results/sign_norm/matched_er/combined.ALL.csv \
   --out-dir final_results/graphs/thesis/sign_normalization/data/matched_er \
   --sign-norm-ablation \
-  --sign-norm-prefix sign_test_er
+  --sign-norm-prefix sign_test_er \
+  --sign-norm-cv-rho-target 1.05
 ```
 
 Then generate option 8 for all three datasets. `axis_limits=None` is

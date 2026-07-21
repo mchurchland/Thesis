@@ -524,6 +524,24 @@ def parse_args():
         help="Mode prefix used to identify sign-normalization ablation rows.",
     )
     ap.add_argument(
+        "--sign-norm-cv-rho-target",
+        type=float,
+        default=None,
+        help=(
+            "Optional nominal spectral-radius target used for the sign-normalization "
+            "CV. When omitted, calculate CV within each target and average targets."
+        ),
+    )
+    ap.add_argument(
+        "--sign-norm-cv-include-rho",
+        action="store_true",
+        help=(
+            "Calculate one sign-normalization CV across spectral radius, leak, "
+            "input scale, and neuron bias. Cannot be combined with "
+            "--sign-norm-cv-rho-target."
+        ),
+    )
+    ap.add_argument(
         "--triad-sign-fraction-plot",
         action="store_true",
         help=(
@@ -1884,6 +1902,15 @@ def _save_sign_norm_combined_grid(
 
     memory_metrics = [metric for metric in ("MC", "IPC") if metric in metrics]
     kernel_metrics = [metric for metric in ("KR", "GR") if metric in metrics]
+    cv_target_label = "Mean within-target CV"
+    if "cv_definition" in cv.columns and set(cv["cv_definition"].dropna()) == {
+        "full_grid_cv_including_rho"
+    }:
+        cv_target_label = r"Full-grid CV (including $\rho$)"
+    elif "rho_target" in cv.columns:
+        cv_targets = pd.to_numeric(cv["rho_target"], errors="coerce").dropna().unique()
+        if len(cv_targets) == 1:
+            cv_target_label = rf"CV at nominal $\rho={float(cv_targets[0]):g}$"
     draw_combined_metrics(
         performance,
         memory_performance_ax,
@@ -1899,9 +1926,9 @@ def _save_sign_norm_combined_grid(
     )
     kernel_performance_ax.set_title("Kernel metrics: mean performance")
 
-    draw_combined_metrics(cv, memory_cv_ax, memory_metrics, "Mean within-target CV")
+    draw_combined_metrics(cv, memory_cv_ax, memory_metrics, cv_target_label)
     memory_cv_ax.set_title("Memory metrics: hyperparameter CV")
-    draw_combined_metrics(cv, kernel_cv_ax, kernel_metrics, "Mean within-target CV")
+    draw_combined_metrics(cv, kernel_cv_ax, kernel_metrics, cv_target_label)
     kernel_cv_ax.set_title("Kernel metrics: hyperparameter CV")
 
     if scaling.empty:
@@ -1998,7 +2025,17 @@ def _save_sign_norm_combined_grid(
     print(f"[saved] {out_path}")
 
 
-def plot_sign_norm_ablation(combined: pd.DataFrame, out_dir: str, prefix: str = "sign_test_og_cel"):
+def plot_sign_norm_ablation(
+    combined: pd.DataFrame,
+    out_dir: str,
+    prefix: str = "sign_test_og_cel",
+    cv_rho_target: float | None = None,
+    cv_include_rho: bool = False,
+):
+    if cv_include_rho and cv_rho_target is not None:
+        raise ValueError(
+            "Choose either full-grid CV including rho or a single rho target, not both."
+        )
     os.makedirs(out_dir, exist_ok=True)
     df = _prepare_sign_norm_ablation_df(combined, prefix)
     if df.empty:
@@ -2070,29 +2107,69 @@ def plot_sign_norm_ablation(combined: pd.DataFrame, out_dir: str, prefix: str = 
         var_name="metric",
         value_name="value",
     ).dropna(subset=["value"])
-    per_target_cv = (
-        hparam_long.groupby(
-            ["normalization", "sign_frac", "unit_id", "rho_target", "metric"],
-            as_index=False,
-        )["value"]
-        .agg(cv=lambda x: _dispersion(x.to_numpy()))
-    )
-    # Keep target radius out of the CV itself: calculate invariance across the
-    # remaining hyperparameters at each target, then average targets per repeat.
-    per_group_cv = (
-        per_target_cv.groupby(
-            ["normalization", "sign_frac", "unit_id", "metric"],
-            as_index=False,
-        )["cv"]
-        .mean()
-    )
+    cv_input = hparam_long
+    if cv_rho_target is not None:
+        available_targets = np.sort(cv_input["rho_target"].dropna().unique().astype(float))
+        target_mask = np.isclose(
+            cv_input["rho_target"].to_numpy(float),
+            float(cv_rho_target),
+            rtol=0.0,
+            atol=1e-9,
+        )
+        cv_input = cv_input.loc[target_mask].copy()
+        if cv_input.empty:
+            available = ", ".join(f"{target:g}" for target in available_targets)
+            raise ValueError(
+                f"Requested sign-normalization CV target {cv_rho_target:g} is absent. "
+                f"Available targets: {available}"
+            )
+
+    if cv_include_rho:
+        # Full-grid invariance: spectral radius is one of the hyperparameter
+        # dimensions contributing to the dispersion within each repeat.
+        per_group_cv = (
+            cv_input.groupby(
+                ["normalization", "sign_frac", "unit_id", "metric"],
+                as_index=False,
+            )["value"]
+            .agg(cv=lambda x: _dispersion(x.to_numpy()))
+        )
+    else:
+        per_target_cv = (
+            cv_input.groupby(
+                ["normalization", "sign_frac", "unit_id", "rho_target", "metric"],
+                as_index=False,
+            )["value"]
+            .agg(cv=lambda x: _dispersion(x.to_numpy()))
+        )
+        # Keep target radius out of the CV itself: calculate invariance across
+        # the remaining hyperparameters at each selected target. If no target
+        # was selected explicitly, average target-specific CVs per repeat.
+        per_group_cv = (
+            per_target_cv.groupby(
+                ["normalization", "sign_frac", "unit_id", "metric"],
+                as_index=False,
+            )["cv"]
+            .mean()
+        )
+
     cv_summary = _summarize_group_values(
         per_group_cv,
         "cv",
         ["normalization", "sign_frac", "metric"],
     )
-    cv_summary["n_rho_targets"] = int(df["rho_target"].nunique())
-    cv_summary["cv_definition"] = "mean_within_target_cv"
+    if cv_include_rho:
+        cv_summary["rho_target"] = np.nan
+        cv_summary["n_rho_targets"] = int(cv_input["rho_target"].nunique())
+        cv_summary["cv_definition"] = "full_grid_cv_including_rho"
+    elif cv_rho_target is None:
+        cv_summary["rho_target"] = np.nan
+        cv_summary["n_rho_targets"] = int(cv_input["rho_target"].nunique())
+        cv_summary["cv_definition"] = "mean_within_target_cv"
+    else:
+        cv_summary["rho_target"] = float(cv_rho_target)
+        cv_summary["n_rho_targets"] = 1
+        cv_summary["cv_definition"] = "within_selected_target_cv"
     cv_csv = _replace_path(os.path.join(out_dir, "sign_norm_ablation_cv.csv"))
     cv_summary.to_csv(cv_csv, index=False)
     print(f"[saved] {cv_csv} (rows={len(cv_summary)})")
@@ -5221,7 +5298,13 @@ def main():
         )
 
     if args.sign_norm_ablation:
-        plot_sign_norm_ablation(combined, args.out_dir, prefix=args.sign_norm_prefix)
+        plot_sign_norm_ablation(
+            combined,
+            args.out_dir,
+            prefix=args.sign_norm_prefix,
+            cv_rho_target=args.sign_norm_cv_rho_target,
+            cv_include_rho=args.sign_norm_cv_include_rho,
+        )
         return
 
     # Save a copy (non-destructive; versioned if exists)

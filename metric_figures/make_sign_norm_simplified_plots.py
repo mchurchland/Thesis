@@ -113,6 +113,18 @@ def _load_dataset(info: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFrame, 
     return perf, cv, scaling
 
 
+def _cv_panel_label(cv: pd.DataFrame) -> str:
+    if "cv_definition" in cv.columns and set(cv["cv_definition"].dropna()) == {
+        "full_grid_cv_including_rho"
+    }:
+        return r"Coefficient of variation across full sweep (including $\rho$)"
+    if "rho_target" in cv.columns:
+        targets = pd.to_numeric(cv["rho_target"], errors="coerce").dropna().unique()
+        if len(targets) == 1:
+            return rf"Coefficient of variation at nominal $\rho={float(targets[0]):g}$"
+    return "Mean coefficient of variation across targets"
+
+
 def _normalize_metric_rows(df: pd.DataFrame, *, invert: bool = False) -> pd.DataFrame:
     out = df.copy()
     out["index"] = np.nan
@@ -976,7 +988,7 @@ def save_option_8_average_perf_cv(
     _draw_group_average_raw_panel(
         axes[2],
         cv,
-        panel_label="Mean coefficient of variation",
+        panel_label=_cv_panel_label(cv),
         ylabel="CV",
         y_limits=axis_limits.get("cv") if axis_limits else None,
     )
