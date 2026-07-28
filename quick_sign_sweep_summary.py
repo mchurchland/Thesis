@@ -22,6 +22,7 @@ from plot_raw_rho_performance_summary import build_summary
 
 OUT_DIR = Path("good_results/summary")
 OUT_STEM = "sign_sweep_quicklook"
+CE_ONLY_OUT_STEM = "sign_sweep_quicklook_celegans_only"
 REF_SIGN_FRAC = 0.2425287356321839
 
 
@@ -45,14 +46,18 @@ def _aggregate_sign_sweeps(summary: pd.DataFrame) -> pd.DataFrame:
     return agg
 
 
-def _load_reference_rhos(summary: pd.DataFrame) -> tuple[float, float]:
+def _load_ce_reference_rho(summary: pd.DataFrame) -> float:
     ce_mask = (
         (summary["series_kind"] == "shuffle")
         & (summary["mode"] == "real")
     )
     if not ce_mask.any():
         raise ValueError("Could not locate the original C. elegans rho in the summary data.")
-    ce_original_rho = float(summary.loc[ce_mask, "raw_rho"].iloc[0])
+    return float(summary.loc[ce_mask, "raw_rho"].iloc[0])
+
+
+def _load_reference_rhos(summary: pd.DataFrame) -> tuple[float, float]:
+    ce_original_rho = _load_ce_reference_rho(summary)
 
     er_mask = (
         (summary["series_kind"] == "sign_sweep")
@@ -71,7 +76,104 @@ def _load_reference_rhos(summary: pd.DataFrame) -> tuple[float, float]:
     return ce_original_rho, er_at_ce_rho
 
 
-def main() -> None:
+def _save_celegans_only(agg: pd.DataFrame, ce_original_rho: float) -> None:
+    ce_curve = (
+        agg[agg["dataset"] == "Matched C. elegans sweep"]
+        .sort_values("sign_frac")
+        .copy()
+    )
+    if ce_curve.empty:
+        raise ValueError("No matched C. elegans sign-sweep rows found.")
+
+    color = "#d55e00"
+    y_min = min(float(ce_curve["raw_rho"].min()), ce_original_rho)
+    y_max = max(float(ce_curve["raw_rho"].max()), ce_original_rho)
+    y_pad = max(3.0, (y_max - y_min) * 0.08)
+
+    fig, ax = plt.subplots(figsize=(7.35, 3.65), dpi=300)
+    ax.plot(
+        ce_curve["sign_frac"],
+        ce_curve["raw_rho"],
+        color=color,
+        linewidth=2.4,
+        marker="o",
+        markersize=6.2,
+        markerfacecolor="white",
+        markeredgecolor=color,
+        markeredgewidth=1.2,
+        zorder=3,
+    )
+    ax.axhline(
+        ce_original_rho,
+        color=color,
+        linestyle="--",
+        linewidth=1.8,
+        alpha=0.95,
+        zorder=2,
+    )
+    ax.axvline(
+        REF_SIGN_FRAC,
+        color="#444444",
+        linestyle="--",
+        linewidth=1.2,
+        alpha=0.9,
+        zorder=2,
+    )
+
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(y_min - y_pad, y_max + y_pad)
+    ax.set_xlabel("sign fraction")
+    ax.set_ylabel(r"raw $\rho(W)$")
+    ax.set_title("Mean raw spectral radius", fontweight="semibold", pad=5)
+    ax.grid(True, axis="y", color="#dfdfdf", linewidth=0.65, alpha=0.7)
+    ax.spines["right"].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_color("#333333")
+        spine.set_linewidth(0.9)
+
+    ax.text(
+        1.005,
+        ce_original_rho,
+        "C. elegans original",
+        color=color,
+        fontsize=9.4,
+        va="center",
+        ha="left",
+        transform=ax.get_yaxis_transform(),
+    )
+    ax.text(
+        REF_SIGN_FRAC + 0.012,
+        y_max + y_pad * 0.72,
+        "empirical sign fraction",
+        fontsize=9.4,
+        color="#444444",
+        va="top",
+        ha="left",
+    )
+    ax.text(
+        0.70,
+        0.90,
+        "C. elegans sweep",
+        color=color,
+        fontsize=10.6,
+        fontweight="semibold",
+        transform=ax.transAxes,
+        ha="left",
+        va="center",
+    )
+
+    fig.subplots_adjust(top=0.90, bottom=0.18, left=0.105, right=0.92)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    png = OUT_DIR / f"{CE_ONLY_OUT_STEM}.png"
+    pdf = OUT_DIR / f"{CE_ONLY_OUT_STEM}.pdf"
+    fig.savefig(png, dpi=300, bbox_inches="tight", facecolor="white")
+    fig.savefig(pdf, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"[saved] {png}")
+    print(f"[saved] {pdf}")
+
+
+def main(*, celegans_only: bool = False) -> None:
     mpl.rcParams.update(
         {
             "font.family": "DejaVu Sans",
@@ -94,6 +196,11 @@ def main() -> None:
     agg = _aggregate_sign_sweeps(summary)
     if agg.empty:
         raise ValueError("No sign-sweep rows found in the summary data.")
+    if celegans_only:
+        ce_original_rho = _load_ce_reference_rho(summary)
+        _save_celegans_only(agg, ce_original_rho)
+        return
+
     ce_original_rho, er_at_ce_rho = _load_reference_rhos(summary)
     raw_max = float(agg["raw_rho"].max())
     er_max = float(agg.loc[agg["dataset"] == "Matched ER sweep", "raw_rho"].max())

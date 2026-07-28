@@ -170,7 +170,11 @@ over matching trial groups.
 
 The thesis uses the existing `plot_frac_cv_meanline` function in
 `graph_hist.py`. It is not currently exposed as a command-line flag, so invoke
-the function directly:
+the function directly. Each output stacks the 3D performance/CV curves above
+the mean raw-spectral-radius curve for the same model's sign sweep. All lower
+curves use the same color. The C. elegans panels mark the empirical sign
+fraction; the ER panel omits that guide. None draws an original-network
+spectral-radius reference:
 
 ```bash
 python - <<'PY'
@@ -389,6 +393,17 @@ quick.build_summary = lambda *_args, **_kwargs: summary.copy()
 quick.main()
 PY
 ```
+
+For the separate C. elegans-only version, use the same wrapper but replace
+`quick.main()` with:
+
+```python
+quick.main(celegans_only=True)
+```
+
+This writes `sign_sweep_quicklook_celegans_only.png` and
+`sign_sweep_quicklook_celegans_only.pdf` without overwriting the combined
+C. elegans/ER figure.
 
 ## 8. Triad sign-fraction plot
 

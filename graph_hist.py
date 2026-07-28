@@ -2536,10 +2536,15 @@ def plot_frac_cv_meanline(
     show: bool = True,
 ):
     """
-    Single 3D plot with one colored line per metric (MC, IPC, KR, GR):
+    Stacked sign-sweep summary. The upper 3D panel has one colored line per
+    metric (MC, IPC, KR, GR):
       x = mode value (parsed numeric component)
       y = mean CV (dispersion) across groups
       z = mean performance across runs
+
+    The lower panel shows the corresponding mean raw spectral radius across
+    the same sign-fraction sweep. It intentionally does not include a
+    horizontal reference for the original C. elegans network.
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -2576,12 +2581,23 @@ def plot_frac_cv_meanline(
     mean_perf = comb_long.groupby(["mode", "metric"])["value"].mean()
     mean_cv = disp.groupby(["mode", "metric"])["dispersion"].mean()
 
-    fig = plt.figure(figsize=(4.0, 3.2), dpi=300)
-    ax = fig.add_subplot(111, projection="3d")
+    if "raw_rho" not in combined.columns:
+        print("[warn] plot_frac_cv_meanline: combined table missing raw_rho.")
+        return
+
+    fig = plt.figure(figsize=(4.5, 5.7), dpi=300)
+    grid = fig.add_gridspec(
+        2,
+        1,
+        height_ratios=(2.25, 1.0),
+        hspace=0.12,
+    )
+    ax = fig.add_subplot(grid[0], projection="3d")
+    ax_rho = fig.add_subplot(grid[1])
 
     colors = mpl.colormaps["tab10"]
     highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.2425287356321839
-    highlight_label = "C. elegans\nsign frac"
+    highlight_label = "C. elegans\nsign fraction"
     highlight_atol = 1e-12
     plotted_any = False
     highlight_labeled = False
@@ -2632,7 +2648,7 @@ def plot_frac_cv_meanline(
     span = x_max - x_min
     pad = 0.05 * span if span > 0 else 1.0
 
-    axis_x_label = "Neg. Sign Frac" if x_label == "Negative Sign %" else x_label
+    axis_x_label = "Negative sign fraction" if x_label == "Negative Sign %" else x_label
     ax.set_xlabel(axis_x_label, fontsize=10.2, labelpad=0)
     ax.set_ylabel("Mean CV", fontsize=10.5, labelpad=-3)
     ax.set_zlabel("")
@@ -2646,9 +2662,9 @@ def plot_frac_cv_meanline(
     _style_3d_axis(ax, tick_labelsize=8, tick_pad=-3, z_tick_pad=-2)
     ax.view_init(elev=20, azim=-18)
     fig.text(
-        1.035,
-        0.52,
-        "Mean Performance",
+        0.985,
+        0.64,
+        "Mean performance",
         fontsize=9.8,
         rotation=90,
         ha="center",
@@ -2676,17 +2692,99 @@ def plot_frac_cv_meanline(
         framealpha=1.0,
         fontsize=8.5,
         loc="upper left",
-        bbox_to_anchor=(0.05, 1.1),
+        bbox_to_anchor=(0.045, 0.975),
         borderaxespad=0.0,
         handlelength=2.0,
         borderpad=0.42,
         labelspacing=0.5,
         markerscale=1.1,
     )
-    _tight_layout_quiet(fig)
+
+    raw_group_cols = [
+        col for col in ("mode", "src", "shuffle_id")
+        if col in combined.columns
+    ]
+    raw_rho = combined.loc[:, raw_group_cols + ["raw_rho"]].copy()
+    raw_rho["sign_frac"] = raw_rho["mode"].map(mode_values)
+    raw_rho["raw_rho"] = pd.to_numeric(raw_rho["raw_rho"], errors="coerce")
+    raw_rho = raw_rho[
+        raw_rho["mode"].isin(modes)
+        & np.isfinite(raw_rho["sign_frac"])
+        & np.isfinite(raw_rho["raw_rho"])
+    ]
+    # A reservoir's raw rho is repeated once per hyperparameter row. Average
+    # within each source/shuffle first so incomplete grids cannot overweight a
+    # particular reservoir in the sweep mean.
+    raw_rho = (
+        raw_rho.groupby(raw_group_cols + ["sign_frac"], as_index=False)["raw_rho"]
+        .mean()
+    )
+    rho_curve = (
+        raw_rho.groupby("sign_frac", as_index=False)["raw_rho"]
+        .mean()
+        .sort_values("sign_frac")
+    )
+    if rho_curve.empty:
+        plt.close(fig)
+        print("[warn] plot_frac_cv_meanline: no finite raw_rho data to plot.")
+        return
+
+    dataset_key = os.path.basename(os.path.normpath(out_dir))
+    rho_color = "#d55e00"
+    ax_rho.plot(
+        rho_curve["sign_frac"],
+        rho_curve["raw_rho"],
+        color=rho_color,
+        linewidth=2.2,
+        marker="o",
+        markersize=5.2,
+        markerfacecolor="white",
+        markeredgecolor=rho_color,
+        markeredgewidth=1.1,
+        zorder=3,
+    )
+    if dataset_key != "matched_er":
+        ax_rho.axvline(
+            highlight_frac,
+            color="#444444",
+            linestyle="--",
+            linewidth=1.05,
+            alpha=0.9,
+            zorder=2,
+        )
+        ax_rho.text(
+            highlight_frac + 0.012,
+            0.97,
+            "empirical sign fraction",
+            color="#444444",
+            fontsize=7.5,
+            ha="left",
+            va="top",
+            transform=ax_rho.get_xaxis_transform(),
+        )
+    rho_min = float(rho_curve["raw_rho"].min())
+    rho_max = float(rho_curve["raw_rho"].max())
+    rho_span = rho_max - rho_min
+    rho_pad = max(0.6, 0.09 * rho_span)
+    ax_rho.set_xlim(x_min - pad, x_max + pad)
+    ax_rho.set_ylim(rho_min - rho_pad, rho_max + rho_pad)
+    ax_rho.set_xlabel(axis_x_label, fontsize=9.4)
+    ax_rho.set_ylabel(r"Mean raw $\rho(W)$", fontsize=9.4)
+    ax_rho.grid(
+        True,
+        axis="y",
+        color="#dfdfdf",
+        linewidth=0.65,
+        alpha=0.7,
+    )
+    ax_rho.tick_params(axis="both", labelsize=8.2)
+    ax_rho.spines["right"].set_visible(False)
+    for spine in ax_rho.spines.values():
+        spine.set_color("#333333")
+        spine.set_linewidth(0.8)
 
     out_fig = _replace_path(os.path.join(out_dir, "meanpoint_frac_cv_lines.png"))
-    fig.subplots_adjust(left=0.02, right=0.98, bottom=-0.04, top=1.18)
+    fig.subplots_adjust(left=0.11, right=0.985, bottom=0.08, top=0.96, hspace=0.12)
     fig.savefig(
         out_fig,
         dpi=600,
