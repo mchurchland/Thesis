@@ -208,6 +208,7 @@ def _build_ctx(
     output_idx: np.ndarray | None = None,
     normalization_mode: str = "spectral_radius",
     label_normalization: bool = False,
+    rank_only: bool = False,
 ) -> VariantContext:
     if job_key not in VARIANT_KEYS:
         if (not job_key.startswith("sign_test")) and (not job_key.startswith("weight_test")):
@@ -229,6 +230,7 @@ def _build_ctx(
         output_idx=output_idx,
         normalization_mode=normalization_mode,
         label_normalization=label_normalization,
+        rank_only=rank_only,
     )
 
 
@@ -236,7 +238,7 @@ def _run_and_save(job_key: str, ctx: VariantContext, out_dir: str, csv_name: str
     os.makedirs(out_dir, exist_ok=True)
     out_csv = os.path.join(out_dir, csv_name)
     rows = run_variant(job_key, ctx)
-    save_rows(out_csv, rows, append=append)
+    save_rows(out_csv, rows, append=append, rank_only=ctx.rank_only)
 
 
 def parse_args():
@@ -301,6 +303,14 @@ def parse_args():
         "--append-existing",
         action="store_true",
         help="Append to an existing output CSV instead of replacing it at the start of this run.",
+    )
+    p.add_argument(
+        "--rank-only",
+        action="store_true",
+        help=(
+            "Compute only KR and GR. If the output CSV exists, update only its KR/GR "
+            "columns and preserve its existing MC/IPC values."
+        ),
     )
 
     # RNG / run ids
@@ -455,6 +465,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.rank_only:
+        print(
+            "[INFO] rank-only mode: skipping MC/IPC and updating only KR/GR "
+            "in any existing output CSV."
+        )
     sign_flip_fracs = list(args.sign_flip_frac if isinstance(args.sign_flip_frac, (list, tuple)) else [args.sign_flip_frac])
     alphas = list(args.alphas if isinstance(args.alphas, (list, tuple)) else [args.alphas])
     normalization_modes = list(args.normalization_modes)
@@ -619,6 +634,7 @@ def main():
                         output_idx=output_idx,
                         normalization_mode=normalization_mode,
                         label_normalization=label_normalization,
+                        rank_only=args.rank_only,
                     )
 
                 if job_key in ("shuffle_weights", "conn_shuf", "local_sign"):

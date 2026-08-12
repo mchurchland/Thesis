@@ -58,13 +58,21 @@ class SimulationParams:
     """Container for the time-series/metric settings used by run_one."""
 
     washout: int = int(500)
-    perturb_std: float = 0.01
     t_train: int = int(1500)
     t_test: int = int(500)
     mc_max_delay: int = 30
     ipc_max_delay: int = 30
     ipc_orders: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
     ridge_alpha: float = 1e-4
+    kr_rank_threshold: float = 1e-3
+    kr_num_streams: int = 200  # minimum; raised to the observed-node count if needed
+    kr_stream_length: int = 10
+    kr_seed_offset: int = 29_000_003
+    gr_rank_threshold: float = 1e-3
+    gr_num_streams: int = 200  # minimum; raised to the observed-node count if needed
+    gr_stream_length: int = 10
+    gr_common_tail_length: int = 3
+    gr_seed_offset: int = 23_000_003
 
 DEFAULT_SIM_PARAMS = SimulationParams()
 
@@ -90,6 +98,7 @@ class VariantContext:
     output_idx: np.ndarray | None = None
     normalization_mode: str = "spectral_radius"
     label_normalization: bool = False
+    rank_only: bool = False
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -99,6 +108,9 @@ def evaluate_reservoir(
     sim_params: SimulationParams = DEFAULT_SIM_PARAMS,
     output_idx: np.ndarray | torch.Tensor | None = None,
     bias: torch.Tensor | None = None,
+    kr_seed: int = 0,
+    gr_seed: int = 0,
+    rank_only: bool = False,
 ):
     """Wrapper around run_one with shared defaults."""
     return run_one(
@@ -107,7 +119,6 @@ def evaluate_reservoir(
         leak,
         device,
         sim_params.washout,
-        sim_params.perturb_std,
         sim_params.t_train,
         sim_params.t_test,
         sim_params.mc_max_delay,
@@ -116,6 +127,16 @@ def evaluate_reservoir(
         sim_params.ridge_alpha,
         output_idx,
         bias=bias,
+        kr_rank_threshold=sim_params.kr_rank_threshold,
+        kr_num_streams=sim_params.kr_num_streams,
+        kr_stream_length=sim_params.kr_stream_length,
+        kr_seed=kr_seed,
+        gr_rank_threshold=sim_params.gr_rank_threshold,
+        gr_num_streams=sim_params.gr_num_streams,
+        gr_stream_length=sim_params.gr_stream_length,
+        gr_common_tail_length=sim_params.gr_common_tail_length,
+        gr_seed=gr_seed,
+        rank_only=rank_only,
     )
 
 
@@ -207,7 +228,18 @@ def _run_variant_row(
         )
         w_np = Wt.detach().cpu().numpy().reshape(-1)
         kl_to_gaussian = _kl_empirical_to_fitted_gaussian(w_np)
-        scores = evaluate_reservoir(Wt, Win, leak, ctx.device, ctx.sim_params, ctx.output_idx, bias=bias_vec)
+        scores = evaluate_reservoir(
+            Wt,
+            Win,
+            leak,
+            ctx.device,
+            ctx.sim_params,
+            ctx.output_idx,
+            bias=bias_vec,
+            kr_seed=ctx.seed + ctx.sim_params.kr_seed_offset,
+            gr_seed=ctx.seed + ctx.sim_params.gr_seed_offset,
+            rank_only=ctx.rank_only,
+        )
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
         row_mode_label = (
@@ -247,35 +279,122 @@ def _run_variant_row(
     return rows_local
 
 
-def save_rows(out_csv: str, rows: list[tuple], *, append: bool = False):
+CSV_HEADER = [
+    "mode",
+    "normalization",
+    "shuffle_id",
+    "rho_target",
+    "leak",
+    "input_scale",
+    "neuron_bias",
+    "MC",
+    "IPC",
+    "KR",
+    "GR",
+    "wt_mean",
+    "cosine_similarity",
+    "kl_to_gaussian",
+    "seed",
+    "src",
+    "raw_rho",
+    "ref_rho",
+    "post_rho",
+    "scale_factor",
+]
+
+RANK_ROW_KEY_COLUMNS = (
+    "mode",
+    "normalization",
+    "shuffle_id",
+    "rho_target",
+    "leak",
+    "input_scale",
+    "neuron_bias",
+    "seed",
+    "src",
+)
+
+
+def _rank_row_key(row: dict[str, str]) -> tuple[str, ...]:
+    """Identify one architecture/hyperparameter/repeat row in a chunk CSV."""
+    return tuple(row[column] for column in RANK_ROW_KEY_COLUMNS)
+
+
+def _update_rank_columns(out_csv: str, rows: list[tuple]) -> None:
+    """Patch KR/GR in an existing result CSV without touching MC/IPC."""
+    import csv
+    import os
+    import tempfile
+
+    path = Path(out_csv)
+    new_rows = [dict(zip(CSV_HEADER, map(str, row), strict=True)) for row in rows]
+
+    if not path.exists():
+        with path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_HEADER)
+            writer.writeheader()
+            for row in new_rows:
+                row["MC"] = ""
+                row["IPC"] = ""
+                writer.writerow(row)
+        return
+
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames != CSV_HEADER:
+            raise ValueError(
+                f"Cannot apply rank-only update to {out_csv}: unexpected CSV schema."
+            )
+        existing_rows = list(reader)
+
+    updates = {_rank_row_key(row): (row["KR"], row["GR"]) for row in new_rows}
+    matched: set[tuple[str, ...]] = set()
+    for row in existing_rows:
+        key = _rank_row_key(row)
+        if key in updates:
+            row["KR"], row["GR"] = updates[key]
+            matched.add(key)
+
+    for row in new_rows:
+        if _rank_row_key(row) not in matched:
+            row["MC"] = ""
+            row["IPC"] = ""
+            existing_rows.append(row)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        newline="",
+        delete=False,
+    ) as f:
+        temp_name = f.name
+        writer = csv.DictWriter(f, fieldnames=CSV_HEADER)
+        writer.writeheader()
+        writer.writerows(existing_rows)
+    os.replace(temp_name, path)
+
+
+def save_rows(
+    out_csv: str,
+    rows: list[tuple],
+    *,
+    append: bool = False,
+    rank_only: bool = False,
+):
+    if rank_only:
+        _update_rank_columns(out_csv, rows)
+        return
+
     mode = "a" if append and Path(out_csv).exists() else "w"
     with open(out_csv, mode, newline="") as f:
         import csv
 
         w = csv.writer(f)
         if mode == "w":
-            w.writerow([
-                "mode",
-                "normalization",
-                "shuffle_id",
-                "rho_target",
-                "leak",
-                "input_scale",
-                "neuron_bias",
-                "MC",
-                "IPC",
-                "KR",
-                "GR",
-                "wt_mean",
-                "cosine_similarity",
-                "kl_to_gaussian",
-                "seed",
-                "src",
-                "raw_rho",
-                "ref_rho",
-                "post_rho",
-                "scale_factor",
-            ])
+            w.writerow(CSV_HEADER)
         w.writerows(rows)
 
 

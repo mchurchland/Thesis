@@ -66,8 +66,20 @@ def compute_IPC(
     return float(total)
 
 
-def compute_KR(X: Tensor) -> float:
-    ## this is just the rank of the matrix, which is the effective rank
+def compute_KR(X_distinct: Tensor, threshold: float = 1e-3) -> int:
+    """Compute kernel rank from final states reached by distinct streams.
+
+    ``X_distinct`` contains one final reservoir state for every independent
+    input stream in the Vidamour KR ensemble. KR is the number of singular
+    values larger than ``threshold * s_max``. Higher values mean that the
+    reservoir separates distinct inputs into more independent state-space
+    directions.
+    """
+    return _relative_svd_rank(X_distinct, threshold, "X_distinct")
+
+
+def compute_KR_legacy_incorrect(X: Tensor) -> float:
+    """Return the former Shannon effective rank of an MC state trajectory."""
     return effective_rank_from_states(X)
 
 
@@ -90,14 +102,43 @@ def compute_MC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor, max_delay: in
     return float(np.sum(capacities)), capacities
 
 
-def compute_GR(X_clean: Tensor, X_noisy: Tensor) -> float:
+def compute_GR(X_similar: Tensor, threshold: float = 1e-3) -> int:
+    """Compute the RCbench generalization rank of similar-input states.
+
+    ``X_similar`` contains one final reservoir state for each similar input
+    stream.  Following RCbench, GR is the number of singular values larger
+    than ``threshold * s_max``.  Lower values indicate that similar inputs are
+    mapped to a lower-dimensional family of reservoir states.
+
+    See: Pilati et al., 2026, *Neuromorphic Computing and Engineering*
+    6:014012; RCbench ``GeneralizationRankEvaluator``.
     """
-    Generalization rank: effective rank of state difference across small perturbations.
-    Lower => more robust/generalizable.
-    Related to robustness metrics using effective rank; see Roy & Vetterli, 2007, IEEE SPL 14:649-652.
+    return _relative_svd_rank(X_similar, threshold, "X_similar")
+
+
+def _relative_svd_rank(X: Tensor, threshold: float, name: str) -> int:
+    """Count singular values above a fraction of the largest singular value."""
+    if X.dim() != 2:
+        raise ValueError(f"{name} must be a 2D state matrix.")
+    if threshold < 0:
+        raise ValueError("threshold must be non-negative.")
+
+    singular_values = torch.linalg.svdvals(X)
+    if singular_values.numel() == 0:
+        return 0
+    s_max = singular_values.max()
+    if not torch.isfinite(s_max) or s_max <= 0:
+        return 0
+    return int(torch.sum(singular_values > threshold * s_max).item())
+
+
+def compute_GR_legacy_incorrect(X_clean: Tensor, X_noisy: Tensor) -> float:
     """
-    D = X_noisy - X_clean ##this is nice I like this, here is whats going on, we add noise
-    # to the input of the reservoir, then we subtract that from the version without noise
-    # and then we compute the effective rank, essentially we see how many dimensions the noise adds
-    # between the clean and noisy states.
+    Deprecated, non-standard GR formerly used by this project.
+
+    This computes the Shannon effective rank of the paired state difference.
+    It is retained only so historical results can be reproduced; it should
+    not be interpreted as the literature/RCbench generalization rank.
+    """
+    D = X_noisy - X_clean
     return effective_rank_from_states(D)

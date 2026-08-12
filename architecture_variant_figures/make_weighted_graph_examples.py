@@ -1055,7 +1055,7 @@ def make_new_sign_matched_four_panel(
             transform=ax.transAxes,
             ha="left",
             va="top",
-            fontsize=20,
+            fontsize=13.2,
             fontweight="bold",
             color="#111111",
             bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.86, "pad": 0.25},

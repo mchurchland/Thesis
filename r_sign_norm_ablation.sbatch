@@ -19,6 +19,16 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
+# Submit with `RANK_ONLY=1 sbatch r_sign_norm_ablation.sbatch` to update only KR/GR.
+RANK_ONLY="${RANK_ONLY:-0}"
+METRIC_ARGS=()
+if [[ "${RANK_ONLY}" == "1" ]]; then
+  METRIC_ARGS+=(--rank-only)
+elif [[ "${RANK_ONLY}" != "0" ]]; then
+  echo "[error] RANK_ONLY must be 0 or 1, got: ${RANK_ONLY}" >&2
+  exit 1
+fi
+
 RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
 OUTROOT="${OUTROOT:-${RESULTS_ROOT}/sign_norm_ablation}"
 mkdir -p "${OUTROOT}"
@@ -105,6 +115,7 @@ run_normalization_ablation() {
     --cuda "${SLURM_LOCALID:-0}" \
     --sign-flip-frac "${SIGN_FLIP_FRACS[@]}" \
     "${unknown_args[@]}" \
+    "${METRIC_ARGS[@]}" \
     "${SUBSET_ARGS[@]}"
 }
 
