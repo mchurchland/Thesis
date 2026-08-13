@@ -64,10 +64,10 @@ class SimulationParams:
     ipc_max_delay: int = 30
     ipc_orders: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
     ridge_alpha: float = 1e-4
-    kr_num_streams: int = 200
+    kr_num_streams: int = 300
     kr_stream_length: int = 10
     kr_seed_offset: int = 29_000_003
-    gr_num_streams: int = 200
+    gr_num_streams: int = 300
     gr_stream_length: int = 10
     gr_common_tail_length: int = 3
     gr_seed_offset: int = 23_000_003

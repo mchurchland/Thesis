@@ -14,7 +14,7 @@ from network_stats.run_one import (
     run_reservoir_stream_batch,
 )
 from network_stats.stats import compute_GR, compute_KR
-from reservoir_variants import save_rows
+from reservoir_variants import DEFAULT_SIM_PARAMS, save_rows
 
 
 class GeneralizationRankTests(unittest.TestCase):
@@ -71,6 +71,12 @@ class GeneralizationRankTests(unittest.TestCase):
             generator=repeated_generator,
         )
         self.assertTrue(torch.equal(streams, repeated))
+
+    def test_production_rank_ensemble_defaults_cover_all_297_nodes(self) -> None:
+        self.assertEqual(DEFAULT_SIM_PARAMS.kr_num_streams, 300)
+        self.assertEqual(DEFAULT_SIM_PARAMS.kr_stream_length, 10)
+        self.assertEqual(DEFAULT_SIM_PARAMS.gr_num_streams, 300)
+        self.assertEqual(DEFAULT_SIM_PARAMS.gr_stream_length, 10)
 
     def test_gr_streams_share_only_the_configured_tail(self) -> None:
         torch.manual_seed(12)
