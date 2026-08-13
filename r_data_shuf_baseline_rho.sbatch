@@ -20,7 +20,7 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
 # Submit with `RANK_ONLY=1 sbatch r_data_shuf_baseline_rho.sbatch` to update only KR/GR.
-RANK_ONLY="${RANK_ONLY:-0}"
+RANK_ONLY="${RANK_ONLY:-1}"
 METRIC_ARGS=()
 if [[ "${RANK_ONLY}" == "1" ]]; then
   METRIC_ARGS+=(--rank-only)
@@ -29,7 +29,7 @@ elif [[ "${RANK_ONLY}" != "0" ]]; then
   exit 1
 fi
 
-RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results_GRKR}"
 OUTROOT="${OUTROOT:-${RESULTS_ROOT}/baseline_rho_topology_shuffles}"
 OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${OUTDIR}"

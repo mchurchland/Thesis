@@ -30,7 +30,7 @@ elif [[ "${RANK_ONLY}" != "0" ]]; then
   exit 1
 fi
 
-RESULTS_ROOT="${RESULTS_ROOT:-final_results}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results_GRKR}"
 OUTROOT="${OUTROOT:-${RESULTS_ROOT}/sign_fraction}"
 mkdir -p "${OUTROOT}"
 
