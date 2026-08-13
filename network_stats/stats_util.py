@@ -12,9 +12,15 @@ def legendre_P(x: Tensor, order: int) -> Tensor:
 
 def effective_rank_from_states(X: Tensor) -> float:
     """
-    Shannon effective rank of centered states (Roy & Vetterli, 2007, IEEE Signal Processing Letters 14:649-652).
+    Shannon effective rank of centered states (Roy & Vetterli, 2007,
+    EUSIPCO, pp. 606-610).
     Uses torch.linalg.svdvals; see https://github.com/pytorch/pytorch/blob/main/torch/linalg/__init__.py
     """
+    if X.dim() != 2:
+        raise ValueError("X must be a 2D state matrix.")
+    if not torch.all(torch.isfinite(X)):
+        raise ValueError("X must contain only finite values.")
+
     Xc = X - X.mean(dim=0, keepdim=True) ## centers the vec dim 0 is time -> center with respect to time
     s = torch.linalg.svdvals(Xc) ## this gives the amount of scaling in each direction, these values are equal to AA^T = u\sigmav^tvsigmau^t = u\sqrt(\sigma)u^t
     ## Hence here the vals afdsare equal to, |eigen of s_l|
@@ -24,13 +30,17 @@ def effective_rank_from_states(X: Tensor) -> float:
     # If nothing changes over time: Every z_t is the same. the matrix has rank 1
     # If states move in many independent directions over time: Then X^T X accumulates variance in many orthogonal directions.
     #this matrix will have high rank
-    s = torch.clamp(s, min=1e-12) ## the iegen values are semi positive positive definite , and hence we just need to make sure that they are not zero or some really small value
+    # Zero singular values carry no probability mass. Exclude them instead of
+    # flooring them, which would artificially increase the effective rank.
+    s = s[s > 1e-12]
+    if s.numel() == 0:
+        return 0.0
     p = s / torch.sum(s) ## divide by sum, if one dominates it will be close to one, these should some to 1 and probabilities,
     H = -torch.sum(p * torch.log(p)) #shannon entropy expected amount of information needed to encode the distribution
     #if h is high lots of variance across many dimensions, if variance constrained to a few dimensions, then h is low
     erank = torch.exp(H)
     ##this gives us the number of the dimensions that are needed to encode the state of the system
-    return float(erank)
+    return float(erank.item())
 
 def ridge_fit_predict(
     Xtr: Tensor,

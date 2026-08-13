@@ -20,10 +20,10 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-# KR-only is the default: it preserves existing MC, IPC, and GR values.
-# Use `KR_ONLY=0 RANK_ONLY=1` for KR+GR or set both to 0 for a full run.
-KR_ONLY="${KR_ONLY:-1}"
-RANK_ONLY="${RANK_ONLY:-0}"
+# KR+GR rank-only is the default: it preserves existing MC and IPC values.
+# Use `KR_ONLY=1 RANK_ONLY=0` for KR only or set both to 0 for a full run.
+KR_ONLY="${KR_ONLY:-0}"
+RANK_ONLY="${RANK_ONLY:-1}"
 METRIC_ARGS=()
 if [[ "${KR_ONLY}" != "0" && "${KR_ONLY}" != "1" ]]; then
   echo "[error] KR_ONLY must be 0 or 1, got: ${KR_ONLY}" >&2

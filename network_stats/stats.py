@@ -66,21 +66,14 @@ def compute_IPC(
     return float(total)
 
 
-def compute_KR(X_states: Tensor, threshold: float = 1e-3) -> int:
-    """Compute temporal kernel rank from a post-washout state trajectory.
-
-    ``X_states`` contains one reservoir state per row from a single long IID
-    input stream. KR is the number of singular values larger than
-    ``threshold * s_max``. Higher values mean that the driven trajectory spans
-    more independent state-space directions.
-    """
-    return _relative_svd_rank(X_states, threshold, "X_states")
-
-
-def compute_KR_legacy_incorrect(X: Tensor) -> float:
-    """Return the former Shannon effective rank of an MC state trajectory."""
+def compute_KR(X: Tensor) -> float:
+    """Return centered Shannon effective rank of independent-input states."""
     return effective_rank_from_states(X)
 
+
+def compute_GR(X: Tensor) -> float:
+    """Return centered Shannon effective rank of related-input states."""
+    return effective_rank_from_states(X)
 
 def compute_MC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor, max_delay: int, alpha: float,device:torch.device) -> tuple[float, np.ndarray]:
     """
@@ -101,21 +94,18 @@ def compute_MC(Xtr: Tensor, Xte: Tensor, utr: Tensor, ute: Tensor, max_delay: in
     return float(np.sum(capacities)), capacities
 
 
-def compute_GR(X_similar: Tensor, threshold: float = 1e-3) -> int:
-    """Compute the RCbench generalization rank of similar-input states.
 
-    ``X_similar`` contains one final reservoir state for each similar input
-    stream.  Following RCbench, GR is the number of singular values larger
-    than ``threshold * s_max``.  Lower values indicate that similar inputs are
-    mapped to a lower-dimensional family of reservoir states.
-
-    See: Pilati et al., 2026, *Neuromorphic Computing and Engineering*
-    6:014012; RCbench ``GeneralizationRankEvaluator``.
-    """
-    return _relative_svd_rank(X_similar, threshold, "X_similar")
+def compute_GR_pilati(X_similar: Tensor, threshold: float = 1e-3) -> int:
+    """Return thresholded RCbench rank of related-input final states."""
+    return _relative_svd_rank_pilati(X_similar, threshold, "X_similar")
 
 
-def _relative_svd_rank(X: Tensor, threshold: float, name: str) -> int:
+def compute_KR_pilati(X_states: Tensor, threshold: float = 1e-3) -> int:
+    """Return thresholded RCbench rank of independent-input final states."""
+    return _relative_svd_rank_pilati(X_states, threshold, "X_states")
+
+
+def _relative_svd_rank_pilati(X: Tensor, threshold: float, name: str) -> int:
     """Count singular values above a fraction of the largest singular value."""
     if X.dim() != 2:
         raise ValueError(f"{name} must be a 2D state matrix.")
@@ -129,15 +119,3 @@ def _relative_svd_rank(X: Tensor, threshold: float, name: str) -> int:
     if not torch.isfinite(s_max) or s_max <= 0:
         return 0
     return int(torch.sum(singular_values > threshold * s_max).item())
-
-
-def compute_GR_legacy_incorrect(X_clean: Tensor, X_noisy: Tensor) -> float:
-    """
-    Deprecated, non-standard GR formerly used by this project.
-
-    This computes the Shannon effective rank of the paired state difference.
-    It is retained only so historical results can be reproduced; it should
-    not be interpreted as the literature/RCbench generalization rank.
-    """
-    D = X_noisy - X_clean
-    return effective_rank_from_states(D)

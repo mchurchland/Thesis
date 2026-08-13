@@ -5165,13 +5165,13 @@ def plot_cv_performance_contour_triptych(
         metric_limits[metric] = (*cv_limits, *perf_limits)
 
     bins = max(24, min(int(bins), 52))
-    fig = plt.figure(figsize=(7.35, 6.55), dpi=300)
+    fig = plt.figure(figsize=(8.25, 6.55), dpi=300)
     grid = fig.add_gridspec(
         len(row_specs),
         len(metrics),
         left=0.105,
-        right=0.865 if use_rho_colors else 0.980,
-        bottom=0.220,
+        right=0.790,
+        bottom=0.255,
         top=0.940,
         wspace=0.28,
         hspace=0.36,
@@ -5303,44 +5303,53 @@ def plot_cv_performance_contour_triptych(
         print("[warn] contour triptych: no finite contours could be drawn.")
         return None
 
-    fig.text(0.485, 0.148, "Coefficient of variation", fontsize=11.4, ha="center")
+    fig.text(0.448, 0.196, "Coefficient of variation", fontsize=11.4, ha="center")
     fig.text(0.012, 0.575, "Mean performance", fontsize=11.4, va="center", rotation=90)
 
     if use_rho_colors and color_scalar is not None:
-        cax = fig.add_axes([0.900, 0.310, 0.017, 0.510])
-        cbar = fig.colorbar(color_scalar, cax=cax, orientation="vertical")
+        cax = fig.add_axes([0.230, 0.105, 0.435, 0.018])
+        cbar = fig.colorbar(color_scalar, cax=cax, orientation="horizontal")
         cbar.set_label(
             r"$\Delta \rho_{\mathrm{raw}}$ from row baseline (%)",
             fontsize=9.2,
-            rotation=270,
-            labelpad=11,
+            labelpad=3,
         )
+        cbar.ax.xaxis.set_label_position("top")
         cbar.ax.tick_params(labelsize=8.2, length=2.4, width=0.60, pad=1.5)
         cbar.outline.set_linewidth(0.45)
         cbar.outline.set_edgecolor("#333333")
 
-    legend_handles = [
-        legend_handles_by_mode[mode]
-        for mode in dict.fromkeys(mode for spec in row_specs for mode in spec["modes"])
-        if mode in legend_handles_by_mode
-    ]
-    if legend_handles:
+    row_centers = np.linspace(0.825, 0.370, len(row_specs))
+    for spec, row_center in zip(row_specs, row_centers):
+        row_handles = [
+            legend_handles_by_mode[mode]
+            for mode in spec["modes"]
+            if mode in legend_handles_by_mode
+        ]
+        if not row_handles:
+            continue
         fig.legend(
-            handles=legend_handles,
-            loc="lower center",
-            bbox_to_anchor=(0.5, 0.030),
-            ncol=4,
+            handles=row_handles,
+            loc="center left",
+            bbox_to_anchor=(0.805, row_center),
+            ncol=1,
             frameon=False,
             fontsize=7.8,
-            columnspacing=0.95,
             handlelength=1.55,
             handletextpad=0.48,
+            labelspacing=0.55,
             borderaxespad=0.0,
         )
 
     os.makedirs(out_dir, exist_ok=True)
     out_png = _replace_path(os.path.join(out_dir, "cv_performance_density_contours_triptych.png"))
-    fig.savefig(out_png, dpi=300, facecolor="white")
+    fig.savefig(
+        out_png,
+        dpi=300,
+        facecolor="white",
+        bbox_inches="tight",
+        pad_inches=0.0,
+    )
     print(f"[saved] {out_png}")
     if show:
         plt.show()

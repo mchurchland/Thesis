@@ -64,11 +64,10 @@ class SimulationParams:
     ipc_max_delay: int = 30
     ipc_orders: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
     ridge_alpha: float = 1e-4
-    kr_rank_threshold: float = 1e-3
-    kr_stream_length: int = 2000  # post-washout states in the temporal KR matrix
+    kr_num_streams: int = 200
+    kr_stream_length: int = 10
     kr_seed_offset: int = 29_000_003
-    gr_rank_threshold: float = 1e-3
-    gr_num_streams: int = 200  # minimum; raised to the observed-node count if needed
+    gr_num_streams: int = 200
     gr_stream_length: int = 10
     gr_common_tail_length: int = 3
     gr_seed_offset: int = 23_000_003
@@ -128,10 +127,9 @@ def evaluate_reservoir(
         sim_params.ridge_alpha,
         output_idx,
         bias=bias,
-        kr_rank_threshold=sim_params.kr_rank_threshold,
+        kr_num_streams=sim_params.kr_num_streams,
         kr_stream_length=sim_params.kr_stream_length,
         kr_seed=kr_seed,
-        gr_rank_threshold=sim_params.gr_rank_threshold,
         gr_num_streams=sim_params.gr_num_streams,
         gr_stream_length=sim_params.gr_stream_length,
         gr_common_tail_length=sim_params.gr_common_tail_length,
