@@ -40,7 +40,7 @@ elif [[ "${RANK_ONLY}" == "1" ]]; then
   METRIC_ARGS+=(--rank-only)
 fi
 
-RESULTS_ROOT="${RESULTS_ROOT:-final_results_GRKR}"
+RESULTS_ROOT="${RESULTS_ROOT:-final_results_KR}"
 OUTROOT="${OUTROOT:-${RESULTS_ROOT}/main_experiment}"
 OUTDIR="${OUTROOT}/chunk_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${OUTDIR}"
