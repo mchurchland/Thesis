@@ -21,7 +21,7 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
 # Submit with `RANK_ONLY=1 sbatch r_data_frac.sbatch` to update only KR/GR.
-RANK_ONLY="${RANK_ONLY:-0}"
+RANK_ONLY="${RANK_ONLY:-1}"
 METRIC_ARGS=()
 if [[ "${RANK_ONLY}" == "1" ]]; then
   METRIC_ARGS+=(--rank-only)
