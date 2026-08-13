@@ -412,7 +412,7 @@ def save_mechanism_overlay(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame,
         _draw_overlay_panel(axes[0, col], perf, scaling, include_marker_label=True, info=info)
         _draw_overlay_panel(axes[1, col], cv, scaling, include_marker_label=False, info=info)
         axes[0, col].set_title(str(info["label"]), fontsize=11)
-        axes[1, col].set_xlabel("Negative edge fraction")
+        axes[1, col].set_xlabel("E/I Edge Balance")
     axes[0, 0].set_ylabel("Metric-normalized performance / raw radius")
     axes[1, 0].set_ylabel("Metric-normalized CV / raw radius")
     handles = [
@@ -469,7 +469,7 @@ def save_normalization_delta(datasets: dict[str, tuple[pd.DataFrame, pd.DataFram
         _draw_marker(ax, info, y=0.04)
         _setup_axis(ax)
         ax.set_title(str(info["label"]), fontsize=11)
-        ax.set_xlabel("Negative edge fraction")
+        ax.set_xlabel("E/I Edge Balance")
     axes[0].set_ylabel("Performance change: own radius vs orig. radius (%)")
     handles = [
         Line2D([0], [0], color=GROUP_COLORS["All metrics"], marker="o", linewidth=2.0, label="All metrics"),
@@ -514,7 +514,7 @@ def save_grouped_perf_cv(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame, p
             if col == 0:
                 ax.set_ylabel(ylabel)
             if row == 1:
-                ax.set_xlabel("Negative edge fraction")
+                ax.set_xlabel("E/I Edge Balance")
     handles = [
         Line2D([0], [0], color=GROUP_COLORS["Memory"], linewidth=2.0, label="Memory"),
         Line2D([0], [0], color=GROUP_COLORS["Kernel"], linewidth=2.0, label="Kernel"),
@@ -567,7 +567,7 @@ def save_radius_mechanism_only(primary: tuple[pd.DataFrame, pd.DataFrame, pd.Dat
         fontsize=8,
         color="#222222",
     )
-    ax.set_xlabel("Negative edge fraction, $q$", fontsize=9.5)
+    ax.set_xlabel("E/I Edge Balance, $q$", fontsize=9.5)
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=9.5)
     #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)
@@ -696,7 +696,7 @@ def save_compact_mechanism_response(primary: tuple[pd.DataFrame, pd.DataFrame, p
         _draw_grouped_performance_panel(ax, perf, group_name, GROUPS[group_name])
         ax.set_ylim(bottom=0.0)
     axes[1].set_xlabel("")
-    axes[2].set_xlabel("Negative edge fraction, $q$", fontsize=9.5)
+    axes[2].set_xlabel("E/I Edge Balance, $q$", fontsize=9.5)
     axes[0].text(
         0.985,
         0.92,
@@ -760,7 +760,7 @@ def save_metric_delta_panels(primary: tuple[pd.DataFrame, pd.DataFrame, pd.DataF
         if idx in (0, 2):
             ax.set_ylabel("Own - original (%)", fontsize=8.8)
         if idx in (2, 3):
-            ax.set_xlabel("Negative edge fraction, $q$", fontsize=9.2)
+            ax.set_xlabel("E/I Edge Balance, $q$", fontsize=9.2)
 
     handles = [
         Patch(facecolor="#2A9D8F", alpha=0.14, edgecolor="none", label=r"$\rho(W)<\rho(W_{\mathrm{orig}})$"),
@@ -784,7 +784,7 @@ def save_mechanism_plus_effect(primary: tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     ax.axhline(1.0, color="#222222", linewidth=0.95, linestyle="--", alpha=0.85)
     ax.plot(ratio["sign_frac"], ratio["rho_ratio"], color="#4B5563", marker="o", markersize=3.5, linewidth=1.9)
     _draw_q_reference_lines(ax, info)
-    ax.set_xlabel("Negative edge fraction, $q$", fontsize=9.2)
+    ax.set_xlabel("E/I Edge Balance, $q$", fontsize=9.2)
     ax.set_ylabel(r"$\rho(W) / \rho(W_{\mathrm{orig}})$", fontsize=9.2)
     #ax.set_ylim(0.58, 1.56)
     _setup_paper_axis(ax)
@@ -807,7 +807,7 @@ def save_mechanism_plus_effect(primary: tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     q_orig = float(info["marker_frac"])
     ax.axvline(q_orig, color="#A77C00", linewidth=0.9, linestyle="--", alpha=0.58)
     ax.axvline(1.0 - q_orig, color="#A77C00", linewidth=0.9, linestyle="--", alpha=0.58)
-    ax.set_xlabel("Negative edge fraction, $q$", fontsize=9.2)
+    ax.set_xlabel("E/I Edge Balance, $q$", fontsize=9.2)
     ax.set_ylabel("Own - original performance (%)", fontsize=9.2)
     _setup_paper_axis(ax)
     ax.legend(
@@ -994,7 +994,7 @@ def save_option_8_average_perf_cv(
     )
 
     axes[1].set_xlabel("")
-    axes[2].set_xlabel("Negative edge fraction, $q$", fontsize=12.5, labelpad=7)
+    axes[2].set_xlabel("E/I Edge Balance, $q$", fontsize=12.5, labelpad=7)
 
     norm_handles = [
         Line2D([0], [0], color="#333333", linestyle="-", linewidth=2.4, label=r"scale by $\rho(W)$"),

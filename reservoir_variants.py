@@ -65,8 +65,7 @@ class SimulationParams:
     ipc_orders: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
     ridge_alpha: float = 1e-4
     kr_rank_threshold: float = 1e-3
-    kr_num_streams: int = 200  # minimum; raised to the observed-node count if needed
-    kr_stream_length: int = 10
+    kr_stream_length: int = 2000  # post-washout states in the temporal KR matrix
     kr_seed_offset: int = 29_000_003
     gr_rank_threshold: float = 1e-3
     gr_num_streams: int = 200  # minimum; raised to the observed-node count if needed
@@ -99,6 +98,7 @@ class VariantContext:
     normalization_mode: str = "spectral_radius"
     label_normalization: bool = False
     rank_only: bool = False
+    kr_only: bool = False
 
 def evaluate_reservoir(
     Wt: torch.Tensor,
@@ -111,6 +111,7 @@ def evaluate_reservoir(
     kr_seed: int = 0,
     gr_seed: int = 0,
     rank_only: bool = False,
+    kr_only: bool = False,
 ):
     """Wrapper around run_one with shared defaults."""
     return run_one(
@@ -128,7 +129,6 @@ def evaluate_reservoir(
         output_idx,
         bias=bias,
         kr_rank_threshold=sim_params.kr_rank_threshold,
-        kr_num_streams=sim_params.kr_num_streams,
         kr_stream_length=sim_params.kr_stream_length,
         kr_seed=kr_seed,
         gr_rank_threshold=sim_params.gr_rank_threshold,
@@ -137,6 +137,7 @@ def evaluate_reservoir(
         gr_common_tail_length=sim_params.gr_common_tail_length,
         gr_seed=gr_seed,
         rank_only=rank_only,
+        kr_only=kr_only,
     )
 
 
@@ -239,6 +240,7 @@ def _run_variant_row(
             kr_seed=ctx.seed + ctx.sim_params.kr_seed_offset,
             gr_seed=ctx.seed + ctx.sim_params.gr_seed_offset,
             rank_only=ctx.rank_only,
+            kr_only=ctx.kr_only,
         )
         Wt_ce = torch.from_numpy(_cel_to_bin(ctx.ce_W_bio)).to(ctx.device) ## for cos sim
         sigma_ce = scale_to_sr(Wt_ce,target_sr) ##for cos sim
@@ -320,8 +322,13 @@ def _rank_row_key(row: dict[str, str]) -> tuple[str, ...]:
     return tuple(row[column] for column in RANK_ROW_KEY_COLUMNS)
 
 
-def _update_rank_columns(out_csv: str, rows: list[tuple]) -> None:
-    """Patch KR/GR in an existing result CSV without touching MC/IPC."""
+def _update_rank_columns(
+    out_csv: str,
+    rows: list[tuple],
+    *,
+    update_gr: bool = True,
+) -> None:
+    """Patch KR and optionally GR without touching other metric columns."""
     import csv
     import os
     import tempfile
@@ -336,6 +343,8 @@ def _update_rank_columns(out_csv: str, rows: list[tuple]) -> None:
             for row in new_rows:
                 row["MC"] = ""
                 row["IPC"] = ""
+                if not update_gr:
+                    row["GR"] = ""
                 writer.writerow(row)
         return
 
@@ -347,18 +356,22 @@ def _update_rank_columns(out_csv: str, rows: list[tuple]) -> None:
             )
         existing_rows = list(reader)
 
-    updates = {_rank_row_key(row): (row["KR"], row["GR"]) for row in new_rows}
+    updates = {_rank_row_key(row): row for row in new_rows}
     matched: set[tuple[str, ...]] = set()
     for row in existing_rows:
         key = _rank_row_key(row)
         if key in updates:
-            row["KR"], row["GR"] = updates[key]
+            row["KR"] = updates[key]["KR"]
+            if update_gr:
+                row["GR"] = updates[key]["GR"]
             matched.add(key)
 
     for row in new_rows:
         if _rank_row_key(row) not in matched:
             row["MC"] = ""
             row["IPC"] = ""
+            if not update_gr:
+                row["GR"] = ""
             existing_rows.append(row)
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -383,7 +396,13 @@ def save_rows(
     *,
     append: bool = False,
     rank_only: bool = False,
+    kr_only: bool = False,
 ):
+    if rank_only and kr_only:
+        raise ValueError("rank_only and kr_only are mutually exclusive.")
+    if kr_only:
+        _update_rank_columns(out_csv, rows, update_gr=False)
+        return
     if rank_only:
         _update_rank_columns(out_csv, rows)
         return

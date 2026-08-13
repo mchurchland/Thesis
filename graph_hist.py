@@ -118,7 +118,18 @@ def _short_legend_name(mode):
     if not isinstance(mode, str):
         return mode
     legend_only = {
-        "cel_sample": "Sampled wt.",
+        "shuffle_weights": "Shuffle",
+        "conn_shuf": "Conn. + shuf.",
+        "global_sign_pres": "pm1 + shuf.",
+        "global_sign_pres_real_w": "Sign-pres. real",
+        "global_sign_pres_real_weight": "Sign-pres. real",
+        "binary+conshuffle+wshuffle": "pm1 sign/conn/shuf.",
+        "binary_base": "Binary",
+        "binary_base_topology_shuffle": "Binary shuf.",
+        "cel_randN": "CE Gaussian",
+        "er_randN": "ER Gaussian",
+        "ws_p01_randN": "WS Gaussian",
+        "cel_sample": "Sampled",
         "local_sign+sample": "Sign-pres. sampled",
     }
     canonical = _SHORT_THESIS_NAME_ALIASES.get(mode, mode)
@@ -223,12 +234,12 @@ def _add_sign_balance_colorbar(
         cbar.set_ticklabels(["0", f"CE {ce_pct}%", "50%"])
         cbar.ax.xaxis.set_ticks_position("top")
         cbar.ax.xaxis.set_label_position("top")
-        cbar.ax.set_title("Negative sign fraction", fontsize=labelsize + 0.5, pad=12)
+        cbar.ax.set_title("E/I Edge Balance", fontsize=labelsize + 0.5, pad=12)
     else:
         cbar.set_ticklabels(["0", "CE", "50%"])
         cbar.ax.yaxis.set_ticks_position("right")
         cbar.ax.yaxis.set_label_position("right")
-        cbar.set_label("Negative sign fraction", fontsize=labelsize + 2, rotation=270, labelpad=9)
+        cbar.set_label("E/I Edge Balance", fontsize=labelsize + 2, rotation=270, labelpad=9)
     cbar.outline.set_linewidth(0.45)
     cbar.outline.set_edgecolor("#333333")
     return cbar
@@ -1710,7 +1721,7 @@ def _save_sign_norm_metric_grid(
             ax.set_axis_off()
             continue
         ax.set_title(metric)
-        ax.set_xlabel("negative edge fraction")
+        ax.set_xlabel("E/I Edge Balance")
         ax.set_ylabel(value_label)
         ax.set_xlim(-0.02, 1.02)
         ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
@@ -1800,7 +1811,7 @@ def _save_sign_norm_scaling_grid(
             ax.set_axis_off()
             continue
         ax.set_title(label)
-        ax.set_xlabel("negative edge fraction")
+        ax.set_xlabel("E/I Edge Balance")
         ax.set_ylabel(label)
         ax.set_xlim(-0.02, 1.02)
         ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
@@ -1989,7 +2000,7 @@ def _save_sign_norm_combined_grid(
             continue
         ax.set_xlim(-0.02, 1.02)
         ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
-        ax.set_xlabel("Negative edge fraction")
+        ax.set_xlabel("E/I Edge Balance")
         ax.grid(True, alpha=0.22)
 
     fig.suptitle("Sign-balance normalization ablation", y=0.985, fontsize=17)
@@ -2311,7 +2322,7 @@ def plot_triad_sign_fraction_summary(
         panel_letter = chr(ord("A") + panel_idx)
         panel_title = " | ".join(title_bits) if title_bits else "Triad $|w|$"
         ax.set_title(f"{panel_letter}  {panel_title}", loc="left", fontweight="bold")
-        ax.set_xlabel("Negative-edge fraction")
+        ax.set_xlabel("E/I Edge Balance")
         ax.set_ylabel(r"Mean triad-average $|w|$")
         ax.set_xlim(-0.02, 1.02)
         ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.2))
@@ -2331,7 +2342,7 @@ def plot_triad_sign_fraction_summary(
             frameon=False,
         )
 
-    fig.suptitle(r"Triad average $|w|$ by negative-edge fraction", y=0.99, fontsize=15)
+    fig.suptitle(r"Triad average $|w|$ by E/I Edge Balance", y=0.99, fontsize=15)
     fig.tight_layout(rect=[0.02, 0.02, 0.98, 0.94], h_pad=2.0, w_pad=1.6)
 
     os.makedirs(out_dir, exist_ok=True)
@@ -2398,7 +2409,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
     color_for_mode = {m: cmap(norm(mode_values[m])) for m in modes}
 
     if all(str(m).startswith("sign_test") for m in modes):
-        x_label = "negative sign frac"
+        x_label = "E/I Edge Balance"
     elif all(str(m).startswith("weight_test") for m in modes):
         x_label = "weight_test value"
     else:
@@ -2534,6 +2545,7 @@ def plot_frac_cv_meanline(
     out_dir: str,
     bins: int = 4,
     show: bool = True,
+    performance_scale: str = "linear",
 ):
     """
     Stacked sign-sweep summary. The upper 3D panel has one colored line per
@@ -2547,6 +2559,10 @@ def plot_frac_cv_meanline(
     horizontal reference for the original C. elegans network.
     """
     os.makedirs(out_dir, exist_ok=True)
+    if performance_scale not in {"linear", "sqrt", "fourth_root", "sixth_root"}:
+        raise ValueError(
+            "performance_scale must be 'linear', 'sqrt', 'fourth_root', or 'sixth_root'."
+        )
 
     # Expected metrics present in both tables.
     metric_cols = [m for m in ("MC", "IPC", "KR", "GR") if m in combined.columns]
@@ -2597,10 +2613,11 @@ def plot_frac_cv_meanline(
 
     colors = mpl.colormaps["tab10"]
     highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.2425287356321839
-    highlight_label = "C. elegans\nsign fraction"
+    highlight_label = "C. elegans\nE/I Edge Balance"
     highlight_atol = 1e-12
     plotted_any = False
     highlight_labeled = False
+    performance_values = []
     for idx, metric in enumerate(metrics):
         rows = []
         for mode in modes:
@@ -2614,13 +2631,24 @@ def plot_frac_cv_meanline(
             continue
         rows = sorted(rows, key=lambda t: t[0])
         xs, ys, zs = map(np.asarray, zip(*rows))
-        ax.plot(xs, ys, zs, marker="o", color=colors(idx % 10), linewidth=2.0, markersize=4.8, label=metric)
+        if performance_scale != "linear" and np.any(zs < 0):
+            raise ValueError("Root-transformed performance scales require non-negative values.")
+        performance_values.extend(zs.tolist())
+        if performance_scale == "sqrt":
+            zs_plot = np.sqrt(zs)
+        elif performance_scale == "fourth_root":
+            zs_plot = np.power(zs, 0.25)
+        elif performance_scale == "sixth_root":
+            zs_plot = np.power(zs, 1.0 / 6.0)
+        else:
+            zs_plot = zs
+        ax.plot(xs, ys, zs_plot, marker="o", color=colors(idx % 10), linewidth=2.0, markersize=4.8, label=metric)
         highlight_mask = np.isclose(xs, highlight_frac, rtol=0.0, atol=highlight_atol)
         if np.any(highlight_mask):
             ax.scatter(
                 xs[highlight_mask],
                 ys[highlight_mask],
-                zs[highlight_mask],
+                zs_plot[highlight_mask],
                 color="black",
                 s=42,
                 depthshade=False,
@@ -2648,10 +2676,39 @@ def plot_frac_cv_meanline(
     span = x_max - x_min
     pad = 0.05 * span if span > 0 else 1.0
 
-    axis_x_label = "Negative sign fraction" if x_label == "Negative Sign %" else x_label
+    axis_x_label = "E/I Edge Balance" if x_label == "Negative Sign %" else x_label
     ax.set_xlabel(axis_x_label, fontsize=10.2, labelpad=0)
     ax.set_ylabel("Mean CV", fontsize=10.5, labelpad=-3)
     ax.set_zlabel("")
+    if performance_scale in {"sqrt", "fourth_root", "sixth_root"}:
+        z_min = float(np.min(performance_values))
+        z_max = float(np.max(performance_values))
+        exponent = {
+            "sqrt": 0.5,
+            "fourth_root": 0.25,
+            "sixth_root": 1.0 / 6.0,
+        }[performance_scale]
+        transformed_min = np.power(z_min, exponent)
+        transformed_max = np.power(z_max, exponent)
+        transformed_pad = 0.06 * (transformed_max - transformed_min)
+        ax.set_zlim(
+            max(0.0, transformed_min - transformed_pad),
+            transformed_max + transformed_pad,
+        )
+        tick_candidates = np.asarray(
+            [1, 2, 5, 10, 20, 50, 100, 200, 500],
+            dtype=float,
+        )
+        tick_values = tick_candidates[
+            (tick_candidates >= z_min) & (tick_candidates <= z_max)
+        ]
+        ax.zaxis.set_major_locator(
+            mpl.ticker.FixedLocator(np.power(tick_values, exponent))
+        )
+        ax.zaxis.set_major_formatter(
+            mpl.ticker.FixedFormatter([f"{value:g}" for value in tick_values])
+        )
+        ax.zaxis.set_minor_locator(mpl.ticker.NullLocator())
     ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
     ax.set_proj_type("ortho")
@@ -2664,7 +2721,16 @@ def plot_frac_cv_meanline(
     fig.text(
         0.985,
         0.64,
-        "Mean performance",
+        "Mean performance"
+        + (
+            " (square-root scale)"
+            if performance_scale == "sqrt"
+            else " (fourth-root scale)"
+            if performance_scale == "fourth_root"
+            else " (sixth-root scale)"
+            if performance_scale == "sixth_root"
+            else ""
+        ),
         fontsize=9.8,
         rotation=90,
         ha="center",
@@ -2755,7 +2821,7 @@ def plot_frac_cv_meanline(
         ax_rho.text(
             highlight_frac + 0.012,
             0.97,
-            "empirical sign fraction",
+            "empirical E/I Edge Balance",
             color="#444444",
             fontsize=7.5,
             ha="left",
@@ -4870,7 +4936,7 @@ def plot_cv_performance_contours_2d(
             fig,
             style_meta.get("ce_frac"),
             bottom=0.175,
-            left=0.915,
+            left=0.890,
             width=0.016,
             height=0.75,
             labelsize=11,

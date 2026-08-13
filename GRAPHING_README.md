@@ -32,7 +32,7 @@ may also create an `all_arch_hist_grid.png` and a CV table as side effects.
 |---|---|
 | Main architecture comparison | `final_results/main/combined.ALL.csv` |
 | Own-radius topology shuffles | `final_results/shuf/combined.ALL.csv` |
-| Fixed-baseline-radius shuffles | `final_results/baseline_rho_shuf/combined.ALL.csv` |
+| Fixed-baseline-radius shuffles | `final_results/Rho_stuff/baseline_rho_shuf/combined.ALL.csv` |
 | Sign sweep: C. elegans sign-matched | `final_results/sign_frac/cel_matched/combined.ALL.csv` |
 | Sign sweep: predicted-polarity-only | `final_results/sign_frac/cel_removed/combined.ALL.csv` |
 | Sign sweep: matched ER | `final_results/sign_frac/matched_er/combined.ALL.csv` |
@@ -87,7 +87,7 @@ cp final_results/graphs/thesis/topology_shuffles/cv_performance_density_contours
 
 ```bash
 python graph_hist.py \
-  --combined final_results/baseline_rho_shuf/combined.ALL.csv \
+  --combined final_results/Rho_stuff/baseline_rho_shuf/combined.ALL.csv \
   --out-dir final_results/graphs/thesis/baseline_rho_shuffles \
   --show-cv-performance-contour-triptych
 ```
@@ -191,6 +191,7 @@ for dataset in ("cel_matched", "cel_removed", "matched_er"):
         output_dir,
         bins=4,
         show=False,
+        performance_scale="sixth_root",
     )
 PY
 ```

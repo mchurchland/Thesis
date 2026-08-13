@@ -122,7 +122,7 @@ def _save_celegans_only(agg: pd.DataFrame, ce_original_rho: float) -> None:
 
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(y_min - y_pad, y_max + y_pad)
-    ax.set_xlabel("sign fraction")
+    ax.set_xlabel("E/I Edge Balance")
     ax.set_ylabel(r"raw $\rho(W)$")
     ax.set_title("Mean raw spectral radius", fontweight="semibold", pad=5)
     ax.grid(True, axis="y", color="#dfdfdf", linewidth=0.65, alpha=0.7)
@@ -144,7 +144,7 @@ def _save_celegans_only(agg: pd.DataFrame, ce_original_rho: float) -> None:
     ax.text(
         REF_SIGN_FRAC + 0.012,
         y_max + y_pad * 0.72,
-        "empirical sign fraction",
+        "empirical E/I Edge Balance",
         fontsize=9.4,
         color="#444444",
         va="top",
@@ -253,7 +253,7 @@ def main(*, celegans_only: bool = False) -> None:
     ax_hi.set_ylim(upper_min, raw_max * 1.06)
     ax_lo.set_ylim(0.0, lower_max)
     ax_lo.set_xlim(-0.02, 1.02)
-    ax_lo.set_xlabel("sign fraction")
+    ax_lo.set_xlabel("E/I Edge Balance")
     ax_lo.set_ylabel(r"raw $\rho(W)$")
     ax_hi.set_ylabel(r"raw $\rho(W)$")
     ax_hi.set_title("Mean raw spectral radius", fontweight="semibold", pad=5)
@@ -270,11 +270,11 @@ def main(*, celegans_only: bool = False) -> None:
     ax_lo.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs_lo)
 
     ax_hi.text(1.005, ce_original_rho, "C. elegans original", color="#d55e00", fontsize=9.4, va="center", ha="left", transform=ax_hi.get_yaxis_transform())
-    ax_lo.text(1.005, er_at_ce_rho, "ER at CE fraction", color="#56b4e9", fontsize=9.4, va="center", ha="left", transform=ax_lo.get_yaxis_transform())
+    ax_lo.text(1.005, er_at_ce_rho, "ER at CE balance", color="#56b4e9", fontsize=9.4, va="center", ha="left", transform=ax_lo.get_yaxis_transform())
     ax_lo.text(
         REF_SIGN_FRAC + 0.012,
         lower_max * 0.94,
-        "empirical sign fraction",
+        "empirical E/I Edge Balance",
         fontsize=9.4,
         color="#444444",
         va="top",
@@ -284,7 +284,7 @@ def main(*, celegans_only: bool = False) -> None:
     c_curve = agg[(agg["dataset"] == "Matched C. elegans sweep")].sort_values("sign_frac")
     drop_point = c_curve.loc[c_curve["sign_frac"].astype(float).sub(REF_SIGN_FRAC).abs().idxmin()]
     ax_lo.annotate(
-        "drop before\nempirical fraction",
+        "drop before\nempirical balance",
         xy=(float(drop_point["sign_frac"]), float(drop_point["raw_rho"])),
         xytext=(0.34, min(14.0, lower_max * 0.8)),
         textcoords="data",

@@ -77,7 +77,7 @@ def plot_comparison(summary_csv: Path, out_path: Path) -> None:
                 zorder=3,
             )
 
-        ax.set_xticks(xs, [f"{int(frac * 100)}% negative signs\nraw $\\rho$ = {rho:.1f}" for frac, rho in zip(sign_fracs, raw_rhos)])
+        ax.set_xticks(xs, [f"E/I Edge Balance: {int(frac * 100)}% inhibitory\nraw $\\rho$ = {rho:.1f}" for frac, rho in zip(sign_fracs, raw_rhos)])
         ax.set_ylabel(ylabel)
         ax.grid(axis="y", color="#d9d9d9", linewidth=0.8, alpha=0.8, zorder=0)
         ax.spines[["top", "right"]].set_visible(False)

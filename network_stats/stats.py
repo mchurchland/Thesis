@@ -66,16 +66,15 @@ def compute_IPC(
     return float(total)
 
 
-def compute_KR(X_distinct: Tensor, threshold: float = 1e-3) -> int:
-    """Compute kernel rank from final states reached by distinct streams.
+def compute_KR(X_states: Tensor, threshold: float = 1e-3) -> int:
+    """Compute temporal kernel rank from a post-washout state trajectory.
 
-    ``X_distinct`` contains one final reservoir state for every independent
-    input stream in the Vidamour KR ensemble. KR is the number of singular
-    values larger than ``threshold * s_max``. Higher values mean that the
-    reservoir separates distinct inputs into more independent state-space
-    directions.
+    ``X_states`` contains one reservoir state per row from a single long IID
+    input stream. KR is the number of singular values larger than
+    ``threshold * s_max``. Higher values mean that the driven trajectory spans
+    more independent state-space directions.
     """
-    return _relative_svd_rank(X_distinct, threshold, "X_distinct")
+    return _relative_svd_rank(X_states, threshold, "X_states")
 
 
 def compute_KR_legacy_incorrect(X: Tensor) -> float:

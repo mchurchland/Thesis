@@ -15,8 +15,9 @@ set -euo pipefail
 # partition even though this retry is a sparse four-task array.
 export REPEAT_SPLIT=20
 
-# This retry is intended to finish the corrected KR/GR run. Override with
-# `RANK_ONLY=0 sbatch r_data_shuf_retry.sbatch` only for a complete rerun.
-export RANK_ONLY="${RANK_ONLY:-1}"
+# This retry is intended to finish the temporal KR run. r_data_shuf.sbatch
+# defaults to KR-only and preserves the existing MC, IPC, and GR columns.
+export KR_ONLY="${KR_ONLY:-1}"
+export RANK_ONLY="${RANK_ONLY:-0}"
 
 exec bash r_data_shuf.sbatch

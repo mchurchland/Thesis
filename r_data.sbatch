@@ -20,14 +20,24 @@ START_SEED="${BASE_SEED}"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
-# Submit with `RANK_ONLY=1 sbatch r_data.sbatch` to update only KR/GR.
-RANK_ONLY="${RANK_ONLY:-1}"
+# KR-only is the default: it preserves existing MC, IPC, and GR values.
+# Use `KR_ONLY=0 RANK_ONLY=1` for KR+GR or set both to 0 for a full run.
+KR_ONLY="${KR_ONLY:-1}"
+RANK_ONLY="${RANK_ONLY:-0}"
 METRIC_ARGS=()
-if [[ "${RANK_ONLY}" == "1" ]]; then
-  METRIC_ARGS+=(--rank-only)
-elif [[ "${RANK_ONLY}" != "0" ]]; then
+if [[ "${KR_ONLY}" != "0" && "${KR_ONLY}" != "1" ]]; then
+  echo "[error] KR_ONLY must be 0 or 1, got: ${KR_ONLY}" >&2
+  exit 1
+elif [[ "${RANK_ONLY}" != "0" && "${RANK_ONLY}" != "1" ]]; then
   echo "[error] RANK_ONLY must be 0 or 1, got: ${RANK_ONLY}" >&2
   exit 1
+elif [[ "${KR_ONLY}" == "1" && "${RANK_ONLY}" == "1" ]]; then
+  echo "[error] KR_ONLY and RANK_ONLY cannot both be 1" >&2
+  exit 1
+elif [[ "${KR_ONLY}" == "1" ]]; then
+  METRIC_ARGS+=(--kr-only)
+elif [[ "${RANK_ONLY}" == "1" ]]; then
+  METRIC_ARGS+=(--rank-only)
 fi
 
 RESULTS_ROOT="${RESULTS_ROOT:-final_results_GRKR}"
