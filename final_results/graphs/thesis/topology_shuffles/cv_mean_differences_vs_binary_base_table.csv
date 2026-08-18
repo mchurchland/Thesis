@@ -1,0 +1,5 @@
+metric,baseline_mode,baseline_label,control_mode,control_label,baseline_mean_cv,control_mean_cv,delta_cv,pct_delta_cv,ci95_low,ci95_high,comparison_type,n
+MC,binary_base,Binary wt.,binary_base_topology_shuffle,Binary wt. shuf.,0.2982373010908389,0.2677738185290155,-0.030463482561823407,-10.214511213184785,-0.033150649621471844,-0.027776315502175013,paired,200
+IPC,binary_base,Binary wt.,binary_base_topology_shuffle,Binary wt. shuf.,0.2316801090691697,0.23015631485266652,-0.0015237942165031715,-0.6577147354709818,-0.00438395665070941,0.0013363682177030176,paired,200
+KR,binary_base,Binary wt.,binary_base_topology_shuffle,Binary wt. shuf.,0.27347044771896,0.2621667969519079,-0.011303650767052087,-4.133408513181877,-0.01342470230229622,-0.00918259923180786,paired,200
+GR,binary_base,Binary wt.,binary_base_topology_shuffle,Binary wt. shuf.,0.21916131186453314,0.2346508953257176,0.015489583461184453,7.067663233718365,0.011162075118567292,0.019817091803801593,paired,200

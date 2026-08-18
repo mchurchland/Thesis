@@ -776,11 +776,20 @@ def ws_directed_adjacency_exact(
 
 
 
-def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
-                                    rng: np.random.Generator | None = None) -> np.ndarray:
+def degree_matched_shuffle_directed(
+    A: np.ndarray,
+    tries: int,
+    rng: np.random.Generator | None = None,
+    return_stats: bool = False,
+):
     """
     Degree-preserving double-edge swap randomization for directed graphs
     (Milo et al., 2002, Science 298:824-827).
+
+    Each successful swap consumes two entries from one random permutation of
+    the edge list, so ``floor(|E| / 2)`` is this implementation's one-pass
+    target. ``tries`` caps cumulative failed pair proposals, not total swaps.
+    Set ``return_stats=True`` to return ``(shuffled_matrix, diagnostics)``.
     """
     def can_swap(a,b,c,d):
         if (len({a,b,c,d}) < 4) or ( A[a,d] or A[c,b]): ## makes sure all the values are unique, if the connection between a and d already exists or c and b
@@ -796,14 +805,19 @@ def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
         A[c,b] = edge2_weight  # add edge 2 to new nodes
     if rng is None:
         raise ValueError("Need to pass in a random number generator")
+    if tries < 0:
+        raise ValueError("tries must be non-negative")
+
     A = A.copy() ## make a copy of A
-    np.fill_diagonal(A, False)
+    np.fill_diagonal(A, 0)
+    A_orig = A.copy()
     edges = np.argwhere(A!=0)
     m = edges.shape[0]
     if m < 2:
         raise ValueError(f"Not enough edges to perform randomization. Found {m} edges. make sure the matrix is correct")
 
     retries = 0
+    successful_swaps = 0
     
     idx = rng.permutation(m)  
     #while not(idx.isempty) and retries < max_retries:
@@ -817,13 +831,44 @@ def degree_matched_shuffle_directed(A: np.ndarray, tries: int,
             edges[idx[i]] = [a,d]
             edges[idx[i+1]] = [c,b]
             i+=2
+            successful_swaps += 1
             
         else:
             retries += 1
             rem = idx[i:]
             rng.shuffle(rem) ## shuffle the indices
             idx[i:] = rem ## replace the indices with the shuffled one
-    return A.astype(np.float32)
+    A = A.astype(np.float32)
+
+    if return_stats:
+        original_edges = A_orig != 0
+        shuffled_edges = A != 0
+        max_swaps = m // 2
+        retained_fraction = (
+            np.count_nonzero(original_edges & shuffled_edges)
+            / np.count_nonzero(original_edges)
+        )
+        reached_max_swaps = successful_swaps == max_swaps
+        hit_failed_attempt_limit = retries >= tries
+
+        stats = {
+            "edges": m,
+            "max_swaps": max_swaps,
+            "successful_swaps": successful_swaps,
+            "successful_fraction": successful_swaps / max_swaps,
+            "failed_swap_attempts": retries,
+            "retained_edge_fraction": retained_fraction,
+            "reached_max_swaps": reached_max_swaps,
+            "hit_failed_attempt_limit": hit_failed_attempt_limit,
+            "termination_reason": (
+                "all_edge_pairs_swapped"
+                if reached_max_swaps
+                else "retry_limit_reached"
+            ),
+        }
+        return A, stats
+
+    return A
 
 def apply_percent_negative(W:np.ndarray,per_neg:float,rng:np.random.Generator): ##these should probably be unified
     nz = np.nonzero(W)

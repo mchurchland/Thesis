@@ -1,0 +1,55 @@
+{
+  "dataset": "cel_matched",
+  "nodes": 297,
+  "known_sign_edges": 1740,
+  "formerly_unknown_sign_edges": 1864,
+  "edges": 3604,
+  "one_pass_max_swaps": 1802,
+  "n_runs": 5000,
+  "tries": 20000,
+  "base_seed": 12345,
+  "seed_stride": 100000,
+  "unknown_sign_seed_offset": 23000000,
+  "unknown_sign_inhibitory_fraction": 0.2425287356321839,
+  "runs_reaching_max_swaps": 2258,
+  "fraction_reaching_max_swaps": 0.4516,
+  "runs_hitting_failed_attempt_limit": 2742,
+  "fraction_hitting_failed_attempt_limit": 0.5484,
+  "all_graph_invariants_passed": true,
+  "successful_swaps": {
+    "min": 1799.0,
+    "q25": 1801.0,
+    "median": 1801.0,
+    "mean": 1801.4,
+    "q75": 1802.0,
+    "max": 1802.0,
+    "std": 0.5906519905619475
+  },
+  "successful_fraction": {
+    "min": 0.9983351831298557,
+    "q25": 0.9994450610432852,
+    "median": 0.9994450610432852,
+    "mean": 0.9996670366259712,
+    "q75": 1.0,
+    "max": 1.0,
+    "std": 0.00032777579942394803
+  },
+  "failed_swap_attempts": {
+    "min": 353.0,
+    "q25": 436.0,
+    "median": 20000.0,
+    "mean": 11163.1242,
+    "q75": 20000.0,
+    "max": 20000.0,
+    "std": 9739.005815216875
+  },
+  "retained_edge_fraction": {
+    "min": 0.038013318534961156,
+    "q25": 0.04716981132075472,
+    "median": 0.049389567147613764,
+    "mean": 0.04939445061043285,
+    "q75": 0.05160932297447281,
+    "max": 0.06326304106548279,
+    "std": 0.003280459647907464
+  }
+}

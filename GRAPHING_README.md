@@ -191,7 +191,7 @@ for dataset in ("cel_matched", "cel_removed", "matched_er"):
         output_dir,
         bins=4,
         show=False,
-        performance_scale="sixth_root",
+        performance_scale="linear",
     )
 PY
 ```
@@ -295,11 +295,9 @@ Both PNG and PDF versions are written by the simplified plotting script.
 
 ## 6. Raw-spectral-radius summary
 
-Use `final_results/sign_norm` as the sign-sweep root. Those mode names include
-the normalization suffix expected by the summary script, which avoids the
-legacy parser mismatch in the plain `sign_frac` files. The script also uses
-historical directory keys, so override its sweep mapping with the current
-`cel_matched` and `cel_removed` names:
+Use the rank-updated `_erank` shuffle and sign-fraction CSVs. The summary parser
+accepts both legacy mode names containing a normalization suffix and the current
+files, which store `spectral_radius` in the `normalization` column:
 
 ```bash
 python - <<'PY'
@@ -310,29 +308,29 @@ plots.SIGN_SWEEPS = [
     (
         "Matched C. elegans sweep",
         "cel_matched",
-        "",
+        "final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv",
         "sign_test_og_cel",
         "#d55e00",
     ),
     (
         "Removed C. elegans sweep",
         "cel_removed",
-        "",
+        "final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv",
         "sign_test_og_cel",
         "#e69f00",
     ),
     (
         "Matched ER sweep",
         "matched_er",
-        "",
+        "final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv",
         "sign_test_er",
         "#56b4e9",
     ),
 ]
 
 summary = plots.build_summary(
-    "final_results/shuf/combined.ALL.csv",
-    "final_results/sign_norm",
+    "final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv",
+    "final_results/sign_frac",
     max_sign_frac=0.5,
 )
 

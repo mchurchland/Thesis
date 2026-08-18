@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""Combine shuffle controls and sign-flip sweeps as performance vs raw rho."""
+"""Plot mean performance and CV against raw rho for the control families."""
 
 from __future__ import annotations
 
 import argparse
-import os
 import re
 from pathlib import Path
 
 import matplotlib as mpl
-
-if not os.environ.get("MPLBACKEND"):
-    mpl.use("Agg")
-
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from matplotlib.ticker import FuncFormatter, FixedLocator
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import pandas as pd
 
@@ -65,25 +60,11 @@ SHUFFLE_FAMILIES = [
 
 SIGN_SWEEPS = [
     (
-        "Matched C. elegans sweep",
-        "matched_cel",
-        "good_results/good_cel_new/matched_cel/combined.ALL.csv",
+        "C. elegans E/I sweep",
+        "cel_matched",
+        "final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv",
         "sign_test_og_cel",
         "#d55e00",
-    ),
-    (
-        "Removed C. elegans sweep",
-        "removed_cel",
-        "good_results/good_cel_new/removed_cel/combined.ALL.csv",
-        "sign_test_og_cel",
-        "#e69f00",
-    ),
-    (
-        "Matched ER sweep",
-        "matched_er",
-        "good_results/good_cel_new/matched_er/combined.ALL.csv",
-        "sign_test_er",
-        "#56b4e9",
     ),
 ]
 
@@ -154,13 +135,31 @@ def _per_group_metric_summary(df: pd.DataFrame, extra_cols: list[str]) -> pd.Dat
 
 def _parse_sign_sweep_metadata(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
     out = df.copy()
-    pat = re.compile(
+    suffixed_pat = re.compile(
         rf"^{re.escape(prefix)}([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
         r"__norm_([A-Za-z0-9_+-]+)$"
     )
-    parsed = out["mode"].astype(str).map(lambda mode: pat.match(mode))
-    out["sign_frac"] = parsed.map(lambda m: float(m.group(1)) if m else np.nan)
-    out["normalization"] = parsed.map(lambda m: m.group(2) if m else "")
+    plain_pat = re.compile(
+        rf"^{re.escape(prefix)}([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)$"
+    )
+    modes = out["mode"].astype(str)
+    suffixed = modes.map(suffixed_pat.match)
+    plain = modes.map(plain_pat.match)
+    supplied_normalization = (
+        out["normalization"].fillna("").astype(str)
+        if "normalization" in out.columns
+        else pd.Series("", index=out.index, dtype=str)
+    )
+    out["sign_frac"] = [
+        float(suffix_match.group(1))
+        if suffix_match
+        else float(plain_match.group(1)) if plain_match else np.nan
+        for suffix_match, plain_match in zip(suffixed, plain)
+    ]
+    out["normalization"] = [
+        suffix_match.group(2) if suffix_match else supplied_normalization.loc[idx]
+        for idx, suffix_match in suffixed.items()
+    ]
     out = out[np.isfinite(out["sign_frac"]) & out["normalization"].isin(NORM_STYLES)].copy()
     return out
 
@@ -189,7 +188,7 @@ def build_summary(
 
     sign_root = Path(sign_root)
     for label, dataset_key, rel_path, prefix, color in SIGN_SWEEPS:
-        sign_path = sign_root / dataset_key / "combined.ALL.csv"
+        sign_path = sign_root / dataset_key / "combined.ALL.GRKR_erank.rank_updated.csv"
         if not sign_path.exists():
             sign_path = Path(rel_path)
         sign = _parse_sign_sweep_metadata(_read_results(sign_path), prefix)
@@ -215,26 +214,22 @@ def build_summary(
     return summary
 
 
-def _format_rho_tick(value: float, _pos: int) -> str:
-    if value >= 10:
-        return f"{value:g}"
-    return f"{value:.1f}".rstrip("0").rstrip(".")
-
-
-def _nice_log_ticks(lo: float, hi: float) -> list[float]:
-    candidates = np.asarray(
-        [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 40, 50, 75, 100],
-        dtype=float,
-    )
-    return [float(v) for v in candidates if lo <= v <= hi]
-
-
 def plot_summary(
     summary: pd.DataFrame,
     out_dir: str | Path,
     stem: str,
     y_scale: str = "linear",
+    show: bool = True,
 ) -> list[str]:
+    if show and "tkagg" not in mpl.get_backend().lower():
+        try:
+            plt.switch_backend("TkAgg")
+        except ImportError as exc:
+            raise RuntimeError(
+                "Interactive display was requested, but no GUI backend is available. "
+                "Install Tk support or run with --no-show."
+            ) from exc
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -242,136 +237,106 @@ def plot_summary(
         {
             "font.family": "DejaVu Sans",
             "axes.linewidth": 0.8,
-            "axes.labelsize": 12.0,
-            "axes.titlesize": 13.0,
-            "xtick.labelsize": 11.0,
-            "ytick.labelsize": 11.0,
-            "legend.fontsize": 10.8,
+            "axes.labelsize": 11.0,
+            "axes.titlesize": 12.0,
+            "xtick.labelsize": 9.2,
+            "ytick.labelsize": 9.2,
+            "legend.fontsize": 10.0,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
         }
     )
 
-    # Two panel columns are much more legible in a two-column manuscript than
-    # the former four-across layout. Each metric now occupies one row, making
-    # its mean and CV directly comparable without shrinking either axis.
-    fig, axes = plt.subplots(4, 2, figsize=(7.15, 8.6), dpi=300, sharex=True)
-    panel_specs = [
-        (metric, value_col)
-        for metric in METRICS
-        for value_col in ("performance", "cv")
-    ]
+    fig, axes = plt.subplots(4, 2, figsize=(7.15, 8.15), dpi=300, sharex=True)
+    rho_ticks = np.asarray([3.0, 10.0, 25.0, 50.0, 100.0])
 
-    panel_letters = tuple("ABCDEFGH")
-    for panel_idx, (ax, (metric, value_col)) in enumerate(zip(axes.ravel(), panel_specs)):
+    for row, metric in enumerate(METRICS):
         metric_df = summary[summary["metric"] == metric].copy()
         shuffle_df = metric_df[metric_df["series_kind"] == "shuffle"]
         sign_df = metric_df[metric_df["series_kind"] == "sign_sweep"]
 
-        for family, modes, color, marker in SHUFFLE_FAMILIES:
-            fam = shuffle_df[shuffle_df["series"] == family].copy()
-            if fam.empty:
-                continue
-            mode_order = {mode: i for i, mode in enumerate(modes)}
-            fam["mode_order"] = fam["mode"].map(mode_order).fillna(999)
-            fam = fam.sort_values(["mode_order", "raw_rho"])
-            ax.plot(
-                fam["raw_rho"],
-                fam[value_col],
-                color=color,
-                linewidth=1.75,
-                marker=marker,
-                markersize=4.7,
-                markerfacecolor="white",
-                markeredgecolor=color,
-                markeredgewidth=1.05,
-                alpha=0.94,
-                zorder=3,
-            )
+        for col, value_col in enumerate(("performance", "cv")):
+            ax = axes[row, col]
+            for family, modes, color, marker in SHUFFLE_FAMILIES:
+                fam = shuffle_df[shuffle_df["series"] == family].copy()
+                if fam.empty:
+                    continue
+                mode_order = {mode: i for i, mode in enumerate(modes)}
+                fam["mode_order"] = fam["mode"].map(mode_order).fillna(999)
+                fam = fam.sort_values(["mode_order", "raw_rho"])
+                ax.plot(
+                    np.sqrt(fam["raw_rho"]),
+                    fam[value_col],
+                    color=color,
+                    linewidth=1.55,
+                    marker=marker,
+                    markersize=4.0,
+                    markerfacecolor="white",
+                    markeredgecolor=color,
+                    markeredgewidth=0.95,
+                    alpha=0.94,
+                    zorder=3,
+                )
 
-        for dataset, sub in sign_df.groupby("dataset", sort=False):
-            sub = sub.sort_values("sign_frac")
-            color = str(sub["color"].iloc[0])
-            ax.plot(
-                sub["raw_rho"],
-                sub[value_col],
-                color=color,
-                linestyle="-",
-                linewidth=1.70,
-                alpha=0.90,
-                zorder=2,
-            )
-            ax.scatter(
-                sub["raw_rho"],
-                sub[value_col],
-                color="white",
-                marker="o",
-                s=25,
-                edgecolor=color,
-                linewidth=1.00,
-                zorder=4,
-            )
+            for _dataset, sub in sign_df.groupby("dataset", sort=False):
+                sub = sub.sort_values("sign_frac")
+                color = str(sub["color"].iloc[0])
+                ax.plot(
+                    np.sqrt(sub["raw_rho"]),
+                    sub[value_col],
+                    color=color,
+                    linewidth=1.55,
+                    marker="o",
+                    markersize=4.0,
+                    markerfacecolor="white",
+                    markeredgecolor=color,
+                    markeredgewidth=0.95,
+                    alpha=0.92,
+                    zorder=4,
+                )
 
-        row, col = divmod(panel_idx, 2)
-        if row == 0:
-            ax.set_title(
-                "Mean performance" if col == 0 else "Coefficient of variation (CV)",
-                fontweight="semibold",
-                pad=7,
+            panel_idx = row * 2 + col
+            ax.text(
+                0.02,
+                0.97,
+                chr(65 + panel_idx),
+                transform=ax.transAxes,
+                ha="left",
+                va="top",
+                fontsize=11.2,
+                fontweight="bold",
             )
-        if col == 0:
-            ax.set_ylabel(metric, fontweight="bold", labelpad=7)
-        ax.text(
-            -0.110,
-            1.025,
-            panel_letters[panel_idx],
-            transform=ax.transAxes,
-            ha="left",
-            va="bottom",
-            fontsize=11.5,
-            fontweight="bold",
-            clip_on=False,
-        )
-        ax.set_xscale("log")
-        ax.set_yscale(y_scale if value_col == "performance" else "linear")
-        ax.set_xlim(2.8, 110.0)
-        ax.xaxis.set_major_locator(FixedLocator([3, 10, 40, 100]))
-        ax.xaxis.set_major_formatter(FuncFormatter(_format_rho_tick))
-        if y_scale == "log" and value_col == "performance":
-            ax.yaxis.set_major_formatter(FuncFormatter(_format_rho_tick))
-        ax.grid(True, axis="y", which="major", color="#d9d9d9", linewidth=0.48, alpha=0.52)
-        ax.grid(True, axis="x", which="major", color="#e5e5e5", linewidth=0.38, alpha=0.38)
-        if y_scale == "log" and value_col == "performance":
-            ax.grid(True, which="minor", axis="y", color="#e8e8e8", linewidth=0.30, alpha=0.30)
-        ax.tick_params(length=3.0, width=0.75, pad=1.4, direction="out")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        for spine in ax.spines.values():
-            spine.set_color("#333333")
-            spine.set_linewidth(0.8)
+            if row == 0:
+                ax.set_title(
+                    "Mean performance" if col == 0 else "Coefficient of variation (CV)",
+                    fontweight="semibold",
+                    pad=5,
+                )
+            if col == 0:
+                ax.set_ylabel(metric, fontweight="bold", labelpad=6)
 
-        finite_y = metric_df[value_col].to_numpy(float)
-        finite_y = finite_y[np.isfinite(finite_y)]
-        if finite_y.size:
-            y_hi = float(np.nanmax(finite_y))
-            if y_scale == "log" and value_col == "performance":
-                positive = finite_y[finite_y > 0]
-                y_lo = float(np.nanmin(positive)) if positive.size else 1e-2
-                y_min, y_max = y_lo * 0.82, y_hi * 1.18
-                ax.set_ylim(y_min, y_max)
-                ticks = _nice_log_ticks(y_min, y_max)
-                if len(ticks) >= 2:
-                    ax.yaxis.set_major_locator(FixedLocator(ticks))
-                    ax.yaxis.set_major_formatter(FuncFormatter(_format_rho_tick))
-                    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-            else:
-                y_lo = min(0.0, float(np.nanmin(finite_y)))
-                pad = max(0.08 * (y_hi - y_lo), 0.5)
-                if value_col == "cv":
-                    pad = max(0.10 * (y_hi - y_lo), 0.025)
-                ax.set_ylim(y_lo, y_hi + pad)
+            ax.set_xlim(np.sqrt(2.8), np.sqrt(110.0))
+            ax.set_xticks(np.sqrt(rho_ticks), labels=["3", "10", "25", "50", "100"])
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=4, min_n_ticks=3))
+            ax.grid(True, color="#dddddd", linewidth=0.45, alpha=0.65)
+            ax.tick_params(length=2.7, width=0.7, pad=1.5, direction="out")
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
 
-    fig.supxlabel(r"Raw spectral radius $\rho(W)$ (log scale)", fontsize=13.0, y=0.153)
+            finite_values = metric_df[value_col].to_numpy(float)
+            finite_values = finite_values[np.isfinite(finite_values)]
+            if finite_values.size:
+                value_hi = float(np.max(finite_values))
+                if col == 0 and y_scale == "log":
+                    positive = finite_values[finite_values > 0]
+                    if positive.size:
+                        ax.set_yscale("log")
+                        ax.set_ylim(float(np.min(positive)) * 0.90, value_hi * 1.10)
+                else:
+                    pad = max(0.08 * value_hi, 0.01 if col else 0.05)
+                    ax.set_ylim(0.0, value_hi + pad)
+
+    fig.supxlabel(r"Raw spectral radius $\rho(W)$", y=0.145, fontsize=11.5)
 
     family_handles = [
         Line2D(
@@ -393,10 +358,10 @@ def plot_summary(
             [0],
             color=color,
             marker="o",
-            markerfacecolor="#d9d9d9",
+            markerfacecolor="white",
             markeredgecolor=color,
-            linewidth=1.70,
-            markersize=4.7,
+            linewidth=1.85,
+            markersize=4.9,
             label=label,
         )
         for label, _key, _path, _prefix, color in SIGN_SWEEPS
@@ -404,35 +369,52 @@ def plot_summary(
     fig.legend(
         handles=family_handles + dataset_handles,
         loc="lower center",
-        bbox_to_anchor=(0.50, 0.018),
+        bbox_to_anchor=(0.50, 0.075),
         ncol=2,
         frameon=False,
-        columnspacing=1.15,
+        columnspacing=1.10,
         handlelength=1.65,
         handletextpad=0.45,
-        fontsize=10.8,
+        fontsize=10.0,
     )
 
-    fig.subplots_adjust(left=0.105, right=0.985, bottom=0.225, top=0.955, wspace=0.24, hspace=0.34)
+    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.195, top=0.955, wspace=0.24, hspace=0.34)
 
     paths = []
     for ext, dpi in (("png", 450), ("pdf", 450)):
         out_path = out_dir / f"{stem}.{ext}"
-        fig.savefig(out_path, dpi=dpi, facecolor="white")
+        fig.savefig(
+            out_path,
+            dpi=dpi,
+            facecolor="white",
+            bbox_inches="tight",
+            pad_inches=0.04,
+        )
         paths.append(str(out_path))
         print(f"[saved] {out_path}")
+    if show:
+        plt.show()
     plt.close(fig)
     return paths
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--shuffle-csv", default="good_results/shuf/combined.ALL.csv")
-    parser.add_argument("--sign-root", default="good_results/good_cel_new")
-    parser.add_argument("--out-dir", default="good_results/summary")
+    parser.add_argument(
+        "--shuffle-csv",
+        default="final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv",
+    )
+    parser.add_argument("--sign-root", default="final_results/sign_frac")
+    parser.add_argument("--out-dir", default="final_results/graphs/thesis/raw_rho")
     parser.add_argument("--stem", default="raw_rho_performance_summary")
     parser.add_argument("--max-sign-frac", type=float, default=0.5)
     parser.add_argument("--y-scale", choices=("log", "linear"), default="linear")
+    parser.add_argument(
+        "--show",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="open the interactive Matplotlib window (default: true)",
+    )
     parser.add_argument("--write-summary-csv", action="store_true")
     return parser.parse_args()
 
@@ -446,7 +428,13 @@ def main() -> None:
         csv_path = out_dir / f"{args.stem}.csv"
         summary.to_csv(csv_path, index=False)
         print(f"[saved] {csv_path}")
-    plot_summary(summary, out_dir, args.stem, y_scale=args.y_scale)
+    plot_summary(
+        summary,
+        out_dir,
+        args.stem,
+        y_scale=args.y_scale,
+        show=args.show,
+    )
 
 
 if __name__ == "__main__":

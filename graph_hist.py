@@ -121,8 +121,8 @@ def _short_legend_name(mode):
         "shuffle_weights": "Shuffle",
         "conn_shuf": "Conn. + shuf.",
         "global_sign_pres": "pm1 + shuf.",
-        "global_sign_pres_real_w": "Sign-pres. real",
-        "global_sign_pres_real_weight": "Sign-pres. real",
+        "global_sign_pres_real_w": "Sign shuf.",
+        "global_sign_pres_real_weight": "Sign shuf.",
         "binary+conshuffle+wshuffle": "pm1 sign/conn/shuf.",
         "binary_base": "Binary",
         "binary_base_topology_shuffle": "Binary shuf.",
@@ -2555,8 +2555,9 @@ def plot_frac_cv_meanline(
       z = mean performance across runs
 
     The lower panel shows the corresponding mean raw spectral radius across
-    the same sign-fraction sweep. It intentionally does not include a
-    horizontal reference for the original C. elegans network.
+    the same sign-fraction sweep, together with the mean CV across the plotted
+    metrics on a second y-axis. It intentionally does not include a horizontal
+    reference for the original C. elegans network.
     """
     os.makedirs(out_dir, exist_ok=True)
     if performance_scale not in {"linear", "sqrt", "fourth_root", "sixth_root"}:
@@ -2613,7 +2614,7 @@ def plot_frac_cv_meanline(
 
     colors = mpl.colormaps["tab10"]
     highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.2425287356321839
-    highlight_label = "C. elegans\nE/I Edge Balance"
+    highlight_label = "C. elegans E/I\nEdge Balance"
     highlight_atol = 1e-12
     plotted_any = False
     highlight_labeled = False
@@ -2702,6 +2703,15 @@ def plot_frac_cv_meanline(
         tick_values = tick_candidates[
             (tick_candidates >= z_min) & (tick_candidates <= z_max)
         ]
+        if tick_values.size < 2:
+            fallback_ticks = mpl.ticker.MaxNLocator(
+                nbins=3,
+                steps=[1, 2, 2.5, 5, 10],
+                min_n_ticks=2,
+            ).tick_values(z_min, z_max)
+            tick_values = fallback_ticks[
+                (fallback_ticks >= z_min) & (fallback_ticks <= z_max)
+            ]
         ax.zaxis.set_major_locator(
             mpl.ticker.FixedLocator(np.power(tick_values, exponent))
         )
@@ -2709,8 +2719,21 @@ def plot_frac_cv_meanline(
             mpl.ticker.FixedFormatter([f"{value:g}" for value in tick_values])
         )
         ax.zaxis.set_minor_locator(mpl.ticker.NullLocator())
+    else:
+        ax.zaxis.set_major_locator(
+            mpl.ticker.MaxNLocator(
+                nbins=4,
+                min_n_ticks=2,
+                integer=True,
+                prune="both",
+            )
+        )
     ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=bins))
     ax.set_xlim(x_min - pad, x_max + pad)
+    if axis_x_label == "E/I Edge Balance":
+        ax.xaxis.set_major_formatter(
+            mpl.ticker.PercentFormatter(xmax=1.0, decimals=0)
+        )
     ax.set_proj_type("ortho")
     ax.set_box_aspect((1.18, 1.0, 0.78), zoom=1.16)
     ax.xaxis.label.set_clip_on(False)
@@ -2758,7 +2781,7 @@ def plot_frac_cv_meanline(
         framealpha=1.0,
         fontsize=8.5,
         loc="upper left",
-        bbox_to_anchor=(0.045, 0.975),
+        bbox_to_anchor=(-0.055, 0.975),
         borderaxespad=0.0,
         handlelength=2.0,
         borderpad=0.42,
@@ -2809,6 +2832,39 @@ def plot_frac_cv_meanline(
         markeredgewidth=1.1,
         zorder=3,
     )
+
+    cv_rows = []
+    for mode in modes:
+        metric_cvs = np.asarray(
+            [mean_cv.get((mode, metric), np.nan) for metric in metrics],
+            dtype=float,
+        )
+        metric_cvs = metric_cvs[np.isfinite(metric_cvs)]
+        frac = mode_values.get(mode, np.nan)
+        if np.isfinite(frac) and metric_cvs.size:
+            cv_rows.append((frac, float(metric_cvs.mean())))
+    cv_curve = pd.DataFrame(cv_rows, columns=["sign_frac", "mean_cv"])
+    cv_curve = (
+        cv_curve.groupby("sign_frac", as_index=False)["mean_cv"]
+        .mean()
+        .sort_values("sign_frac")
+    )
+
+    cv_color = "#374151"
+    ax_cv = ax_rho.twinx()
+    ax_cv.plot(
+        cv_curve["sign_frac"],
+        cv_curve["mean_cv"],
+        color=cv_color,
+        linestyle="--",
+        linewidth=1.8,
+        marker="s",
+        markersize=4.0,
+        markerfacecolor="white",
+        markeredgecolor=cv_color,
+        markeredgewidth=0.9,
+        zorder=4,
+    )
     if dataset_key != "matched_er":
         ax_rho.axvline(
             highlight_frac,
@@ -2820,22 +2876,33 @@ def plot_frac_cv_meanline(
         )
         ax_rho.text(
             highlight_frac + 0.012,
-            0.97,
+            0.52,
             "empirical E/I Edge Balance",
             color="#444444",
             fontsize=7.5,
             ha="left",
-            va="top",
+            va="center",
             transform=ax_rho.get_xaxis_transform(),
+            bbox={
+                "facecolor": "white",
+                "edgecolor": "none",
+                "alpha": 0.82,
+                "pad": 0.8,
+            },
+            zorder=6,
         )
     rho_min = float(rho_curve["raw_rho"].min())
     rho_max = float(rho_curve["raw_rho"].max())
     rho_span = rho_max - rho_min
     rho_pad = max(0.6, 0.09 * rho_span)
     ax_rho.set_xlim(x_min - pad, x_max + pad)
+    if axis_x_label == "E/I Edge Balance":
+        ax_rho.xaxis.set_major_formatter(
+            mpl.ticker.PercentFormatter(xmax=1.0, decimals=0)
+        )
     ax_rho.set_ylim(rho_min - rho_pad, rho_max + rho_pad)
     ax_rho.set_xlabel(axis_x_label, fontsize=9.4)
-    ax_rho.set_ylabel(r"Mean raw $\rho(W)$", fontsize=9.4)
+    ax_rho.set_ylabel(r"Mean raw $\rho(W)$", fontsize=9.4, color=rho_color)
     ax_rho.grid(
         True,
         axis="y",
@@ -2843,11 +2910,24 @@ def plot_frac_cv_meanline(
         linewidth=0.65,
         alpha=0.7,
     )
-    ax_rho.tick_params(axis="both", labelsize=8.2)
+    ax_rho.tick_params(axis="x", labelsize=8.2)
+    ax_rho.tick_params(axis="y", labelsize=8.2, colors=rho_color)
     ax_rho.spines["right"].set_visible(False)
     for spine in ax_rho.spines.values():
         spine.set_color("#333333")
         spine.set_linewidth(0.8)
+    ax_rho.spines["left"].set_color(rho_color)
+
+    cv_min = float(cv_curve["mean_cv"].min())
+    cv_max = float(cv_curve["mean_cv"].max())
+    cv_span = cv_max - cv_min
+    cv_pad = max(0.005, 0.10 * cv_span)
+    ax_cv.set_ylim(cv_min - cv_pad, cv_max + cv_pad)
+    ax_cv.set_ylabel("Mean CV across metrics", fontsize=9.4, color=cv_color)
+    ax_cv.tick_params(axis="y", labelsize=8.2, colors=cv_color)
+    ax_cv.spines["right"].set_color(cv_color)
+    ax_cv.spines["right"].set_linewidth(0.8)
+    ax_cv.spines["top"].set_visible(False)
 
     out_fig = _replace_path(os.path.join(out_dir, "meanpoint_frac_cv_lines.png"))
     fig.subplots_adjust(left=0.11, right=0.985, bottom=0.08, top=0.96, hspace=0.12)
@@ -4729,6 +4809,8 @@ def plot_cv_performance_contours_2d(
 
     present_modes = list(dict.fromkeys(joint["mode"].astype(str)))
     modes, color_map, label_map, style_meta = _mode_styles_for_cv_performance(present_modes)
+    # Omit the shuffled-sign signed-unit control from the main architecture figure.
+    modes = [mode for mode in modes if mode != "global_sign_pres"]
     marker_map = style_meta.get("marker_map", _mode_marker_map(modes))
     plot_baseline_mode = baseline_mode if baseline_mode in modes else None
     if plot_baseline_mode is None:
@@ -5020,7 +5102,7 @@ def plot_cv_performance_contour_triptych(
             "modes": ["real", "shuffle", "celW+connShuf", "conn_shuf_only"],
         },
         {
-            "row_label": "Sign-pres.",
+            "row_label": "PM1",
             "baseline": "local_sign+binary",
             "modes": [
                 "local_sign+binary",
@@ -5262,6 +5344,11 @@ def plot_cv_performance_contour_triptych(
                 )
                 plotted_any = True
                 if mode not in legend_handles_by_mode:
+                    legend_label = (
+                        "PM1"
+                        if mode == "local_sign+binary"
+                        else _short_legend_name(mode)
+                    )
                     legend_handles_by_mode[mode] = Line2D(
                         [0],
                         [0],
@@ -5271,14 +5358,14 @@ def plot_cv_performance_contour_triptych(
                         markersize=6.8 if marker == "*" else 5.2,
                         markeredgecolor="#222222",
                         markeredgewidth=0.50,
-                        label=_short_legend_name(mode),
+                        label=legend_label,
                     )
 
             if row_idx == 0:
                 ax.set_title(metric, fontsize=13.0, fontweight="semibold", pad=4)
             if col_idx == 0:
                 ax.text(
-                    -0.30,
+                    -0.35,
                     0.5,
                     spec["row_label"],
                     transform=ax.transAxes,
@@ -5311,11 +5398,11 @@ def plot_cv_performance_contour_triptych(
         cbar = fig.colorbar(color_scalar, cax=cax, orientation="horizontal")
         cbar.set_label(
             r"$\Delta \rho_{\mathrm{raw}}$ from row baseline (%)",
-            fontsize=9.2,
+            fontsize=11.2,
             labelpad=3,
         )
         cbar.ax.xaxis.set_label_position("top")
-        cbar.ax.tick_params(labelsize=8.2, length=2.4, width=0.60, pad=1.5)
+        cbar.ax.tick_params(labelsize=10.0, length=2.8, width=0.65, pad=1.8)
         cbar.outline.set_linewidth(0.45)
         cbar.outline.set_edgecolor("#333333")
 
