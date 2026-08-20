@@ -24,6 +24,31 @@ Outputs to `architecture_variant_figures/graph_examples`:
   - negative edges use the negative color scale (solid edges)
 - `00_file_index.png`: filename/variant index
 
+## Trimmed topology figure and appendix controls
+
+The sign-matched topology comparison follows the thesis feedback to keep the
+main figure compact. The main output retains the original panels A and D:
+
+- A: sign-matched C. elegans connectome
+- D: sign-matched connection shuffle
+
+The former panel B (complex connections removed) is appended to the second
+architecture appendix grid as panel P. The former panel C is omitted. This
+produces `model_grid_I_to_P.png`; the same image is also written to the legacy
+`model_grid_I_to_O.png` and `model_grid_I_to_Q.png` paths so existing thesis
+references continue to resolve.
+
+```bash
+python architecture_variant_figures/make_weighted_graph_examples.py \
+  --new-sign-matched-four-panel \
+  --new-sign-matched-four-panel-out new_4to1_four_panel.png \
+  --ce-ei ""
+```
+
+`new_4to1_four_panel.png` remains as a compatibility filename but now contains
+the trimmed A/D comparison. An accurately named copy is written to
+`new_4to1_two_panel.png`.
+
 Implementation note:
 - CE data loading uses `util.util.load_connectome`.
 - Variant weight-matrix construction uses project-native code (`util.util.build_reservoir` plus CE shuffle helpers).

@@ -30,26 +30,27 @@ may also create an `all_arch_hist_grid.png` and a CV table as side effects.
 
 | Experiment | Input |
 |---|---|
-| Main architecture comparison | `final_results/main/combined.ALL.csv` |
-| Own-radius topology shuffles | `final_results/shuf/combined.ALL.csv` |
+| Main architecture comparison | `final_results/main/combined.ALL.GRKR_erank.rank_updated.csv` |
+| Own-radius topology shuffles | `final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv` |
 | Fixed-baseline-radius shuffles | `final_results/Rho_stuff/baseline_rho_shuf/combined.ALL.csv` |
-| Sign sweep: C. elegans sign-matched | `final_results/sign_frac/cel_matched/combined.ALL.csv` |
-| Sign sweep: predicted-polarity-only | `final_results/sign_frac/cel_removed/combined.ALL.csv` |
-| Sign sweep: matched ER | `final_results/sign_frac/matched_er/combined.ALL.csv` |
+| Sign sweep: C. elegans sign-matched | `final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv` |
+| Sign sweep: predicted-polarity-only | `final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv` |
+| Sign sweep: matched ER | `final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv` |
 | Sign-normalization versions | `final_results/sign_norm/{cel_matched,cel_removed,matched_er}/combined.ALL.csv` |
 | Triad summary | `final_results/triad/triad_sign_fraction_group_summary.ALL.csv` |
 
 Do not point plotting commands at `final_chunks`. Plot the merged
 `combined.ALL.csv` files.
 
-## 1. Main architecture islands (2 x 2)
+## 1. Main architecture islands (1 x 3)
 
 This produces the thesis architecture figure with 50% CV/performance density
-contours.
+contours for IPC, KR, and MC. GR is intentionally reserved for the standalone
+generalization-rank figure in Section 7 because lower GR is desirable.
 
 ```bash
 python graph_hist.py \
-  --combined final_results/main/combined.ALL.csv \
+  --combined final_results/main/combined.ALL.GRKR_erank.rank_updated.csv \
   --out-dir final_results/graphs/thesis/architecture \
   --show-cv-performance-contours
 
@@ -63,7 +64,7 @@ Primary output:
 final_results/graphs/thesis/architecture/50per.png
 ```
 
-## 2. Topology-shuffle islands (3 x 4)
+## 2. Topology-shuffle islands (3 x 3)
 
 These are the row-specific triptychs. The rows use different baselines:
 
@@ -75,7 +76,7 @@ These are the row-specific triptychs. The rows use different baselines:
 
 ```bash
 python graph_hist.py \
-  --combined final_results/shuf/combined.ALL.csv \
+  --combined final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv \
   --out-dir final_results/graphs/thesis/topology_shuffles \
   --show-cv-performance-contour-triptych
 
@@ -181,7 +182,7 @@ python - <<'PY'
 import graph_hist as graph
 
 for dataset in ("cel_matched", "cel_removed", "matched_er"):
-    input_csv = f"final_results/sign_frac/{dataset}/combined.ALL.csv"
+    input_csv = f"final_results/sign_frac/{dataset}/combined.ALL.GRKR_erank.rank_updated.csv"
     output_dir = f"final_results/graphs/thesis/sign_fraction/{dataset}"
     combined = graph._ensure_columns(graph._read_combined_csv(input_csv))
     dispersion = graph._compute_dispersion_table(combined, mode="cv")
@@ -346,7 +347,30 @@ plots.plot_summary(
 PY
 ```
 
-## 7. Sign-sweep quick-look
+## 7. Standalone generalization-rank synthesis
+
+GR is excluded from figures whose vertical axis is labelled mean performance.
+Generate its two-column architecture, sign-sweep, raw-radius, and shuffle
+summary exclusively from the rank-updated `_erank` inputs. Sign-fraction
+panel B uses the complete 0--100% E/I edge-balance sweep; the raw-radius
+panels C and D retain sign-sweep conditions through 50%:
+
+```bash
+python plot_generalization_rank_summary.py
+```
+
+Outputs:
+
+```text
+final_results/graphs/thesis/generalization_rank/generalization_rank_summary.png
+final_results/graphs/thesis/generalization_rank/generalization_rank_summary.pdf
+final_results/graphs/thesis/generalization_rank/generalization_rank_summary.csv
+```
+
+In this figure, increasing GR means poorer generalization and increasing CV
+means greater hyperparameter sensitivity.
+
+## 8. Sign-sweep quick-look
 
 The quick-look script has historical input paths hard-coded. The following
 wrapper supplies the final merged data without changing the script:

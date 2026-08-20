@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
@@ -216,14 +217,17 @@ def parse_args() -> argparse.Namespace:
         "--new-sign-matched-four-panel",
         action="store_true",
         help=(
-            "Write only a 2x2 comparison: sign-matched connectome, removed-edge connectome, "
-            "ER matched to the CE sign rate, and sign-matched connection shuffle."
+            "Write the trimmed main comparison (original panels A and D) and move the "
+            "removed-edge control into the expanded appendix grids."
         ),
     )
     p.add_argument(
         "--new-sign-matched-four-panel-out",
         default="new_sign_matched_four_panel.png",
-        help="Output filename for --new-sign-matched-four-panel, relative to --outdir unless absolute.",
+        help=(
+            "Output filename for the trimmed A/D comparison, relative to --outdir unless "
+            "absolute. The legacy option name is retained for compatibility."
+        ),
     )
     p.add_argument(
         "--known-only",
@@ -247,6 +251,14 @@ def parse_args() -> argparse.Namespace:
         help="Multiply node coordinates by this factor to spread nodes out.",
     )
     p.add_argument("--show-node-labels", action="store_true", help="Draw neuron-name labels on nodes.")
+    p.add_argument(
+        "--appendix-show-node-labels",
+        action="store_true",
+        help=(
+            "Draw neuron-name labels on the expanded appendix grids without adding them "
+            "to the trimmed main A/D comparison."
+        ),
+    )
     p.add_argument("--label-fontsize", type=int, default=10, help="Font size for node labels when enabled.")
     p.add_argument("--panel-title-fontsize", type=int, default=28, help="Panel title font size.")
     p.add_argument(
@@ -430,7 +442,10 @@ def _panel_letter(index: int) -> str:
 
 
 def _grid_title(variant: Variant) -> str:
-    return _short_legend_name(variant.key)
+    short_name = _short_legend_name(variant.key)
+    if variant.key.startswith("appendix_") and short_name == variant.key:
+        return variant.title
+    return short_name
 
 
 def _paper_variants() -> list[Variant]:
@@ -845,13 +860,28 @@ def make_variant_grid_figures(
     show_direction: bool,
     figure_dpi: int,
     show: bool,
+    extra_panels: list[tuple[Variant, np.ndarray, dict[int, np.ndarray]]] | None = None,
+    split_at: int | None = None,
 ) -> list[Path]:
-    lettered = [(idx, _panel_letter(idx), variant) for idx, variant in enumerate(variants)]
+    grid_items: list[
+        tuple[Variant, tuple[np.ndarray, dict[int, np.ndarray]] | None]
+    ] = [(variant, None) for variant in variants]
+    for variant, W, pos in extra_panels or []:
+        grid_items.append((variant, (W, pos)))
+
+    lettered = [
+        (idx, _panel_letter(idx), variant, prepared)
+        for idx, (variant, prepared) in enumerate(grid_items)
+    ]
     ncols = 2
-    split_at = math.ceil(len(lettered) / 2)
-    if split_at % ncols and split_at < len(lettered):
-        split_at += ncols - (split_at % ncols)
-    chunks = [lettered[:split_at], lettered[split_at:]]
+    resolved_split = split_at
+    if resolved_split is None:
+        resolved_split = math.ceil(len(lettered) / 2)
+        if resolved_split % ncols and resolved_split < len(lettered):
+            resolved_split += ncols - (resolved_split % ncols)
+    if not 0 < resolved_split <= len(lettered):
+        raise ValueError(f"split_at must be in [1, {len(lettered)}], got {resolved_split}.")
+    chunks = [lettered[:resolved_split], lettered[resolved_split:]]
 
     _, ref_w, _ = _edge_subset(ce_base, max_edges=max_edges, keep_all_negatives=keep_all_negatives)
     pos_map, neg_map = build_dual_colormap_norms(ref_w)
@@ -870,19 +900,22 @@ def make_variant_grid_figures(
         for ax in axes.flat:
             ax.axis("off")
 
-        for local_idx, (panel_idx, letter, variant) in enumerate(chunk):
+        for local_idx, (panel_idx, letter, variant, prepared) in enumerate(chunk):
             ax = axes.flat[local_idx]
-            panel_seed = seed + panel_idx * 97
-            W_var, panel_pos = build_variant_panel_data(
-                variant=variant,
-                ce_base=ce_base,
-                ce_pos=ce_pos,
-                seed=panel_seed,
-                er_p=er_p,
-                ws_p=ws_p,
-                layout_iters=layout_iters,
-                layout_scale=layout_scale,
-            )
+            if prepared is None:
+                panel_seed = seed + panel_idx * 97
+                W_var, panel_pos = build_variant_panel_data(
+                    variant=variant,
+                    ce_base=ce_base,
+                    ce_pos=ce_pos,
+                    seed=panel_seed,
+                    er_p=er_p,
+                    ws_p=ws_p,
+                    layout_iters=layout_iters,
+                    layout_scale=layout_scale,
+                )
+            else:
+                W_var, panel_pos = prepared
             draw_weighted_panel(
                 ax,
                 W_var,
@@ -946,7 +979,11 @@ def make_index_figure(
         "",
     ]
     for idx, v in enumerate(variants):
-        lines.append(f"{_panel_letter(idx)}  {v.slug}.png  -  {_grid_title(v)}")
+        letter = _panel_letter(idx)
+        location = f"{v.slug}.png"
+        if v.key.startswith("appendix_"):
+            location = f"model_grid_I_to_P.png (panel {letter})"
+        lines.append(f"{letter}  {location}  -  {_grid_title(v)}")
 
     fig_h = max(4.0, 0.62 * len(lines))
     fig = plt.figure(figsize=(14, fig_h))
@@ -979,7 +1016,7 @@ def make_new_sign_matched_four_panel(
     show_direction: bool,
     figure_dpi: int,
     show: bool,
-) -> None:
+) -> list[tuple[str, np.ndarray, dict[int, np.ndarray]]]:
     if ce_known.shape != ce_removed.shape:
         raise ValueError(
             "The sign-matched base adjacency and removed adjacency must have the same shape: "
@@ -1026,15 +1063,16 @@ def make_new_sign_matched_four_panel(
     else:
         pos_map, neg_map = build_dual_colormap_norms(np.array([], dtype=np.float32))
 
-    title_size = min(panel_title_fontsize, 18)
-    fig, axes = plt.subplots(2, 2, figsize=(11.0, 9.2), squeeze=False)
-    for idx, (ax, (title, W, pos)) in enumerate(zip(axes.flat, panels)):
+    # Preserve the original A and D identifiers so existing prose remains valid.
+    selected_panels = [(0, panels[0]), (3, panels[3])]
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.8), squeeze=False)
+    for ax, (original_idx, (title, W, pos)) in zip(axes.flat, selected_panels):
         draw_weighted_panel(
             ax,
             W,
             pos,
             title="",
-            panel_title_fontsize=title_size,
+            panel_title_fontsize=min(panel_title_fontsize, 18),
             node_colors=["#666666"] * W.shape[0],
             node_labels=ce_labels if show_node_labels else None,
             label_fontsize=label_fontsize,
@@ -1051,7 +1089,7 @@ def make_new_sign_matched_four_panel(
         ax.text(
             0.018,
             0.982,
-            _panel_letter(idx),
+            _panel_letter(original_idx),
             transform=ax.transAxes,
             ha="left",
             va="top",
@@ -1063,10 +1101,11 @@ def make_new_sign_matched_four_panel(
         )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.975, bottom=0.01, wspace=0.015, hspace=0.20)
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.965, bottom=0.02, wspace=0.025)
     fig.savefig(out_path, dpi=figure_dpi)
     maybe_show(show)
     plt.close(fig)
+    return panels
 
 
 def main() -> None:
@@ -1080,7 +1119,7 @@ def main() -> None:
     if args.new_sign_matched_four_panel:
         ce_removed, _removed_ei, _removed_labels = load_ce_with_project_code(args.removed_adj, args.ce_ei)
         out_path = _resolve_out_path(outdir, args.new_sign_matched_four_panel_out)
-        make_new_sign_matched_four_panel(
+        sign_matched_panels = make_new_sign_matched_four_panel(
             ce_known=ce_known,
             ce_removed=ce_removed,
             ce_labels=ce_labels,
@@ -1100,7 +1139,75 @@ def main() -> None:
             figure_dpi=args.figure_dpi,
             show=args.show,
         )
-        print(f"Wrote 1 file to: {out_path.resolve()}")
+
+        # The original B control now lives in the appendix after the existing
+        # seven panels I--O. The first eight-panel appendix sheet remains A--H.
+        panel_b_title, panel_b_W, panel_b_pos = sign_matched_panels[1]
+        supplemental_variants = [
+            Variant(
+                key="appendix_removed_connections",
+                slug="complex_connections_removed",
+                title=panel_b_title,
+            )
+        ]
+        supplemental_panels = [
+            (supplemental_variants[0], panel_b_W, panel_b_pos)
+        ]
+        paper_variants = _paper_variants()
+        make_index_figure(
+            paper_variants + supplemental_variants,
+            outdir,
+            index_fontsize=args.index_fontsize,
+            figure_dpi=args.figure_dpi,
+            show=args.show,
+        )
+        grid_paths = make_variant_grid_figures(
+            variants=paper_variants,
+            ce_base=sign_matched_panels[0][1],
+            ce_pos=sign_matched_panels[0][2],
+            ce_labels=ce_labels,
+            outdir=outdir,
+            seed=args.seed,
+            er_p=args.er_p,
+            ws_p=args.ws_p,
+            max_edges=args.max_edges,
+            layout_iters=args.layout_iters,
+            layout_scale=args.layout_scale,
+            keep_all_negatives=keep_all_negatives,
+            show_node_labels=args.appendix_show_node_labels or args.show_node_labels,
+            label_fontsize=args.label_fontsize,
+            panel_title_fontsize=args.panel_title_fontsize,
+            show_grid_titles=args.grid_titles,
+            show_direction=args.show_direction,
+            figure_dpi=args.figure_dpi,
+            show=args.show,
+            extra_panels=supplemental_panels,
+            split_at=8,
+        )
+
+        # Keep existing thesis/image references working while exposing accurate
+        # filenames for the trimmed main figure and expanded I--P appendix grid.
+        for compatibility_path in (
+            outdir / "new_4to1_four_panel.png",
+            outdir / "new_4to1_two_panel.png",
+        ):
+            if out_path.resolve() != compatibility_path.resolve():
+                shutil.copyfile(out_path, compatibility_path)
+        expanded_grid = next(
+            (path for path in grid_paths if path.name == "model_grid_I_to_P.png"),
+            None,
+        )
+        if expanded_grid is not None:
+            for compatibility_path in (
+                outdir / "model_grid_I_to_O.png",
+                outdir / "model_grid_I_to_Q.png",
+            ):
+                shutil.copyfile(expanded_grid, compatibility_path)
+
+        print(
+            f"Wrote trimmed main figure and {len(grid_paths)} appendix grids to: "
+            f"{outdir.resolve()}"
+        )
         return
 
     if args.known_only:

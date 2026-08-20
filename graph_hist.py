@@ -48,6 +48,12 @@ from util.graph_utils import (
     _aggregate_over_hparams,
 )
 
+
+# GR is intentionally reported in its own synthesis figure. Unlike the
+# performance metrics below, lower GR indicates better generalization, so it
+# must not share axes labelled "Mean performance" with higher-is-better scores.
+PERFORMANCE_METRICS = ("IPC", "KR", "MC")
+
 # Optional hard filter for analysis modes.
 # Leave empty to analyze all modes, or populate with exact mode names.
 ANALYSIS_MODE_FILTER = [
@@ -1913,15 +1919,7 @@ def _save_sign_norm_combined_grid(
 
     memory_metrics = [metric for metric in ("MC", "IPC") if metric in metrics]
     kernel_metrics = [metric for metric in ("KR", "GR") if metric in metrics]
-    cv_target_label = "Mean within-target CV"
-    if "cv_definition" in cv.columns and set(cv["cv_definition"].dropna()) == {
-        "full_grid_cv_including_rho"
-    }:
-        cv_target_label = r"Full-grid CV (including $\rho$)"
-    elif "rho_target" in cv.columns:
-        cv_targets = pd.to_numeric(cv["rho_target"], errors="coerce").dropna().unique()
-        if len(cv_targets) == 1:
-            cv_target_label = rf"CV at nominal $\rho={float(cv_targets[0]):g}$"
+    cv_target_label = "Mean CV"
     draw_combined_metrics(
         performance,
         memory_performance_ax,
@@ -1938,9 +1936,9 @@ def _save_sign_norm_combined_grid(
     kernel_performance_ax.set_title("Kernel metrics: mean performance")
 
     draw_combined_metrics(cv, memory_cv_ax, memory_metrics, cv_target_label)
-    memory_cv_ax.set_title("Memory metrics: hyperparameter CV")
+    memory_cv_ax.set_title("Memory metrics: Mean CV")
     draw_combined_metrics(cv, kernel_cv_ax, kernel_metrics, cv_target_label)
-    kernel_cv_ax.set_title("Kernel metrics: hyperparameter CV")
+    kernel_cv_ax.set_title("Kernel metrics: Mean CV")
 
     if scaling.empty:
         rho_ax.set_axis_off()
@@ -2477,7 +2475,7 @@ def plot_frac_arch_histograms(disp: pd.DataFrame, out_dir: str, bins: int):
             any_plotted = True
             ax.set_title(f"{metric}")
             ax.set_xlabel(x_label)
-            ax.set_ylabel("coefficient of variation ")
+            ax.set_ylabel("Mean CV")
             ax.set_zlabel("fraction (hist, z)")
 
             # Make x discrete and readable
@@ -2549,7 +2547,7 @@ def plot_frac_cv_meanline(
 ):
     """
     Stacked sign-sweep summary. The upper 3D panel has one colored line per
-    metric (MC, IPC, KR, GR):
+    higher-is-better performance metric (IPC, KR, MC):
       x = mode value (parsed numeric component)
       y = mean CV (dispersion) across groups
       z = mean performance across runs
@@ -2566,14 +2564,14 @@ def plot_frac_cv_meanline(
         )
 
     # Expected metrics present in both tables.
-    metric_cols = [m for m in ("MC", "IPC", "KR", "GR") if m in combined.columns]
+    metric_cols = [m for m in PERFORMANCE_METRICS if m in combined.columns]
     if not metric_cols:
-        print("[warn] plot_frac_cv_meanline: no MC/IPC/KR/GR columns found.")
+        print("[warn] plot_frac_cv_meanline: no IPC/KR/MC columns found.")
         return
     metrics_disp = set(disp["metric"].unique())
     metrics = [m for m in metric_cols if m in metrics_disp]
     if not metrics:
-        print("[warn] plot_frac_cv_meanline: dispersion table missing MC/IPC/KR/GR metrics.")
+        print("[warn] plot_frac_cv_meanline: dispersion table missing IPC/KR/MC metrics.")
         return
 
     def mode_to_value(mode: str) -> float:
@@ -2923,7 +2921,7 @@ def plot_frac_cv_meanline(
     cv_span = cv_max - cv_min
     cv_pad = max(0.005, 0.10 * cv_span)
     ax_cv.set_ylim(cv_min - cv_pad, cv_max + cv_pad)
-    ax_cv.set_ylabel("Mean CV across metrics", fontsize=9.4, color=cv_color)
+    ax_cv.set_ylabel("Mean CV", fontsize=9.4, color=cv_color)
     ax_cv.tick_params(axis="y", labelsize=8.2, colors=cv_color)
     ax_cv.spines["right"].set_color(cv_color)
     ax_cv.spines["right"].set_linewidth(0.8)
@@ -3094,7 +3092,7 @@ def plot_weight_gauss_mean_cv(
         return
 
     ax.set_xlabel("log10(Noise Magnitude)", fontsize=18, labelpad=10)
-    ax.set_ylabel("mean CV ", fontsize=18, labelpad=12)
+    ax.set_ylabel("Mean CV", fontsize=18, labelpad=12)
     ax.set_zlabel(z_label_base, fontsize=18, labelpad=10)
     # helpful x ticks at common magnitudes if they are within range
     xticks = [v for v in (1, 10, 100, 1000) if np.isfinite(np.log10(v))]
@@ -3355,7 +3353,7 @@ def plot_weight_gauss_cv_metric_2d(
     zero_mode = next((mode for mode, raw in mode_vals if raw == 0), None)
     _write_weight_metric_difference_table(
         cv_lookup,
-        "mean CV",
+        "Mean CV",
         out_dir,
         tex_name="weight_gauss_diff_mean_cv_table.tex",
         mode_vals=mode_vals,
@@ -3407,7 +3405,7 @@ def plot_weight_gauss_cv_metric_2d(
         ax.grid(True, alpha=0.25, linewidth=0.8)
         return plotted
 
-    plotted_cv = _draw_panel(axes[0], cv_lookup, "mean CV")
+    plotted_cv = _draw_panel(axes[0], cv_lookup, "Mean CV")
     plotted_mean = _draw_panel(axes[1], mean_lookup, "Mean Metric Value")
 
     if not (plotted_cv or plotted_mean):
@@ -3612,7 +3610,7 @@ def plot_weight_gauss_perf_cv_grid(
 
     _write_weight_metric_difference_table(
         cv_lookup,
-        "mean CV",
+        "Mean CV",
         out_dir,
         tex_name="weight_gauss_diff_mean_cv_table.tex",
         mode_vals=mode_vals,
@@ -3641,8 +3639,8 @@ def plot_weight_gauss_perf_cv_grid(
 
     any_plotted = False
 
-    any_plotted |= _draw_panel(ax10, cv_lookup, "mean CV")
-    any_plotted |= _draw_panel(ax11, cv_lookup, "mean CV")
+    any_plotted |= _draw_panel(ax10, cv_lookup, "Mean CV")
+    any_plotted |= _draw_panel(ax11, cv_lookup, "Mean CV")
     any_plotted |= _draw_panel(ax00, mean_lookup, "Mean Metric Value")
     any_plotted |= _draw_panel(ax01, mean_lookup, "Mean Metric Value")
     if not any_plotted:
@@ -3832,7 +3830,7 @@ def plot_rho_cv_other_perf(
                 ax.set_xticks(np.log10(tick_vals))
                 ax.set_xticklabels([f"{v}" for v in tick_vals])
             ax.set_xlabel("rho (log10)", fontsize=13, labelpad=2)
-            ax.set_ylabel("CV(leak,input)", fontsize=11, labelpad=2)
+            ax.set_ylabel("Mean CV", fontsize=11, labelpad=2)
             ax.set_zlabel("mean metric", fontsize=13, labelpad=3)
             # Match both panels to the left/front viewpoint.
             ax.view_init(elev=22, azim=-35)
@@ -4067,7 +4065,7 @@ def plot_overlaid_arch_histograms(
                 legend_handles, legend_labels = ax.get_legend_handles_labels()
             ax.set_title(f"Invariance of {m}")
             if idx == 2 or idx ==3:
-                ax.set_xlabel("coefficient of variation")
+                ax.set_xlabel("Mean CV")
             if idx == 0 or idx ==2:
                 ax.set_ylabel("fraction (normalized by N)")
             ax.grid(True, which="both", axis="both", alpha=0.18, linestyle=":")
@@ -4701,7 +4699,7 @@ def plot_cv_performance_hills_3d(
             plotted_any = True
 
         ax.set_title(metric, fontsize=18, fontweight="semibold", pad=5)
-        ax.set_xlabel("CV", fontsize=12.5, labelpad=6)
+        ax.set_xlabel("Mean CV", fontsize=12.5, labelpad=6)
         ax.set_ylabel("Mean performance", fontsize=12.5, labelpad=7)
         ax.set_zlabel("")
         if panel_peak > 0:
@@ -4836,33 +4834,24 @@ def plot_cv_performance_contours_2d(
             if np.isfinite(delta):
                 color_map[mode] = mpl.colors.to_hex(rho_cmap(rho_norm(delta)))
 
-    metrics = [
-        metric for metric in ("GR", "IPC", "KR", "MC")
-        if metric in set(joint["metric"])
-    ]
+    metrics = [metric for metric in PERFORMANCE_METRICS if metric in set(joint["metric"])]
     if not metrics:
-        print("[warn] 2D contours: none of GR/IPC/KR/MC were available.")
+        print("[warn] 2D contours: none of IPC/KR/MC were available.")
         return None
 
     bins = max(24, min(int(bins), 52))
-    fig = plt.figure(figsize=(7.35, 5.80), dpi=300)
+    fig = plt.figure(figsize=(8.25, 4.35), dpi=300)
     grid = fig.add_gridspec(
-        2,
-        2,
-        left=0.095,
+        1,
+        len(metrics),
+        left=0.075,
         right=0.865,
-        bottom=0.285,
-        top=0.940,
-        wspace=0.20,
-        hspace=0.28,
+        bottom=0.355,
+        top=0.910,
+        wspace=0.24,
     )
     flat_axes = np.array(
-        [
-            fig.add_subplot(grid[0, 0]),
-            fig.add_subplot(grid[0, 1]),
-            fig.add_subplot(grid[1, 0]),
-            fig.add_subplot(grid[1, 1]),
-        ],
+        [fig.add_subplot(grid[0, idx]) for idx in range(len(metrics))],
         dtype=object,
     )
     plotted_any = False
@@ -4989,17 +4978,17 @@ def plot_cv_performance_contours_2d(
     fig.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.030),
+        bbox_to_anchor=(0.5, 0.035),
         ncol=min(3, max(1, len(legend_handles))),
         frameon=False,
-        fontsize=8.8,
-        columnspacing=0.85,
-        handlelength=1.55,
+        fontsize=13.0,
+        columnspacing=0.70,
+        handlelength=1.40,
         handletextpad=0.50,
         borderaxespad=0.0,
     )
-    fig.text(0.500, 0.180, "Coefficient of variation", fontsize=13.5, ha="center")
-    fig.text(0.028, 0.610, "Mean performance", fontsize=13.5, va="center", rotation=90)
+    fig.text(0.470, 0.245, "Mean CV", fontsize=13.5, ha="center")
+    fig.text(0.018, 0.635, "Mean performance", fontsize=13.5, va="center", rotation=90)
     if use_rho_colors and rho_color_scalar is not None:
         cax = fig.add_axes([0.895, 0.195, 0.016, 0.70])
         cbar = fig.colorbar(rho_color_scalar, cax=cax, orientation="vertical")
@@ -5017,10 +5006,10 @@ def plot_cv_performance_contours_2d(
         _add_sign_balance_colorbar(
             fig,
             style_meta.get("ce_frac"),
-            bottom=0.175,
+            bottom=0.325,
             left=0.890,
             width=0.016,
-            height=0.75,
+            height=0.585,
             labelsize=11,
             orientation="vertical",
         )
@@ -5070,7 +5059,7 @@ def plot_cv_performance_contour_triptych(
     axis_mean_tbl: pd.DataFrame | None = None,
     axis_label: str | None = None,
 ) -> str | None:
-    """Plot the three shuffle-control contour comparisons in one 3x4 figure."""
+    """Plot the three shuffle-control comparisons for IPC, KR, and MC."""
     contour_percent = float(contour_percent)
     if not (0.0 < contour_percent < 100.0):
         raise ValueError("contour_percent must be greater than 0 and less than 100.")
@@ -5130,9 +5119,9 @@ def plot_cv_performance_contour_triptych(
         print("[warn] contour triptych: no complete comparison rows were available.")
         return None
 
-    metrics = [metric for metric in ("GR", "IPC", "KR", "MC") if metric in set(joint["metric"])]
+    metrics = [metric for metric in PERFORMANCE_METRICS if metric in set(joint["metric"])]
     if not metrics:
-        print("[warn] contour triptych: none of GR/IPC/KR/MC were available.")
+        print("[warn] contour triptych: none of IPC/KR/MC were available.")
         return None
 
     rho_delta_lookup: dict[tuple[str, str], float] = {}
@@ -5251,7 +5240,7 @@ def plot_cv_performance_contour_triptych(
     grid = fig.add_gridspec(
         len(row_specs),
         len(metrics),
-        left=0.105,
+        left=0.125,
         right=0.790,
         bottom=0.255,
         top=0.940,
@@ -5362,24 +5351,24 @@ def plot_cv_performance_contour_triptych(
                     )
 
             if row_idx == 0:
-                ax.set_title(metric, fontsize=13.0, fontweight="semibold", pad=4)
+                ax.set_title(metric, fontsize=15.5, fontweight="semibold", pad=5)
             if col_idx == 0:
                 ax.text(
-                    -0.35,
+                    -0.32,
                     0.5,
                     spec["row_label"],
                     transform=ax.transAxes,
                     rotation=90,
                     ha="center",
                     va="center",
-                    fontsize=9.8,
+                    fontsize=12.0,
                     fontweight="semibold",
                 )
             ax.set_xlabel("")
             ax.set_ylabel("")
             ax.set_xlim(cv_lo, cv_hi)
             ax.set_ylim(perf_lo, perf_hi)
-            ax.tick_params(axis="both", labelsize=8.2, length=2.8, width=0.60, pad=1.4)
+            ax.tick_params(axis="both", labelsize=10.0, length=3.1, width=0.65, pad=1.6)
             ax.grid(True, color="#cfcfcf", alpha=0.21, linewidth=0.45)
             for spine in ax.spines.values():
                 spine.set_linewidth(0.65)
@@ -5390,19 +5379,19 @@ def plot_cv_performance_contour_triptych(
         print("[warn] contour triptych: no finite contours could be drawn.")
         return None
 
-    fig.text(0.448, 0.196, "Coefficient of variation", fontsize=11.4, ha="center")
-    fig.text(0.012, 0.575, "Mean performance", fontsize=11.4, va="center", rotation=90)
+    fig.text(0.448, 0.196, "Mean CV", fontsize=13.5, ha="center")
+    fig.text(0.012, 0.575, "Mean performance", fontsize=13.5, va="center", rotation=90)
 
     if use_rho_colors and color_scalar is not None:
         cax = fig.add_axes([0.230, 0.105, 0.435, 0.018])
         cbar = fig.colorbar(color_scalar, cax=cax, orientation="horizontal")
         cbar.set_label(
             r"$\Delta \rho_{\mathrm{raw}}$ from row baseline (%)",
-            fontsize=11.2,
+            fontsize=13.0,
             labelpad=3,
         )
         cbar.ax.xaxis.set_label_position("top")
-        cbar.ax.tick_params(labelsize=10.0, length=2.8, width=0.65, pad=1.8)
+        cbar.ax.tick_params(labelsize=11.5, length=3.0, width=0.65, pad=1.8)
         cbar.outline.set_linewidth(0.45)
         cbar.outline.set_edgecolor("#333333")
 
@@ -5421,7 +5410,7 @@ def plot_cv_performance_contour_triptych(
             bbox_to_anchor=(0.805, row_center),
             ncol=1,
             frameon=False,
-            fontsize=7.8,
+            fontsize=12.0,
             handlelength=1.55,
             handletextpad=0.48,
             labelspacing=0.55,
@@ -5435,7 +5424,7 @@ def plot_cv_performance_contour_triptych(
         dpi=300,
         facecolor="white",
         bbox_inches="tight",
-        pad_inches=0.0,
+        pad_inches=0.04,
     )
     print(f"[saved] {out_png}")
     if show:

@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -17,7 +20,9 @@ import pandas as pd
 from util.graph_utils import _assign_group_ids
 
 
-METRICS = ("GR", "IPC", "KR", "MC")
+# GR is plotted separately because lower GR indicates better generalization,
+# unlike the higher-is-better performance metrics in this figure.
+METRICS = ("IPC", "KR", "MC")
 
 SHORT_NAMES = {
     "real": "C. elegans",
@@ -73,22 +78,29 @@ NORM_STYLES = {
 }
 
 
-def _read_results(path: str | Path) -> pd.DataFrame:
+def _read_results(
+    path: str | Path,
+    metrics: tuple[str, ...] = METRICS,
+) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(path)
     df = pd.read_csv(path)
-    required = {"mode", "src", "shuffle_id", "raw_rho", *METRICS}
+    required = {"mode", "src", "shuffle_id", "raw_rho", *metrics}
     missing = sorted(required.difference(df.columns))
     if missing:
         raise ValueError(f"{path} is missing required columns: {missing}")
-    for col in ("raw_rho", *METRICS):
+    for col in ("raw_rho", *metrics):
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df[np.isfinite(df["raw_rho"])].copy()
     return _assign_group_ids(df)
 
 
-def _per_group_metric_summary(df: pd.DataFrame, extra_cols: list[str]) -> pd.DataFrame:
+def _per_group_metric_summary(
+    df: pd.DataFrame,
+    extra_cols: list[str],
+    metrics: tuple[str, ...] = METRICS,
+) -> pd.DataFrame:
     group_cols = ["mode", "src", "group_id", *extra_cols]
     raw_rho = (
         df.groupby(group_cols, as_index=False)["raw_rho"]
@@ -97,7 +109,7 @@ def _per_group_metric_summary(df: pd.DataFrame, extra_cols: list[str]) -> pd.Dat
     )
     long = df.melt(
         id_vars=group_cols,
-        value_vars=list(METRICS),
+        value_vars=list(metrics),
         var_name="metric",
         value_name="performance",
     ).dropna(subset=["performance"])
@@ -168,12 +180,17 @@ def build_summary(
     shuffle_csv: str | Path,
     sign_root: str | Path,
     max_sign_frac: float = 0.5,
+    metrics: tuple[str, ...] = METRICS,
 ) -> pd.DataFrame:
     frames = []
 
-    shuffle = _read_results(shuffle_csv)
+    shuffle = _read_results(shuffle_csv, metrics=metrics)
     shuffle["series_kind"] = "shuffle"
-    shuffle_summary = _per_group_metric_summary(shuffle, ["series_kind"])
+    shuffle_summary = _per_group_metric_summary(
+        shuffle,
+        ["series_kind"],
+        metrics=metrics,
+    )
     for family, modes, color, marker in SHUFFLE_FAMILIES:
         fam = shuffle_summary[shuffle_summary["mode"].isin(modes)].copy()
         if fam.empty:
@@ -191,7 +208,10 @@ def build_summary(
         sign_path = sign_root / dataset_key / "combined.ALL.GRKR_erank.rank_updated.csv"
         if not sign_path.exists():
             sign_path = Path(rel_path)
-        sign = _parse_sign_sweep_metadata(_read_results(sign_path), prefix)
+        sign = _parse_sign_sweep_metadata(
+            _read_results(sign_path, metrics=metrics),
+            prefix,
+        )
         sign = sign[sign["sign_frac"] <= float(max_sign_frac)].copy()
         if sign.empty:
             continue
@@ -200,6 +220,7 @@ def build_summary(
         sign_summary = _per_group_metric_summary(
             sign,
             ["series_kind", "dataset", "sign_frac", "normalization"],
+            metrics=metrics,
         )
         sign_summary["series"] = label
         sign_summary["series_key"] = sign_summary["dataset"]
@@ -220,6 +241,7 @@ def plot_summary(
     stem: str,
     y_scale: str = "linear",
     show: bool = True,
+    metrics: tuple[str, ...] = METRICS,
 ) -> list[str]:
     if show and "tkagg" not in mpl.get_backend().lower():
         try:
@@ -247,10 +269,17 @@ def plot_summary(
         }
     )
 
-    fig, axes = plt.subplots(4, 2, figsize=(7.15, 8.15), dpi=300, sharex=True)
+    fig, axes = plt.subplots(
+        len(metrics),
+        2,
+        figsize=(7.15, 6.85),
+        dpi=300,
+        sharex=True,
+        squeeze=False,
+    )
     rho_ticks = np.asarray([3.0, 10.0, 25.0, 50.0, 100.0])
 
-    for row, metric in enumerate(METRICS):
+    for row, metric in enumerate(metrics):
         metric_df = summary[summary["metric"] == metric].copy()
         shuffle_df = metric_df[metric_df["series_kind"] == "shuffle"]
         sign_df = metric_df[metric_df["series_kind"] == "sign_sweep"]
@@ -297,18 +326,19 @@ def plot_summary(
 
             panel_idx = row * 2 + col
             ax.text(
-                0.02,
-                0.97,
+                0.975,
+                0.955,
                 chr(65 + panel_idx),
                 transform=ax.transAxes,
-                ha="left",
+                ha="right",
                 va="top",
-                fontsize=11.2,
+                fontsize=11.5,
                 fontweight="bold",
+                zorder=20,
             )
             if row == 0:
                 ax.set_title(
-                    "Mean performance" if col == 0 else "Coefficient of variation (CV)",
+                    "Mean performance" if col == 0 else "Mean CV",
                     fontweight="semibold",
                     pad=5,
                 )
@@ -336,7 +366,7 @@ def plot_summary(
                     pad = max(0.08 * value_hi, 0.01 if col else 0.05)
                     ax.set_ylim(0.0, value_hi + pad)
 
-    fig.supxlabel(r"Raw spectral radius $\rho(W)$", y=0.145, fontsize=11.5)
+    fig.supxlabel(r"Raw spectral radius $\rho(W)$", y=0.170, fontsize=11.5)
 
     family_handles = [
         Line2D(
@@ -369,16 +399,16 @@ def plot_summary(
     fig.legend(
         handles=family_handles + dataset_handles,
         loc="lower center",
-        bbox_to_anchor=(0.50, 0.075),
-        ncol=2,
+        bbox_to_anchor=(0.50, 0.025),
+        ncol=3,
         frameon=False,
-        columnspacing=1.10,
+        columnspacing=0.90,
         handlelength=1.65,
         handletextpad=0.45,
-        fontsize=10.0,
+        fontsize=10.8,
     )
 
-    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.195, top=0.955, wspace=0.24, hspace=0.34)
+    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.245, top=0.955, wspace=0.24, hspace=0.34)
 
     paths = []
     for ext, dpi in (("png", 450), ("pdf", 450)):

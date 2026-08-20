@@ -114,15 +114,7 @@ def _load_dataset(info: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFrame, 
 
 
 def _cv_panel_label(cv: pd.DataFrame) -> str:
-    if "cv_definition" in cv.columns and set(cv["cv_definition"].dropna()) == {
-        "full_grid_cv_including_rho"
-    }:
-        return r"Coefficient of variation across full sweep (including $\rho$)"
-    if "rho_target" in cv.columns:
-        targets = pd.to_numeric(cv["rho_target"], errors="coerce").dropna().unique()
-        if len(targets) == 1:
-            return rf"Coefficient of variation at nominal $\rho={float(targets[0]):g}$"
-    return "Mean coefficient of variation across targets"
+    return "Mean CV"
 
 
 def _normalize_metric_rows(df: pd.DataFrame, *, invert: bool = False) -> pd.DataFrame:
@@ -414,7 +406,7 @@ def save_mechanism_overlay(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame,
         axes[0, col].set_title(str(info["label"]), fontsize=11)
         axes[1, col].set_xlabel("E/I Edge Balance")
     axes[0, 0].set_ylabel("Metric-normalized performance / raw radius")
-    axes[1, 0].set_ylabel("Metric-normalized CV / raw radius")
+    axes[1, 0].set_ylabel("Mean CV / raw radius")
     handles = [
         Line2D([0], [0], color=NORM_COLORS["spectral_radius"], linestyle="-", marker="o", label="Own-radius normalization"),
         Line2D([0], [0], color=NORM_COLORS["original_radius"], linestyle="--", marker="o", label="Original-radius normalization"),
@@ -422,7 +414,7 @@ def save_mechanism_overlay(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame,
         Line2D([0], [0], color="#7a5a00", linewidth=1.6, label="Observed / target fraction"),
     ]
     fig.legend(handles=handles, loc="upper center", ncol=4, frameon=False, bbox_to_anchor=(0.5, 1.01))
-    fig.suptitle("Option 1: performance and CV mechanism overlay", y=1.06, fontsize=14)
+    fig.suptitle("Option 1: performance and Mean CV mechanism overlay", y=1.06, fontsize=14)
     fig.tight_layout()
     fig.savefig(OUT_DIR / "option_1_mechanism_overlay.png", bbox_inches="tight")
     plt.close(fig)
@@ -490,7 +482,7 @@ def save_grouped_perf_cv(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame, p
         for row, (source_df, invert, ylabel) in enumerate(
             (
                 (perf, False, "Metric-normalized performance"),
-                (cv, False, "Metric-normalized CV (higher = more sensitive)"),
+                (cv, False, "Mean CV"),
             )
         ):
             ax = axes[row, col]
@@ -522,7 +514,7 @@ def save_grouped_perf_cv(datasets: dict[str, tuple[pd.DataFrame, pd.DataFrame, p
         Line2D([0], [0], color="#333333", linestyle="--", marker="o", linewidth=1.8, label="orig. radius"),
     ]
     fig.legend(handles=handles, loc="upper center", ncol=4, frameon=False, bbox_to_anchor=(0.5, 1.01))
-    fig.suptitle("Option 3: grouped performance and CV", y=1.06, fontsize=14)
+    fig.suptitle("Option 3: grouped performance and Mean CV", y=1.06, fontsize=14)
     fig.tight_layout()
     fig.savefig(OUT_DIR / "option_3_grouped_perf_cv.png", bbox_inches="tight")
     plt.close(fig)
@@ -989,7 +981,7 @@ def save_option_8_average_perf_cv(
         axes[2],
         cv,
         panel_label=_cv_panel_label(cv),
-        ylabel="CV",
+        ylabel="Mean CV",
         y_limits=axis_limits.get("cv") if axis_limits else None,
     )
 
