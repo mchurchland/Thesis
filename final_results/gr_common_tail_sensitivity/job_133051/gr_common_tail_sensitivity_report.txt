@@ -1,0 +1,33 @@
+GR common-tail sensitivity report
+
+Protocol: 300 streams with a fixed 7-step varying prefix; shared-tail lengths=[0, 1, 2, 3, 4, 5, 7, 10]; reference=3.
+Models=['real', 'cel_randN', 'er_randN', 'ws_p01_randN', 'local_sign', 'local_sign+flat', 'local_sign+binary', 'global_sign_pres', 'global_sign_pres_real_weight', 'binary_base']; seeds=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].
+The prefix and shared-continuation onset are fixed across tail conditions. Total stream length is prefix_length + tail_length.
+Input construction reuses make_gr_input_streams; state evolution and GR reuse run_reservoir_stream_batch and compute_GR.
+
+Interpretation: lower GR means lower-dimensional final-state variation for streams sharing the specified recent input tail. It is an operational, protocol-dependent result, not a protocol-independent measure of task generalization.
+Tail length 0 is an independent-input diagnostic. Judge robustness from architecture ordering across positive tail lengths, not equality of absolute GR values.
+
+[Architecture-order stability vs reference]
+tail=0: pearson=0.9928, spearman=1.0000, n_models=10
+tail=1: pearson=0.9946, spearman=1.0000, n_models=10
+tail=2: pearson=0.9985, spearman=1.0000, n_models=10
+tail=3: pearson=1.0000, spearman=1.0000, n_models=10
+tail=4: pearson=0.9990, spearman=1.0000, n_models=10
+tail=5: pearson=0.9970, spearman=0.9879, n_models=10
+tail=7: pearson=0.9916, spearman=0.9636, n_models=10
+tail=10: pearson=0.9841, spearman=0.9273, n_models=10
+
+[Per-model GR means]
+C. elegans: tail=0: 5.9721±0.7047, tail=1: 7.8659±1.3802, tail=2: 7.0797±0.8922, tail=3: 5.9642±0.7403, tail=4: 5.1348±0.6105, tail=5: 4.4952±0.4642, tail=7: 3.6809±0.3894, tail=10: 2.9510±0.3680
+cel+randN: tail=0: 18.0899±1.5605, tail=1: 22.5861±2.6540, tail=2: 21.0469±2.2497, tail=3: 18.2259±1.9857, tail=4: 15.4712±1.7971, tail=5: 13.1176±1.5988, tail=7: 9.9651±1.3730, tail=10: 7.4357±1.6235
+ER (p=0.1): tail=0: 22.8116±1.3418, tail=1: 28.2037±3.1682, tail=2: 26.7447±1.9798, tail=3: 24.0725±1.7819, tail=4: 21.3066±1.7736, tail=5: 18.6775±1.6372, tail=7: 14.7837±1.5779, tail=10: 11.1185±1.7066
+ws_p0.1+randN: tail=0: 23.8817±1.8475, tail=1: 29.4723±3.3239, tail=2: 28.2432±2.7592, tail=3: 25.0607±2.4061, tail=4: 21.8644±2.2989, tail=5: 19.2515±2.2196, tail=7: 15.2983±2.2382, tail=10: 11.5125±2.0631
+local_sign: tail=0: 12.5560±2.9966, tail=1: 15.0713±3.0998, tail=2: 13.2318±3.1512, tail=3: 10.7119±2.8326, tail=4: 8.6805±2.5538, tail=5: 7.1321±2.3640, tail=7: 5.0197±1.9848, tail=10: 3.3294±1.4560
+local_sign+flat: tail=0: 10.6580±2.0074, tail=1: 12.9209±2.7534, tail=2: 11.0849±2.0006, tail=3: 8.7217±1.4327, tail=4: 6.9143±1.2799, tail=5: 5.5847±1.2135, tail=7: 3.8237±1.1106, tail=10: 2.4754±0.8579
+local_sign+binary: tail=0: 8.7032±1.6543, tail=1: 10.3648±1.9369, tail=2: 8.6333±1.3577, tail=3: 6.6899±1.0423, tail=4: 5.2513±0.9256, tail=5: 4.2532±0.8519, tail=7: 2.9766±0.7855, tail=10: 2.0054±0.5379
+global_sign_pres: tail=0: 5.5955±0.6527, tail=1: 6.7213±0.9068, tail=2: 5.9219±0.5616, tail=3: 4.9412±0.7007, tail=4: 4.1072±0.8423, tail=5: 3.4471±0.8949, tail=7: 2.5237±0.9048, tail=10: 1.7820±0.6695
+global_sign_pres_real_weight: tail=0: 9.1887±2.4172, tail=1: 11.7481±3.0059, tail=2: 10.3134±2.3806, tail=3: 8.2270±2.0543, tail=4: 6.4114±1.7156, tail=5: 5.1663±1.5234, tail=7: 3.5801±1.1924, tail=10: 2.3428±0.7849
+binary_base: tail=0: 3.1600±0.3680, tail=1: 3.7250±0.4459, tail=2: 3.3754±0.1962, tail=3: 2.8198±0.3780, tail=4: 2.3404±0.4173, tail=5: 1.9861±0.3993, tail=7: 1.5701±0.3695, tail=10: 1.2765±0.2547
+
+This report quantifies sensitivity; it does not assume the result is tail-invariant.
