@@ -77,6 +77,24 @@ NORM_STYLES = {
     "spectral_radius": ("-", "scale by $\\rho(W)$"),
 }
 
+EXTENDED_ABSTRACT_COLORS = {
+    "Binary controls": "#7A5195",
+    "PM1 controls": "#D17C00",
+    "C. elegans shuffle controls": "#007F5F",
+    "C. elegans E/I sweep": "#E07A5F",
+    "Matched C. elegans sweep": "#E07A5F",
+    "Removed C. elegans sweep": "#4C78A8",
+    "Matched ER sweep": "#8F6BB3",
+}
+
+
+def _display_color(label: str, default: str, color_scheme: str) -> str:
+    if color_scheme == "extended-abstract":
+        return EXTENDED_ABSTRACT_COLORS.get(label, default)
+    if color_scheme != "thesis":
+        raise ValueError("color_scheme must be 'thesis' or 'extended-abstract'.")
+    return default
+
 
 def _read_results(
     path: str | Path,
@@ -181,6 +199,7 @@ def build_summary(
     sign_root: str | Path,
     max_sign_frac: float = 0.5,
     metrics: tuple[str, ...] = METRICS,
+    sign_sweeps=SIGN_SWEEPS,
 ) -> pd.DataFrame:
     frames = []
 
@@ -204,7 +223,7 @@ def build_summary(
         frames.append(fam)
 
     sign_root = Path(sign_root)
-    for label, dataset_key, rel_path, prefix, color in SIGN_SWEEPS:
+    for label, dataset_key, rel_path, prefix, color in sign_sweeps:
         sign_path = sign_root / dataset_key / "combined.ALL.GRKR_erank.rank_updated.csv"
         if not sign_path.exists():
             sign_path = Path(rel_path)
@@ -242,7 +261,11 @@ def plot_summary(
     y_scale: str = "linear",
     show: bool = True,
     metrics: tuple[str, ...] = METRICS,
+    color_scheme: str = "thesis",
+    sign_sweeps=SIGN_SWEEPS,
 ) -> list[str]:
+    if color_scheme not in {"thesis", "extended-abstract"}:
+        raise ValueError("color_scheme must be 'thesis' or 'extended-abstract'.")
     if show and "tkagg" not in mpl.get_backend().lower():
         try:
             plt.switch_backend("TkAgg")
@@ -287,6 +310,7 @@ def plot_summary(
         for col, value_col in enumerate(("performance", "cv")):
             ax = axes[row, col]
             for family, modes, color, marker in SHUFFLE_FAMILIES:
+                color = _display_color(family, color, color_scheme)
                 fam = shuffle_df[shuffle_df["series"] == family].copy()
                 if fam.empty:
                     continue
@@ -310,6 +334,7 @@ def plot_summary(
             for _dataset, sub in sign_df.groupby("dataset", sort=False):
                 sub = sub.sort_values("sign_frac")
                 color = str(sub["color"].iloc[0])
+                color = _display_color(str(_dataset), color, color_scheme)
                 ax.plot(
                     np.sqrt(sub["raw_rho"]),
                     sub[value_col],
@@ -372,10 +397,10 @@ def plot_summary(
         Line2D(
             [0],
             [0],
-            color=color,
+            color=_display_color(label, color, color_scheme),
             marker=marker,
             markerfacecolor="white",
-            markeredgecolor=color,
+            markeredgecolor=_display_color(label, color, color_scheme),
             linewidth=1.75,
             markersize=4.7,
             label=label,
@@ -386,15 +411,15 @@ def plot_summary(
         Line2D(
             [0],
             [0],
-            color=color,
+            color=_display_color(label, color, color_scheme),
             marker="o",
             markerfacecolor="white",
-            markeredgecolor=color,
+            markeredgecolor=_display_color(label, color, color_scheme),
             linewidth=1.85,
             markersize=4.9,
             label=label,
         )
-        for label, _key, _path, _prefix, color in SIGN_SWEEPS
+        for label, _key, _path, _prefix, color in sign_sweeps
     ]
     fig.legend(
         handles=family_handles + dataset_handles,
@@ -446,6 +471,11 @@ def parse_args() -> argparse.Namespace:
         help="open the interactive Matplotlib window (default: true)",
     )
     parser.add_argument("--write-summary-csv", action="store_true")
+    parser.add_argument(
+        "--color-scheme",
+        choices=("thesis", "extended-abstract"),
+        default="thesis",
+    )
     return parser.parse_args()
 
 
@@ -464,6 +494,7 @@ def main() -> None:
         args.stem,
         y_scale=args.y_scale,
         show=args.show,
+        color_scheme=args.color_scheme,
     )
 
 

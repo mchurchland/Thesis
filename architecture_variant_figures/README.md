@@ -27,10 +27,11 @@ Outputs to `architecture_variant_figures/graph_examples`:
 ## Trimmed topology figure and appendix controls
 
 The sign-matched topology comparison follows the thesis feedback to keep the
-main figure compact. The main output retains the original panels A and D:
+main figure compact. It selects the original panels A and D, then relabels the
+trimmed pair sequentially as A and B:
 
 - A: sign-matched C. elegans connectome
-- D: sign-matched connection shuffle
+- B: sign-matched connection shuffle
 
 The former panel B (complex connections removed) is appended to the second
 architecture appendix grid as panel P. The former panel C is omitted. This
@@ -46,7 +47,7 @@ python architecture_variant_figures/make_weighted_graph_examples.py \
 ```
 
 `new_4to1_four_panel.png` remains as a compatibility filename but now contains
-the trimmed A/D comparison. An accurately named copy is written to
+the trimmed A/B comparison. An accurately named copy is written to
 `new_4to1_two_panel.png`.
 
 Implementation note:

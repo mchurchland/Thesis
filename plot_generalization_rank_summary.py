@@ -47,6 +47,24 @@ SIGN_SPECS = (
     ),
 )
 
+EXTENDED_ABSTRACT_SIGN_SPECS = (
+    (
+        "Matched C. elegans",
+        Path("final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv"),
+        "#007F5F",
+    ),
+    (
+        "Predicted-polarity only",
+        Path("final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv"),
+        "#E07A5F",
+    ),
+    (
+        "Matched ER",
+        Path("final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv"),
+        "#7A5195",
+    ),
+)
+
 CE_SIGN_FRACTION = 0.2425287356321839
 
 MAIN_ORDER = (
@@ -124,6 +142,18 @@ MAIN_COLORS = {
     "binary_base": "#1557d4",
 }
 
+EXTENDED_ABSTRACT_MAIN_COLORS = {
+    "real": "#2A9D8F",
+    "cel+randN": "#F6C85F",
+    "er+randN": "#F6C85F",
+    "ws_p0.1+randN": "#F6C85F",
+    "local_sign": "#2A9D8F",
+    "local_sign+flat": "#2A9D8F",
+    "local_sign+binary": "#2A9D8F",
+    "global_sign_pres_real_weight": "#2A9D8F",
+    "binary_base": "#00204C",
+}
+
 SHUFFLE_FAMILIES = (
     (
         "C. elegans shuffles",
@@ -148,6 +178,12 @@ SHUFFLE_FAMILIES = (
         ("binary_base", "binary_base_topology_shuffle"),
         "#5f6b7a",
     ),
+)
+
+EXTENDED_ABSTRACT_SHUFFLE_FAMILIES = (
+    (*SHUFFLE_FAMILIES[0][:3], "#007F5F"),
+    (*SHUFFLE_FAMILIES[1][:3], "#D17C00"),
+    (*SHUFFLE_FAMILIES[2][:3], "#7A5195"),
 )
 
 
@@ -340,19 +376,25 @@ def _panel_label(ax, label: str) -> None:
     )
 
 
-def _plot_main_architectures(ax, grouped: pd.DataFrame) -> list[Line2D]:
+def _plot_main_architectures(
+    ax,
+    grouped: pd.DataFrame,
+    main_colors: dict[str, str],
+    contour_mass: float,
+) -> list[Line2D]:
     handles: list[Line2D] = []
     available = set(grouped["mode"])
     for mode in MAIN_ORDER:
         if mode not in available:
             continue
-        color = MAIN_COLORS[mode]
+        color = main_colors[mode]
         marker = MARKERS[mode]
         _draw_hdi_contour(
             ax,
             grouped[grouped["mode"] == mode],
             color,
             marker,
+            contour_mass=contour_mass,
             baseline=mode == "real",
         )
         handles.append(
@@ -437,9 +479,10 @@ def _plot_sign_sweeps(ax, summaries: list[tuple[str, pd.DataFrame, str]]) -> Non
 def _raw_rho_series(
     shuffle_summary: pd.DataFrame,
     sign_summaries: list[tuple[str, pd.DataFrame, str]],
+    shuffle_families,
 ) -> list[tuple[str, pd.DataFrame, str, str]]:
     series: list[tuple[str, pd.DataFrame, str, str]] = []
-    for title, _baseline, modes, color in SHUFFLE_FAMILIES:
+    for title, _baseline, modes, color in shuffle_families:
         mode_order = {mode: idx for idx, mode in enumerate(modes)}
         sub = shuffle_summary[shuffle_summary["mode"].isin(modes)].copy()
         sub["order"] = sub["mode"].map(mode_order)
@@ -515,6 +558,7 @@ def _plot_shuffle_family(
     color_map,
     panel_label: str,
     common_limits: tuple[float, float, float, float],
+    contour_mass: float,
 ) -> None:
     mode_raw_rho = grouped.groupby("mode")["raw_rho"].mean()
     baseline_rho = float(mode_raw_rho[baseline])
@@ -530,6 +574,7 @@ def _plot_shuffle_family(
             sub,
             color,
             MARKERS.get(mode, "o"),
+            contour_mass=contour_mass,
             baseline=mode == baseline,
         )
         if point is None:
@@ -570,7 +615,32 @@ def create_figure(
     sign_specs: tuple[tuple[str, Path, str], ...],
     out_dir: Path,
     stem: str,
+    contour_percent: float = 50.0,
+    color_scheme: str = "thesis",
 ) -> list[Path]:
+    if color_scheme not in {"thesis", "extended-abstract"}:
+        raise ValueError("color_scheme must be 'thesis' or 'extended-abstract'.")
+    contour_percent = float(contour_percent)
+    if not (0.0 < contour_percent < 100.0):
+        raise ValueError("contour_percent must be greater than 0 and less than 100.")
+    contour_mass = contour_percent / 100.0
+    if color_scheme == "extended-abstract":
+        extended_sign_colors = {
+            dataset: color
+            for dataset, _path, color in EXTENDED_ABSTRACT_SIGN_SPECS
+        }
+        sign_specs = tuple(
+            (dataset, path, extended_sign_colors.get(dataset, color))
+            for dataset, path, color in sign_specs
+        )
+        main_colors = EXTENDED_ABSTRACT_MAIN_COLORS
+        shuffle_families = EXTENDED_ABSTRACT_SHUFFLE_FAMILIES
+        rho_cmap_name = "PRGn"
+    else:
+        main_colors = MAIN_COLORS
+        shuffle_families = SHUFFLE_FAMILIES
+        rho_cmap_name = "coolwarm"
+
     main_groups = _read_grouped_gr(main_csv)
     shuffle_groups = _read_grouped_gr(shuffle_csv)
     sign_groups = [
@@ -626,17 +696,19 @@ def create_figure(
         fig.add_subplot(outer[3, 1:3]),
     ]
 
-    main_handles = _plot_main_architectures(ax_main, main_groups)
+    main_handles = _plot_main_architectures(
+        ax_main, main_groups, main_colors, contour_mass
+    )
     _plot_sign_sweeps(ax_sign, sign_summaries)
     _plot_raw_rho(
         ax_raw_gr,
         ax_raw_cv,
-        _raw_rho_series(shuffle_summary, sign_summaries),
+        _raw_rho_series(shuffle_summary, sign_summaries, shuffle_families),
     )
 
     all_shuffle = shuffle_groups[
         shuffle_groups["mode"].isin(
-            {mode for _title, _baseline, modes, _color in SHUFFLE_FAMILIES for mode in modes}
+            {mode for _title, _baseline, modes, _color in shuffle_families for mode in modes}
         )
     ]
     x_values = all_shuffle["gr_cv"].to_numpy(dtype=float)
@@ -649,7 +721,7 @@ def create_figure(
 
     mean_rho = shuffle_groups.groupby("mode")["raw_rho"].mean()
     rho_deltas = []
-    for _title, baseline, modes, _color in SHUFFLE_FAMILIES:
+    for _title, baseline, modes, _color in shuffle_families:
         baseline_rho = float(mean_rho[baseline])
         for mode in modes:
             rho_deltas.append(
@@ -661,9 +733,9 @@ def create_figure(
         vcenter=0.0,
         vmax=max_abs_delta,
     )
-    rho_cmap = mpl.colormaps["coolwarm"]
+    rho_cmap = mpl.colormaps[rho_cmap_name]
 
-    for ax, family, panel_label in zip(shuffle_axes, SHUFFLE_FAMILIES, ("E", "F", "G")):
+    for ax, family, panel_label in zip(shuffle_axes, shuffle_families, ("E", "F", "G")):
         title, baseline, modes, _color = family
         _plot_shuffle_family(
             ax,
@@ -675,6 +747,7 @@ def create_figure(
             rho_cmap,
             panel_label,
             common_limits,
+            contour_mass,
         )
 
     ax_main.legend(
@@ -690,9 +763,9 @@ def create_figure(
     sign_balance_cmap = mpl.colors.LinearSegmentedColormap.from_list(
         "architecture_sign_balance",
         [
-            (0.0, MAIN_COLORS["binary_base"]),
-            (CE_SIGN_FRACTION / 0.5, MAIN_COLORS["real"]),
-            (1.0, MAIN_COLORS["cel+randN"]),
+            (0.0, main_colors["binary_base"]),
+            (CE_SIGN_FRACTION / 0.5, main_colors["real"]),
+            (1.0, main_colors["cel+randN"]),
         ],
     )
     sign_balance_scalar = mpl.cm.ScalarMappable(
@@ -759,12 +832,31 @@ def parse_args() -> argparse.Namespace:
         default=Path("final_results/graphs/thesis/generalization_rank"),
     )
     parser.add_argument("--stem", default="generalization_rank_summary")
+    parser.add_argument(
+        "--contour-percent",
+        type=float,
+        default=50.0,
+        help="Highest-density percentage enclosed by each GR contour (default: 50).",
+    )
+    parser.add_argument(
+        "--color-scheme",
+        choices=("thesis", "extended-abstract"),
+        default="thesis",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    create_figure(args.main_csv, args.shuffle_csv, SIGN_SPECS, args.out_dir, args.stem)
+    create_figure(
+        args.main_csv,
+        args.shuffle_csv,
+        SIGN_SPECS,
+        args.out_dir,
+        args.stem,
+        contour_percent=args.contour_percent,
+        color_scheme=args.color_scheme,
+    )
 
 
 if __name__ == "__main__":

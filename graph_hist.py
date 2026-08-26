@@ -190,26 +190,60 @@ def _detect_ce_sign_fraction(fractions) -> float | None:
 
 
 _SIGN_BALANCE_COLOR_MAX = 0.5
+COLOR_SCHEMES = ("thesis", "extended-abstract")
 
 
-def _sign_balance_color(frac: float, ce_frac: float | None) -> str:
+def _validate_color_scheme(color_scheme: str) -> str:
+    if color_scheme not in COLOR_SCHEMES:
+        raise ValueError(
+            f"color_scheme must be one of {COLOR_SCHEMES}; got {color_scheme!r}."
+        )
+    return color_scheme
+
+
+def _rho_delta_colormap(color_scheme: str):
+    """Return the diverging map used for raw-spectral-radius differences."""
+    _validate_color_scheme(color_scheme)
+    cmap_name = "PRGn" if color_scheme == "extended-abstract" else "coolwarm"
+    return mpl.colormaps[cmap_name]
+
+
+def _sign_balance_color(
+    frac: float,
+    ce_frac: float | None,
+    color_scheme: str = "thesis",
+) -> str:
     """Color sign-balance modes only by negative-sign fraction."""
     if not np.isfinite(frac):
         return "#8a8a8a"
     frac = min(max(float(frac), 0.0), _SIGN_BALANCE_COLOR_MAX)
-    return mpl.colors.to_hex(_sign_balance_colormap(ce_frac)(frac / _SIGN_BALANCE_COLOR_MAX))
+    return mpl.colors.to_hex(
+        _sign_balance_colormap(ce_frac, color_scheme)(frac / _SIGN_BALANCE_COLOR_MAX)
+    )
 
 
-def _sign_balance_colormap(ce_frac: float | None = None):
+def _sign_balance_colormap(
+    ce_frac: float | None = None,
+    color_scheme: str = "thesis",
+):
+    _validate_color_scheme(color_scheme)
     ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.22
     ce_pos = min(max(ce / _SIGN_BALANCE_COLOR_MAX, 0.08), 0.92)
-    return mpl.colors.LinearSegmentedColormap.from_list(
-        "sign_balance_0_to_50",
-        [
+    if color_scheme == "extended-abstract":
+        anchors = [
+            (0.0, "#00204C"),
+            (ce_pos, "#2A9D8F"),
+            (1.0, "#F6C85F"),
+        ]
+    else:
+        anchors = [
             (0.0, "#1557D4"),
             (ce_pos, "#B72FE3"),
             (1.0, "#F2B705"),
-        ],
+        ]
+    return mpl.colors.LinearSegmentedColormap.from_list(
+        "sign_balance_0_to_50",
+        anchors,
     )
 
 
@@ -223,13 +257,14 @@ def _add_sign_balance_colorbar(
     height: float = 0.012,
     labelsize: float = 8.0,
     orientation: str = "horizontal",
+    color_scheme: str = "thesis",
 ):
     ce = float(ce_frac) if ce_frac is not None and np.isfinite(ce_frac) else 0.22
     ce = min(max(ce, 1e-6), 0.499999)
     cax = fig.add_axes([left, bottom, width, height])
     scalar = mpl.cm.ScalarMappable(
         norm=mpl.colors.Normalize(vmin=0.0, vmax=_SIGN_BALANCE_COLOR_MAX),
-        cmap=_sign_balance_colormap(ce),
+        cmap=_sign_balance_colormap(ce, color_scheme),
     )
     scalar.set_array([])
     cbar = fig.colorbar(scalar, cax=cax, orientation=orientation)
@@ -363,7 +398,11 @@ def _architecture_sign_balance_color_map(modes):
     return color_map
 
 
-def _mode_styles_for_cv_performance(present_modes):
+def _mode_styles_for_cv_performance(
+    present_modes,
+    color_scheme: str = "thesis",
+):
+    _validate_color_scheme(color_scheme)
     present_modes = list(dict.fromkeys(str(mode) for mode in present_modes))
     sign_fracs = {mode: _sign_fraction_from_mode(mode) for mode in present_modes}
     sign_modes = [mode for mode, frac in sign_fracs.items() if np.isfinite(frac)]
@@ -374,15 +413,19 @@ def _mode_styles_for_cv_performance(present_modes):
         modes = sorted(sign_modes, key=lambda mode: (sign_fracs[mode], mode))
         modes.extend(mode for mode in present_modes if mode not in modes)
         color_map = {
-            mode: _sign_balance_color(sign_fracs.get(mode, np.nan), ce_frac)
+            mode: _sign_balance_color(
+                sign_fracs.get(mode, np.nan), ce_frac, color_scheme
+            )
             for mode in modes
             if np.isfinite(sign_fracs.get(mode, np.nan))
         }
-        fallback_palette = mpl.colormaps["tab20"]
+        fallback_palette = mpl.colormaps[
+            "Dark2" if color_scheme == "extended-abstract" else "tab20"
+        ]
         fallback_idx = 0
         for mode in modes:
             if mode not in color_map:
-                color_map[mode] = fallback_palette(fallback_idx % 20)
+                color_map[mode] = fallback_palette(fallback_idx % fallback_palette.N)
                 fallback_idx += 1
         label_map = {mode: _sign_balance_label(mode, ce_frac) for mode in modes}
         marker_map = _mode_marker_map(modes)
@@ -409,15 +452,17 @@ def _mode_styles_for_cv_performance(present_modes):
     modes.extend(mode for mode in present_modes if mode not in modes)
     ce_frac = 0.2425287356321839
     mode_fracs = {mode: _mode_sign_fraction(mode, ce_frac) for mode in modes}
-    fallback_palette = mpl.colormaps["tab20"]
+    fallback_palette = mpl.colormaps[
+        "Dark2" if color_scheme == "extended-abstract" else "tab20"
+    ]
     color_map = {}
     palette_idx = 0
     for mode in modes:
         frac = mode_fracs.get(mode, np.nan)
         if np.isfinite(frac):
-            color_map[mode] = _sign_balance_color(frac, ce_frac)
+            color_map[mode] = _sign_balance_color(frac, ce_frac, color_scheme)
         else:
-            color_map[mode] = fallback_palette(palette_idx % 20)
+            color_map[mode] = fallback_palette(palette_idx % fallback_palette.N)
             palette_idx += 1
     label_map = {mode: _short_legend_name(mode) for mode in modes}
     marker_map = _mode_marker_map(modes)
@@ -631,6 +676,15 @@ def parse_args():
         type=float,
         default=50.0,
         help="Highest-density percentage shown by CV/performance contours (default: 50).",
+    )
+    ap.add_argument(
+        "--color-scheme",
+        choices=COLOR_SCHEMES,
+        default="thesis",
+        help=(
+            "Figure palette. 'extended-abstract' uses a visibly distinct palette "
+            "while leaving the thesis defaults unchanged."
+        ),
     )
     ap.add_argument(
         "--cv-baseline-mode",
@@ -2544,6 +2598,7 @@ def plot_frac_cv_meanline(
     bins: int = 4,
     show: bool = True,
     performance_scale: str = "linear",
+    color_scheme: str = "thesis",
 ):
     """
     Stacked sign-sweep summary. The upper 3D panel has one colored line per
@@ -2558,6 +2613,7 @@ def plot_frac_cv_meanline(
     reference for the original C. elegans network.
     """
     os.makedirs(out_dir, exist_ok=True)
+    _validate_color_scheme(color_scheme)
     if performance_scale not in {"linear", "sqrt", "fourth_root", "sixth_root"}:
         raise ValueError(
             "performance_scale must be 'linear', 'sqrt', 'fourth_root', or 'sixth_root'."
@@ -2610,7 +2666,9 @@ def plot_frac_cv_meanline(
     ax = fig.add_subplot(grid[0], projection="3d")
     ax_rho = fig.add_subplot(grid[1])
 
-    colors = mpl.colormaps["tab10"]
+    colors = mpl.colormaps[
+        "Dark2" if color_scheme == "extended-abstract" else "tab10"
+    ]
     highlight_frac = _detect_ce_sign_fraction(mode_values.values()) or 0.2425287356321839
     highlight_label = "C. elegans E/I\nEdge Balance"
     highlight_atol = 1e-12
@@ -2817,7 +2875,7 @@ def plot_frac_cv_meanline(
         return
 
     dataset_key = os.path.basename(os.path.normpath(out_dir))
-    rho_color = "#d55e00"
+    rho_color = "#7A5195" if color_scheme == "extended-abstract" else "#d55e00"
     ax_rho.plot(
         rho_curve["sign_frac"],
         rho_curve["raw_rho"],
@@ -2848,7 +2906,7 @@ def plot_frac_cv_meanline(
         .sort_values("sign_frac")
     )
 
-    cv_color = "#374151"
+    cv_color = "#00876C" if color_scheme == "extended-abstract" else "#374151"
     ax_cv = ax_rho.twinx()
     ax_cv.plot(
         cv_curve["sign_frac"],
@@ -4774,9 +4832,11 @@ def plot_cv_performance_contours_2d(
     rho_delta_by_mode: dict[str, float] | None = None,
     rho_baseline_label: str | None = None,
     baseline_mode: str | None = None,
+    color_scheme: str = "thesis",
 ) -> str | None:
     """Plot top-down highest-density contours of joint CV/performance trials."""
     contour_percent = float(contour_percent)
+    _validate_color_scheme(color_scheme)
     if not (0.0 < contour_percent < 100.0):
         raise ValueError("contour_percent must be greater than 0 and less than 100.")
     contour_mass = contour_percent / 100.0
@@ -4806,7 +4866,9 @@ def plot_cv_performance_contours_2d(
         return None
 
     present_modes = list(dict.fromkeys(joint["mode"].astype(str)))
-    modes, color_map, label_map, style_meta = _mode_styles_for_cv_performance(present_modes)
+    modes, color_map, label_map, style_meta = _mode_styles_for_cv_performance(
+        present_modes, color_scheme=color_scheme
+    )
     # Omit the shuffled-sign signed-unit control from the main architecture figure.
     modes = [mode for mode in modes if mode != "global_sign_pres"]
     marker_map = style_meta.get("marker_map", _mode_marker_map(modes))
@@ -4826,7 +4888,7 @@ def plot_cv_performance_contours_2d(
         if not np.isfinite(max_abs) or max_abs <= 0:
             max_abs = 1.0
         rho_norm = mpl.colors.TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
-        rho_cmap = mpl.colormaps["coolwarm"]
+        rho_cmap = _rho_delta_colormap(color_scheme)
         rho_color_scalar = mpl.cm.ScalarMappable(norm=rho_norm, cmap=rho_cmap)
         rho_color_scalar.set_array([])
         for mode in modes:
@@ -5012,6 +5074,7 @@ def plot_cv_performance_contours_2d(
             height=0.585,
             labelsize=11,
             orientation="vertical",
+            color_scheme=color_scheme,
         )
 
     os.makedirs(out_dir, exist_ok=True)
@@ -5058,9 +5121,11 @@ def plot_cv_performance_contour_triptych(
     axis_disp: pd.DataFrame | None = None,
     axis_mean_tbl: pd.DataFrame | None = None,
     axis_label: str | None = None,
+    color_scheme: str = "thesis",
 ) -> str | None:
     """Plot the three shuffle-control comparisons for IPC, KR, and MC."""
     contour_percent = float(contour_percent)
+    _validate_color_scheme(color_scheme)
     if not (0.0 < contour_percent < 100.0):
         raise ValueError("contour_percent must be greater than 0 and less than 100.")
     contour_mass = contour_percent / 100.0
@@ -5149,7 +5214,7 @@ def plot_cv_performance_contour_triptych(
         if not np.isfinite(max_abs) or max_abs <= 0:
             max_abs = 1.0
         color_norm = mpl.colors.TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
-        color_cmap = mpl.colormaps["coolwarm"]
+        color_cmap = _rho_delta_colormap(color_scheme)
         color_scalar = mpl.cm.ScalarMappable(norm=color_norm, cmap=color_cmap)
         color_scalar.set_array([])
     else:
@@ -5158,9 +5223,11 @@ def plot_cv_performance_contour_triptych(
         color_scalar = None
 
     marker_map = _mode_marker_map([mode for spec in row_specs for mode in spec["modes"]])
-    fallback_palette = mpl.colormaps["tab20"]
+    fallback_palette = mpl.colormaps[
+        "Dark2" if color_scheme == "extended-abstract" else "tab20"
+    ]
     fallback_colors = {
-        mode: mpl.colors.to_hex(fallback_palette(idx % 20))
+        mode: mpl.colors.to_hex(fallback_palette(idx % fallback_palette.N))
         for idx, mode in enumerate(dict.fromkeys(mode for spec in row_specs for mode in spec["modes"]))
     }
 
@@ -5624,6 +5691,7 @@ def main():
             rho_delta_by_mode=None,
             rho_baseline_label=None,
             baseline_mode=resolved_rho_baseline,
+            color_scheme=args.color_scheme,
         )
     if args.show_cv_performance_3d:
         plot_cv_performance_hills_3d(
@@ -5645,6 +5713,7 @@ def main():
             axis_disp=triptych_axis_disp,
             axis_mean_tbl=triptych_axis_mean_tbl,
             axis_label=triptych_axis_label,
+            color_scheme=args.color_scheme,
         )
 
 

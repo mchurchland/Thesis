@@ -1,0 +1,41 @@
+context,series,mode,sign_fraction,mean_gr,gr_cv,raw_rho,n_groups,source_file
+main,Architecture comparison,binary_base,,2.5096601281377175,0.2191613035056617,15.278559684753418,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,cel+randN,,13.915816223099828,0.7644289535535412,4.174598430395126,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,er+randN,,17.762213248771925,0.8627576029523008,3.6280066645145417,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,global_sign_pres,,4.3239180463925,0.4158546808386503,7.934643080234528,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,global_sign_pres_real_weight,,6.339703963920474,0.4474693462850719,60.91696599960327,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,local_sign,,8.744368661586195,0.6543632577466049,5.20260486125946,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,local_sign+binary,,5.868107633559654,0.5206854480552804,6.2845439219474795,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,local_sign+flat,,7.524802081317952,0.6109224589907591,3.210763165950775,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,real,,4.932475620259841,0.3470078853485887,73.30743656158447,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+main,Architecture comparison,ws_p0.1+randN,,18.70474231614421,0.8683949837902142,3.573223203420639,200,final_results/main/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,binary+conshuffle+wshuffle,,4.449494968534758,0.4245585813317197,7.925836038589478,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,binary+shuffle,,5.117512691946079,0.48326711625266583,7.059514572620392,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,binary_base,,2.509660162081321,0.21916131186453314,15.278559684753418,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,binary_base_topology_shuffle,,2.352008259687573,0.23465089532571756,15.456112418174744,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,celW+connShuf,,9.490514131560921,0.6444019913075911,47.22346750259399,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,conn_shuf_only,,10.198707479530325,0.6596134635680798,44.53476148605347,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,global_sign_pres,,4.323917979920904,0.4158546830827507,7.934643080234528,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,local_sign+binary,,5.868107665454349,0.5206854532759029,6.2845439219474795,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,real,,4.932475672078629,0.3470078734745009,73.30743656158447,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+shuffle,Shuffle controls,shuffle,,8.578788066767157,0.6246082459701436,49.01490772247315,200,final_results/shuf/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel0.0,0.0,3.0633021802268923,0.25789105902759335,106.5088882446289,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel0.2,0.2,5.510193247708181,0.41942001295025955,65.95554452896118,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel0.24250832408435072,0.2425083240843507,6.5327453040890395,0.4556979290409096,59.46572551727295,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel0.4,0.4,8.527740145126979,0.4924887315153322,49.961240196228026,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel0.6,0.6,8.126544499099255,0.48953101057876,51.08281352996826,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel0.8,0.8,5.384598537770411,0.41795771949849425,67.14698825836182,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched C. elegans,sign_test_og_cel1.0,1.0,3.0676371157355606,0.30097871919589164,106.50869750976562,200,final_results/sign_frac/cel_matched/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel0.0,0.0,3.1113780501236517,0.24917967750044925,78.14213562011719,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel0.2,0.2,4.837897956582407,0.3324398723416762,51.1908037185669,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel0.2425287356321839,0.2425287356321839,5.257854734466722,0.3441186768505574,47.68347846984863,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel0.4,0.4,5.755541309664647,0.35228551959801235,44.07058874130249,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel0.6,0.6,5.815116269762317,0.354577551774299,43.6528512096405,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel0.8,0.8,4.974434267859906,0.33583735358155253,51.08261442184448,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Predicted-polarity only,sign_test_og_cel1.0,1.0,3.159053079858422,0.2639802282931165,78.14221954345703,200,final_results/sign_frac/cel_removed/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched ER,sign_test_er0.0,0.0,2.7084175407203537,0.24326695116737937,12.121951365470887,200,final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched ER,sign_test_er0.2,0.2,4.584175332573553,0.44996203704373683,7.267385227680206,200,final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched ER,sign_test_er0.4,0.4,18.207090307163696,0.8770324704786128,3.609231961965561,200,final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched ER,sign_test_er0.6,0.6,18.184995465899508,0.8774785000415359,3.615069671869278,200,final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched ER,sign_test_er0.8,0.8,4.5288090434980885,0.47483479007785223,7.271330187320709,200,final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv
+sign_sweep,Matched ER,sign_test_er1.0,1.0,2.6271720039409896,0.2914245991219336,12.121951761245727,200,final_results/sign_frac/matched_er/combined.ALL.GRKR_erank.rank_updated.csv

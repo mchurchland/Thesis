@@ -217,15 +217,15 @@ def parse_args() -> argparse.Namespace:
         "--new-sign-matched-four-panel",
         action="store_true",
         help=(
-            "Write the trimmed main comparison (original panels A and D) and move the "
-            "removed-edge control into the expanded appendix grids."
+            "Write the trimmed main comparison (source panels A and D, displayed as A "
+            "and B) and move the removed-edge control into the expanded appendix grids."
         ),
     )
     p.add_argument(
         "--new-sign-matched-four-panel-out",
         default="new_sign_matched_four_panel.png",
         help=(
-            "Output filename for the trimmed A/D comparison, relative to --outdir unless "
+            "Output filename for the trimmed A/B comparison, relative to --outdir unless "
             "absolute. The legacy option name is retained for compatibility."
         ),
     )
@@ -1063,10 +1063,12 @@ def make_new_sign_matched_four_panel(
     else:
         pos_map, neg_map = build_dual_colormap_norms(np.array([], dtype=np.float32))
 
-    # Preserve the original A and D identifiers so existing prose remains valid.
+    # Select the original A and D source panels, then relabel the trimmed pair A/B.
     selected_panels = [(0, panels[0]), (3, panels[3])]
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.8), squeeze=False)
-    for ax, (original_idx, (title, W, pos)) in zip(axes.flat, selected_panels):
+    for display_idx, (ax, (_original_idx, (title, W, pos))) in enumerate(
+        zip(axes.flat, selected_panels)
+    ):
         draw_weighted_panel(
             ax,
             W,
@@ -1089,7 +1091,7 @@ def make_new_sign_matched_four_panel(
         ax.text(
             0.018,
             0.982,
-            _panel_letter(original_idx),
+            _panel_letter(display_idx),
             transform=ax.transAxes,
             ha="left",
             va="top",

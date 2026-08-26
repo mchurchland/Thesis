@@ -10,7 +10,8 @@ The main metrics are:
 - **MC** — linear memory capacity
 - **IPC** — information processing capacity
 - **KR** — kernel rank (state-space separation)
-- **GR** — generalization rank (lower values indicate better generalization)
+- **GR** — shared-tail generalization rank (lower values indicate a
+  lower-dimensional family of final states under the specified protocol)
 
 For each architecture, the pipeline sweeps spectral radius, leak rate, input
 scale, and neuron bias. It then summarizes both mean metric performance and
@@ -31,7 +32,7 @@ invariance, primarily as the coefficient of variation (CV) over that grid.
 | `util/` | Connectome loading, graph construction, merging, and result-repair utilities |
 | `Connectome/` | Processed 297-node adjacency, neuron names, and unknown-sign edge weights |
 | `r_*.sbatch` | Production and methodology SLURM launchers |
-| `Parameter_justification/` | MC/IPC delay, order, and methodology sensitivity analyses |
+| `Parameter_justification/` | MC/IPC delay and order checks plus GR common-tail sensitivity analyses |
 | `final_results/` | Curated merged results and thesis-ready figures |
 | `final_results_GRKR_*`, `final_results_KR_*` | Rank-metric reruns and intermediate merged results |
 | `metric_figures/` | Specialized plotting and table-generation scripts |
@@ -122,11 +123,20 @@ sbatch r_data.sbatch
 | `r_ipc_delay.sbatch` | IPC delay sensitivity |
 | `r_ipc_order.sbatch` | IPC polynomial-order sensitivity |
 | `r_ipc_methodology.sbatch` | Broader IPC methodology validation |
+| `r_gr_common_tail.sbatch` | GR common-tail-length sensitivity |
 
 The primary launchers partition 200 seeded repeats over 20 array tasks. Each
 task writes a provenance-tagged CSV below a `chunk_<id>/` directory. Fixed seed
 offsets make repeat assignment, rank streams, and optional node subsets
 reproducible across architectures.
+
+The GR methodology launcher holds the reservoir, experiment seed, and all
+non-tail settings fixed while evaluating each length through the existing GR
+input and state-evolution helpers. Its default length-three condition exactly
+reproduces the production protocol for each seed. Lengths zero and ten are
+limiting controls for a ten-step stream; conclusions about robustness should
+be based on the interior lengths and stable architecture ordering, not on
+equality of absolute GR values.
 
 Two normalization modes are available:
 

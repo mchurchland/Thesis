@@ -23,6 +23,16 @@ The recommended destination for thesis figures is:
 final_results/graphs/thesis/
 ```
 
+For the non-archival extended-abstract variants, run:
+
+```bash
+python make_extended_abstract_figures.py
+```
+
+This writes a separate 70%-contour, alternate-colour set to
+`final_results/graphs/extended_abstract/` using only the rank-updated `_erank`
+inputs listed below. It does not overwrite the thesis figures.
+
 The plotting commands do not modify the merged result CSVs. `graph_hist.py`
 may also create an `all_arch_hist_grid.png` and a CV table as side effects.
 

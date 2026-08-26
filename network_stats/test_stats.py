@@ -77,6 +77,7 @@ class GeneralizationRankTests(unittest.TestCase):
         self.assertEqual(DEFAULT_SIM_PARAMS.kr_stream_length, 10)
         self.assertEqual(DEFAULT_SIM_PARAMS.gr_num_streams, 300)
         self.assertEqual(DEFAULT_SIM_PARAMS.gr_stream_length, 10)
+        self.assertEqual(DEFAULT_SIM_PARAMS.gr_common_tail_length, 3)
 
     def test_gr_streams_share_only_the_configured_tail(self) -> None:
         torch.manual_seed(12)
