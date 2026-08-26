@@ -130,13 +130,13 @@ task writes a provenance-tagged CSV below a `chunk_<id>/` directory. Fixed seed
 offsets make repeat assignment, rank streams, and optional node subsets
 reproducible across architectures.
 
-The GR methodology launcher holds the reservoir, experiment seed, and all
-non-tail settings fixed while evaluating each length through the existing GR
-input and state-evolution helpers. Its default length-three condition exactly
-reproduces the production protocol for each seed. Lengths zero and ten are
-limiting controls for a ten-step stream; conclusions about robustness should
-be based on the interior lengths and stable architecture ordering, not on
-equality of absolute GR values.
+The GR methodology launcher reuses the same independently sampled seven-step
+prefix for each stream while varying the length of one shared continuation.
+Total stream length is therefore `7 + common_tail_length`, and the default
+length-three condition exactly reproduces the production ten-step protocol for
+each seed. Length zero is a prefix-only diagnostic; conclusions about
+robustness should be based on stable architecture ordering across positive
+tail lengths, not equality of absolute GR values.
 
 Two normalization modes are available:
 

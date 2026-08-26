@@ -6,6 +6,10 @@ Reservoir construction, input generation, state evolution, effective-rank
 calculation, model expansion, connectome loading, and seed handling all reuse
 existing project helpers.
 
+The independently sampled prefix remains fixed at seven steps by default;
+only the duration of the shared continuation changes, so each condition has
+total length ``prefix_length + common_tail_length``.
+
 Absolute GR remains conditional on this shared-tail protocol. The report
 therefore emphasizes architecture-order stability relative to the production
 tail length rather than treating GR as a protocol-independent generalization
@@ -28,7 +32,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from inv_arc_test import _pick_device  # noqa: E402
 from network_stats.run_one import (  # noqa: E402
-    make_gr_input_streams,
+    make_gr_input_stream_sweep,
     run_reservoir_stream_batch,
 )
 from network_stats.stats import compute_GR  # noqa: E402
@@ -86,16 +90,20 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_SIM_PARAMS.gr_num_streams,
     )
     p.add_argument(
-        "--stream-length",
+        "--prefix-length",
         type=int,
-        default=DEFAULT_SIM_PARAMS.gr_stream_length,
+        default=(
+            DEFAULT_SIM_PARAMS.gr_stream_length
+            - DEFAULT_SIM_PARAMS.gr_common_tail_length
+        ),
+        help="Fixed independently sampled prefix length for every tail condition.",
     )
     p.add_argument(
         "--common-tail-lengths",
         type=int,
         nargs="+",
         default=[0, 1, 2, 3, 4, 5, 7, DEFAULT_SIM_PARAMS.gr_stream_length],
-        help="Lengths to evaluate; 0 and stream-length are diagnostic controls.",
+        help="Shared-continuation lengths to evaluate; 0 is a diagnostic control.",
     )
     p.add_argument(
         "--reference-tail-length",
@@ -114,8 +122,8 @@ def parse_args() -> argparse.Namespace:
 def _validate_args(args: argparse.Namespace) -> list[int]:
     if args.num_streams < 2:
         raise ValueError("--num-streams must be >= 2.")
-    if args.stream_length < 1:
-        raise ValueError("--stream-length must be >= 1.")
+    if args.prefix_length < 1:
+        raise ValueError("--prefix-length must be >= 1.")
     if any(rho <= 0.0 for rho in args.rho):
         raise ValueError("--rho values must be positive.")
     if any(not 0.0 < leak <= 1.0 for leak in args.leak):
@@ -126,10 +134,10 @@ def _validate_args(args: argparse.Namespace) -> list[int]:
         raise ValueError("--neuron-biases values must be non-negative.")
 
     tail_lengths = sorted(set(int(length) for length in args.common_tail_lengths))
-    if any(not 0 <= length <= args.stream_length for length in tail_lengths):
-        raise ValueError("--common-tail-lengths must lie in [0, --stream-length].")
-    if not 0 <= args.reference_tail_length <= args.stream_length:
-        raise ValueError("--reference-tail-length must lie in [0, --stream-length].")
+    if any(length < 0 for length in tail_lengths):
+        raise ValueError("--common-tail-lengths must be non-negative.")
+    if args.reference_tail_length < 0:
+        raise ValueError("--reference-tail-length must be non-negative.")
     if args.reference_tail_length not in tail_lengths:
         tail_lengths.append(args.reference_tail_length)
         tail_lengths.sort()
@@ -202,13 +210,18 @@ def _write_report(
         "GR common-tail sensitivity report",
         "",
         (
-            f"Protocol: {args.num_streams} streams of length {args.stream_length}; "
-            f"tail lengths={tail_lengths}; reference={args.reference_tail_length}."
+            f"Protocol: {args.num_streams} streams with a fixed "
+            f"{args.prefix_length}-step varying prefix; shared-tail "
+            f"lengths={tail_lengths}; reference={args.reference_tail_length}."
         ),
         f"Models={models}; seeds={seeds}.",
         (
-            "Each condition uses the existing make_gr_input_streams, "
-            "run_reservoir_stream_batch, and compute_GR implementation."
+            "The prefix and shared-continuation onset are fixed across tail "
+            "conditions. Total stream length is prefix_length + tail_length."
+        ),
+        (
+            "Input construction reuses make_gr_input_streams; state evolution "
+            "and GR reuse run_reservoir_stream_batch and compute_GR."
         ),
         "",
         (
@@ -218,8 +231,8 @@ def _write_report(
             "measure of task generalization."
         ),
         (
-            "Tail lengths 0 and stream_length are diagnostic endpoints. Judge "
-            "robustness from the interior-tail architecture ordering, not equality "
+            "Tail length 0 is an independent-input diagnostic. Judge robustness "
+            "from architecture ordering across positive tail lengths, not equality "
             "of absolute GR values."
         ),
         "",
@@ -290,7 +303,7 @@ def main() -> None:
             )
         nnz_target_ce = int(np.count_nonzero(ce_W_trial))
         gr_seed = seed + args.gr_seed_offset
-        stream_cache: dict[tuple[int, int, torch.dtype], torch.Tensor] = {}
+        stream_cache: dict[tuple[int, torch.dtype], dict[int, torch.Tensor]] = {}
 
         for rho in args.rho:
             for input_scale in args.input_scale:
@@ -319,24 +332,25 @@ def main() -> None:
                                 Wt.dtype,
                                 seed + 17_000_003,
                             )
+                            cache_key = (int(Win.shape[1]), Win.dtype)
+                            if cache_key not in stream_cache:
+                                generator = torch.Generator(device=device)
+                                generator.manual_seed(gr_seed)
+                                stream_cache[cache_key] = make_gr_input_stream_sweep(
+                                    n_streams=args.num_streams,
+                                    prefix_length=args.prefix_length,
+                                    common_tail_lengths=tail_lengths,
+                                    reference_tail_length=args.reference_tail_length,
+                                    n_inputs=int(Win.shape[1]),
+                                    device=device,
+                                    dtype=Win.dtype,
+                                    generator=generator,
+                                )
                             for tail_length in tail_lengths:
-                                cache_key = (tail_length, int(Win.shape[1]), Win.dtype)
-                                if cache_key not in stream_cache:
-                                    generator = torch.Generator(device=device)
-                                    generator.manual_seed(gr_seed)
-                                    stream_cache[cache_key] = make_gr_input_streams(
-                                        n_streams=args.num_streams,
-                                        stream_length=args.stream_length,
-                                        common_tail_length=tail_length,
-                                        n_inputs=int(Win.shape[1]),
-                                        device=device,
-                                        dtype=Win.dtype,
-                                        generator=generator,
-                                    )
                                 states = run_reservoir_stream_batch(
                                     Wt,
                                     Win,
-                                    stream_cache[cache_key],
+                                    stream_cache[cache_key][tail_length],
                                     leak,
                                     initial_state=initial_state,
                                     bias=bias,
@@ -350,10 +364,10 @@ def main() -> None:
                                         "input_scale": input_scale,
                                         "neuron_bias": neuron_bias,
                                         "num_streams": args.num_streams,
-                                        "stream_length": args.stream_length,
+                                        "prefix_length": args.prefix_length,
                                         "common_tail_length": tail_length,
-                                        "independent_prefix_length": (
-                                            args.stream_length - tail_length
+                                        "total_stream_length": (
+                                            args.prefix_length + tail_length
                                         ),
                                         "gr_seed": gr_seed,
                                         "GR": compute_GR(states),

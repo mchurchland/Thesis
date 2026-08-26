@@ -32,12 +32,11 @@ CE_EI="${CE_EI:-}"
 UNKNOWN_SIGN_POLICY="${UNKNOWN_SIGN_POLICY:-random_unknown_sign_matched}"
 CE_UNKNOWN_SIGN_WEIGHTS="${CE_UNKNOWN_SIGN_WEIGHTS:-Connectome/ce_unknown_sign_weights.npy}"
 
-# The current production protocol is 300 streams, total length 10, and a
-# three-step common tail. Lengths 0 and 10 are limiting controls; interpret
-# robustness from the interior lengths rather than treating the controls as
-# ordinary GR conditions.
+# The production condition has a seven-step varying prefix followed by a
+# three-step common tail. Keep the seven-step prefix fixed while changing the
+# shared continuation; total stream length is PREFIX_LENGTH + tail length.
 NUM_STREAMS="${NUM_STREAMS:-300}"
-STREAM_LENGTH="${STREAM_LENGTH:-10}"
+PREFIX_LENGTH="${PREFIX_LENGTH:-7}"
 REFERENCE_TAIL_LENGTH="${REFERENCE_TAIL_LENGTH:-3}"
 COMMON_TAIL_LENGTHS_TEXT="${COMMON_TAIL_LENGTHS:-0 1 2 3 4 5 7 10}"
 read -r -a COMMON_TAIL_LENGTH_ARGS <<< "${COMMON_TAIL_LENGTHS_TEXT}"
@@ -75,7 +74,7 @@ fi
 
 mkdir -p "${OUT_DIR}"
 echo "[info] GR common-tail sweep output: ${OUT_DIR}"
-echo "[info] tail lengths: ${COMMON_TAIL_LENGTH_ARGS[*]} (reference=${REFERENCE_TAIL_LENGTH})"
+echo "[info] fixed prefix: ${PREFIX_LENGTH}; tail lengths: ${COMMON_TAIL_LENGTH_ARGS[*]} (reference=${REFERENCE_TAIL_LENGTH})"
 
 conda run -n cel python Parameter_justification/gr_common_tail_sensitivity.py \
   --ce-adj "${CE_ADJ}" \
@@ -89,7 +88,7 @@ conda run -n cel python Parameter_justification/gr_common_tail_sensitivity.py \
   --input-scale "${INPUT_SCALE_ARGS[@]}" \
   --neuron-biases "${NEURON_BIAS_ARGS[@]}" \
   --num-streams "${NUM_STREAMS}" \
-  --stream-length "${STREAM_LENGTH}" \
+  --prefix-length "${PREFIX_LENGTH}" \
   --common-tail-lengths "${COMMON_TAIL_LENGTH_ARGS[@]}" \
   --reference-tail-length "${REFERENCE_TAIL_LENGTH}" \
   "${UNKNOWN_SIGN_ARGS[@]}" \

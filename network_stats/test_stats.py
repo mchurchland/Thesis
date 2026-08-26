@@ -8,6 +8,7 @@ import tempfile
 import torch
 
 from network_stats.run_one import (
+    make_gr_input_stream_sweep,
     make_gr_input_streams,
     make_kr_input_streams,
     run_one,
@@ -110,6 +111,43 @@ class GeneralizationRankTests(unittest.TestCase):
 
         self.assertTrue(torch.equal(generate(42), generate(42)))
         self.assertFalse(torch.equal(generate(42), generate(43)))
+
+    def test_gr_tail_sweep_keeps_prefix_fixed_and_matches_reference(self) -> None:
+        generator = torch.Generator(device="cpu")
+        generator.manual_seed(42)
+        sweep = make_gr_input_stream_sweep(
+            n_streams=5,
+            prefix_length=7,
+            common_tail_lengths=[0, 1, 3, 5],
+            reference_tail_length=3,
+            n_inputs=1,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            generator=generator,
+        )
+
+        reference_generator = torch.Generator(device="cpu")
+        reference_generator.manual_seed(42)
+        production_reference = make_gr_input_streams(
+            n_streams=5,
+            stream_length=10,
+            common_tail_length=3,
+            n_inputs=1,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            generator=reference_generator,
+        )
+
+        for tail_length, streams in sweep.items():
+            self.assertEqual(tuple(streams.shape), (5, 7 + tail_length, 1))
+            self.assertTrue(torch.equal(streams[:, :7, :], sweep[0]))
+            if tail_length:
+                shared = streams[:1, 7:, :].expand(5, -1, -1)
+                self.assertTrue(torch.equal(streams[:, 7:, :], shared))
+
+        self.assertTrue(torch.equal(sweep[3], production_reference))
+        self.assertTrue(torch.equal(sweep[1][:, 7:, :], sweep[5][:, 7:8, :]))
+        self.assertTrue(torch.equal(sweep[3][:, 7:, :], sweep[5][:, 7:10, :]))
 
     def test_stream_batch_returns_one_final_state_per_stream(self) -> None:
         streams = torch.tensor([[[0.1], [0.2]], [[-0.1], [0.2]]])
