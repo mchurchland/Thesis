@@ -54,7 +54,7 @@ ALL_JOB_KEYS = ( ## I need to change the names anyways lets do this inclass loca
     "local_sign+flat", #x 
     #"local_sign+sample", 
     "local_sign+binary", #x
-    "global_sign_pres", #x
+    #"global_sign_pres", #x
     "global_sign_pres_real_weight", #x
     "binary_base", #x
     #"binary_base_topology_shuffle", #x
